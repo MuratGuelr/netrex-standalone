@@ -1,15 +1,15 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import {
   LiveKitRoom,
-  RoomAudioRenderer,
   useParticipants,
   useParticipantInfo,
   useLocalParticipant,
   useRoomContext,
   useTracks,
   VideoTrack,
+  AudioTrack, // Sesleri manuel yönetmek için
 } from "@livekit/components-react";
-import { Track, RoomEvent } from "livekit-client";
+import { Track, RoomEvent, VideoPresets } from "livekit-client";
 import "@livekit/components-styles";
 import {
   Mic,
@@ -31,6 +31,8 @@ import {
   Volume1,
   Layers,
   StopCircle,
+  Tv,
+  AlertTriangle,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
@@ -68,8 +70,26 @@ const styleInjection = `
   }
 `;
 
-// --- YARDIMCI BİLEŞENLER ---
+// --- YENİ: MİKROFON YÖNETİCİSİ (RoomAudioRenderer yerine) ---
+// Sadece mikrofon seslerini çalar, ekran paylaşım seslerine karışmaz.
+function MicrophoneManager() {
+  const audioTracks = useTracks([Track.Source.Microphone]);
+  const { userVolumes } = useSettingsStore();
 
+  return (
+    <>
+      {audioTracks.map((trackRef) => (
+        <AudioTrack
+          key={trackRef.publication.trackSid}
+          trackRef={trackRef}
+          volume={(userVolumes[trackRef.participant.identity] ?? 100) / 100}
+        />
+      ))}
+    </>
+  );
+}
+
+// --- GLOBAL CHAT & EVENTS ---
 function GlobalChatListener({ showChatPanel }) {
   const room = useRoomContext();
   const { incrementUnread, currentChannel } = useChatStore();
@@ -102,26 +122,6 @@ function GlobalChatListener({ showChatPanel }) {
   return null;
 }
 
-function VolumeManager() {
-  const room = useRoomContext();
-  const { userVolumes } = useSettingsStore();
-  const tracks = useTracks([Track.Source.Microphone]);
-  useEffect(() => {
-    if (!room) return;
-    tracks.forEach((trackRef) => {
-      const { participant, publication } = trackRef;
-      if (!participant.isLocal && publication.kind === Track.Kind.Audio) {
-        const audioTrack = publication.track;
-        if (audioTrack) {
-          const volumeLevel = userVolumes[participant.identity] ?? 100;
-          audioTrack.setVolume(volumeLevel / 100);
-        }
-      }
-    });
-  }, [tracks, userVolumes, room]);
-  return null;
-}
-
 function VoiceProcessorHandler() {
   const { rawAudioMode } = useSettingsStore();
   if (!rawAudioMode) useVoiceProcessor();
@@ -147,6 +147,7 @@ function RoomEventsHandler() {
 
 function DeafenManager({ isDeafened }) {
   useEffect(() => {
+    // Sadece Audio elementlerini etkiler
     const muteAllAudio = () => {
       document.querySelectorAll("audio").forEach((el) => {
         el.muted = isDeafened;
@@ -224,7 +225,8 @@ export default function ActiveRoom({
   const [chatPosition, setChatPosition] = useState("right");
   const [contextMenu, setContextMenu] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [isWatchingScreen, setIsWatchingScreen] = useState(true);
+
+  const [activeStreamId, setActiveStreamId] = useState(null);
 
   const { noiseSuppression, echoCancellation, autoGainControl } =
     useSettingsStore();
@@ -293,6 +295,7 @@ export default function ActiveRoom({
       data-lk-theme="default"
       className="flex-1 flex flex-col bg-[#313338]"
       onDisconnected={handleDisconnect}
+      connectOptions={{ autoSubscribe: true, dynacast: true }}
       options={{
         audioCaptureDefaults: {
           echoCancellation,
@@ -305,7 +308,9 @@ export default function ActiveRoom({
       <GlobalChatListener showChatPanel={showChatPanel} />
       <VoiceProcessorHandler />
       <RoomEventsHandler />
-      <VolumeManager />
+
+      {/* BURADA ARTIK RoomAudioRenderer YOK. Mikrofonlar için bunu kullanıyoruz: */}
+      <MicrophoneManager />
 
       {isReconnecting && (
         <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
@@ -321,7 +326,6 @@ export default function ActiveRoom({
       )}
 
       <style>{styleInjection}</style>
-      <RoomAudioRenderer />
       <DeafenManager isDeafened={isDeafened} />
       <SettingsModal
         isOpen={showSettings}
@@ -404,8 +408,8 @@ export default function ActiveRoom({
         username={username}
         userId={userId}
         onUserContextMenu={handleUserContextMenu}
-        isWatchingScreen={isWatchingScreen}
-        setIsWatchingScreen={setIsWatchingScreen}
+        activeStreamId={activeStreamId}
+        setActiveStreamId={setActiveStreamId}
       />
 
       <BottomControls
@@ -415,6 +419,7 @@ export default function ActiveRoom({
         isDeafened={isDeafened}
         setIsDeafened={setIsDeafened}
         playSound={playSound}
+        setActiveStreamId={setActiveStreamId}
       />
 
       {contextMenu && (
@@ -439,25 +444,37 @@ function StageManager({
   username,
   userId,
   onUserContextMenu,
-  isWatchingScreen,
-  setIsWatchingScreen,
+  activeStreamId,
+  setActiveStreamId,
 }) {
   const screenTracks = useTracks([Track.Source.ScreenShare]);
-  const hasScreenShare = screenTracks.length > 0;
 
-  const isLocalSharing =
-    screenTracks.length > 0 && screenTracks[0].participant.isLocal;
+  const activeTrack = activeStreamId
+    ? screenTracks.find((t) => t.participant.identity === activeStreamId)
+    : null;
 
-  // Yerel önizleme gizleme durumu
+  // Tüm ekran paylaşımlarını kontrol et, eğer ben de paylaşıyorsam localSharing = true
+  const { localParticipant } = useLocalParticipant();
+  const amISharing = localParticipant.isScreenShareEnabled;
+
+  useEffect(() => {
+    if (screenTracks.length > 0 && !activeStreamId) {
+      setActiveStreamId(screenTracks[0].participant.identity);
+    }
+    if (
+      activeStreamId &&
+      !screenTracks.find((t) => t.participant.identity === activeStreamId)
+    ) {
+      setActiveStreamId(null);
+    }
+  }, [screenTracks, activeStreamId, setActiveStreamId]);
+
+  const isLocalSharing = activeTrack?.participant.isLocal;
   const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
 
-  // Eğer ekran paylaşımı bittiyse izleme modunu otomatik aç
   useEffect(() => {
-    if (!hasScreenShare) {
-      setIsWatchingScreen(true);
-      setLocalPreviewHidden(false); // Resetle
-    }
-  }, [hasScreenShare, setIsWatchingScreen]);
+    if (!activeTrack) setLocalPreviewHidden(false);
+  }, [activeTrack]);
 
   return (
     <div className="flex-1 flex overflow-hidden min-h-0 relative bg-black">
@@ -474,47 +491,76 @@ function StageManager({
             flexBasis: showChatPanel && currentTextChannel ? "60%" : "100%",
           }}
         >
-          {hasScreenShare && isWatchingScreen ? (
-            // --- EKRAN PAYLAŞIM ALANI ---
+          {/* ÇOKLU YAYIN SEÇİCİ BAR */}
+          {screenTracks.length > 1 && activeStreamId && (
+            <div className="bg-[#1e1f22] p-2 flex gap-2 overflow-x-auto border-b border-[#111214] shrink-0">
+              {screenTracks.map((t) => (
+                <button
+                  key={t.participant.sid}
+                  onClick={() => {
+                    setActiveStreamId(t.participant.identity);
+                    setLocalPreviewHidden(false);
+                  }}
+                  className={`
+                    px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-all
+                    ${
+                      activeStreamId === t.participant.identity
+                        ? "bg-[#5865f2] text-white"
+                        : "bg-[#2b2d31] text-[#949ba4] hover:text-white"
+                    }
+                  `}
+                >
+                  <Monitor size={12} />
+                  {t.participant.isLocal
+                    ? "Senin Yayının"
+                    : t.participant.identity}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeTrack ? (
             isLocalSharing && localPreviewHidden ? (
-              // Durum A: Kendi yayınımı gizledim
               <LocalHiddenPlaceholder
                 onShow={() => setLocalPreviewHidden(false)}
                 onStopSharing={() => {
-                  const tracks =
-                    screenTracks[0].participant.getTrackPublications();
-                  for (const t of tracks) {
-                    if (
-                      t.source === Track.Source.ScreenShare ||
-                      t.source === Track.Source.ScreenShareAudio
-                    ) {
-                      t.track?.stop();
-                      screenTracks[0].participant.unpublishTrack(t.track);
-                    }
-                  }
+                  activeTrack.track?.stop();
+                  activeTrack.participant.unpublishTrack(activeTrack.track);
                 }}
               />
             ) : (
-              // Durum B: Yayın izleniyor (Kendi yayınım veya başkasının)
               <ScreenShareStage
-                screenTracks={screenTracks}
-                onStopWatching={() => setIsWatchingScreen(false)}
+                trackRef={activeTrack}
+                onStopWatching={() => setActiveStreamId(null)}
                 onUserContextMenu={onUserContextMenu}
                 isLocalSharing={isLocalSharing}
-                onHideLocal={() => setLocalPreviewHidden(true)} // Kendini gizle butonu için
+                amISharing={amISharing} // Ben yayın yapıyor muyum bilgisini yolla (Anti-loop için)
+                onHideLocal={() => setLocalPreviewHidden(true)}
               />
             )
           ) : (
-            // --- STANDART IZGARA MODU ---
             <div className="w-full h-full flex flex-col items-center justify-center p-4 relative">
-              {hasScreenShare && !isWatchingScreen && (
-                <div className="absolute top-4 right-4 z-20">
-                  <button
-                    onClick={() => setIsWatchingScreen(true)}
-                    className="bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-2 rounded-full shadow-lg text-sm font-bold flex items-center gap-2 animate-bounce"
-                  >
-                    <Monitor size={16} /> Yayına Dön
-                  </button>
+              {screenTracks.length > 0 && (
+                <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+                  <div className="bg-black/60 backdrop-blur-md p-2 rounded-lg border border-[#2b2d31]">
+                    <div className="text-[10px] uppercase font-bold text-[#949ba4] mb-1 px-1">
+                      Canlı Yayınlar
+                    </div>
+                    {screenTracks.map((t) => (
+                      <button
+                        key={t.participant.sid}
+                        onClick={() =>
+                          setActiveStreamId(t.participant.identity)
+                        }
+                        className="bg-[#5865f2] hover:bg-[#4752c4] text-white w-full px-4 py-2 rounded-md shadow-sm text-sm font-bold flex items-center gap-2 mb-1"
+                      >
+                        <Tv size={14} />
+                        {t.participant.isLocal
+                          ? "Yayınına Dön"
+                          : `${t.participant.identity} izle`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <ParticipantList
@@ -551,7 +597,6 @@ function StageManager({
   );
 }
 
-// --- YEREL YAYIN GİZLENDİĞİNDE GÖRÜNEN EKRAN ---
 function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   return (
     <div className="flex flex-col h-full w-full bg-[#313338] items-center justify-center p-8 text-center relative overflow-hidden">
@@ -564,7 +609,8 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
 
         <h2 className="text-xl font-bold text-white mb-2">Önizleme Gizlendi</h2>
         <p className="text-gray-400 text-sm max-w-sm mb-8">
-          Yayının devam ediyor ancak performans için önizlemeyi kapattın.
+          Yayının devam ediyor. Performansı artırmak ve ayna etkisini önlemek
+          için önizlemeyi kapattın.
         </p>
 
         <div className="flex gap-4">
@@ -586,22 +632,22 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   );
 }
 
-// --- SCREEN SHARE PLAYER (STAGE) ---
+// --- SCREEN SHARE PLAYER ---
 function ScreenShareStage({
-  screenTracks,
+  trackRef,
   onStopWatching,
   onUserContextMenu,
   isLocalSharing,
   onHideLocal,
+  amISharing,
 }) {
   const [volume, setVolume] = useState(50);
+  const [prevVolume, setPrevVolume] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
 
   const participants = useParticipants();
   const viewerCount = Math.max(0, participants.length - 1);
-
-  const trackRef = screenTracks[0];
   const participant = trackRef?.participant;
 
   const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
@@ -609,12 +655,18 @@ function ScreenShareStage({
     (t) => t.participant.sid === participant?.sid
   );
 
-  useEffect(() => {
-    if (audioTrackRef?.publication?.track) {
-      const el = audioTrackRef.publication.track.attachedElements?.[0];
-      if (el) el.volume = volume / 100;
+  // ANTI-LOOP MANTIĞI: Eğer ben de yayın yapıyorsam ve başkasını izliyorsam, sesi zorla kapat.
+  const isAudioDisabled = amISharing && !isLocalSharing;
+
+  const toggleMuteStream = () => {
+    if (isAudioDisabled) return; // Yayın yaparken açamazsın
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(prevVolume > 0 ? prevVolume : 50);
     }
-  }, [volume, audioTrackRef]);
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -637,12 +689,16 @@ function ScreenShareStage({
           className="max-w-full max-h-full object-contain shadow-2xl"
         />
 
-        {/* Kendi yayınımızı duyma (echo prevention), başkasıysa duy */}
-        {!isLocalSharing && audioTrackRef && <RoomAudioRenderer />}
+        {/* SES YÖNETİMİ - LiveKit'in AudioTrack'ini kullanıyoruz, volume prop'u %100 çalışır */}
+        {!isLocalSharing && audioTrackRef && (
+          <AudioTrack
+            trackRef={audioTrackRef}
+            volume={isAudioDisabled ? 0 : volume / 100}
+          />
+        )}
 
-        {/* --- OVERLAY --- */}
+        {/* OVERLAY */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
-          {/* Üst Bar */}
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-3">
               <div className="bg-[#5865f2] px-3 py-1 rounded text-xs font-bold text-white shadow-md uppercase">
@@ -656,7 +712,6 @@ function ScreenShareStage({
             </div>
 
             <div className="flex gap-2">
-              {/* Kendi yayınımızsa "Gizle" butonu göster */}
               {isLocalSharing && (
                 <button
                   onClick={onHideLocal}
@@ -666,19 +721,16 @@ function ScreenShareStage({
                   <EyeOff size={20} />
                 </button>
               )}
-
-              {/* İzlemeyi durdur (Sadece grid'e döner) */}
               <button
                 onClick={onStopWatching}
                 className="bg-black/50 hover:bg-red-500/80 text-gray-300 hover:text-white p-2 rounded-full backdrop-blur-md transition-colors"
-                title="Küçült / Izgaraya Dön"
+                title="İzlemeyi Durdur"
               >
                 <Minimize size={20} />
               </button>
             </div>
           </div>
 
-          {/* Alt Bar */}
           <div className="flex justify-between items-end">
             <div className="flex items-center gap-2 text-gray-300 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
               <Users size={16} />
@@ -686,40 +738,52 @@ function ScreenShareStage({
             </div>
 
             <div className="flex items-center gap-4 bg-black/60 p-2 rounded-lg backdrop-blur-md">
-              {/* Ses Kontrolü (Sadece Başkasını İzlerken) */}
               {!isLocalSharing && (
                 <div className="flex items-center gap-2 group/vol">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 50 : 0)}
-                    className="text-white hover:text-indigo-400 transition"
-                  >
-                    {volume === 0 ? (
-                      <VolumeX size={20} />
-                    ) : volume < 50 ? (
-                      <Volume1 size={20} />
-                    ) : (
-                      <Volume2 size={20} />
-                    )}
-                  </button>
-                  <div className="w-0 group-hover/vol:w-24 overflow-hidden transition-all duration-300">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={volume}
-                      onChange={(e) => setVolume(Number(e.target.value))}
-                      className="volume-slider w-20 ml-2"
-                    />
-                  </div>
+                  {isAudioDisabled ? (
+                    <div
+                      className="flex items-center gap-2 text-yellow-500 text-xs font-bold px-2"
+                      title="Ses döngüsünü önlemek için ses kapatıldı."
+                    >
+                      <AlertTriangle size={16} />
+                      <span className="hidden group-hover/vol:inline">
+                        Yayın Yaptığın İçin Ses Kapalı
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={toggleMuteStream}
+                        className="text-white hover:text-indigo-400 transition"
+                        title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
+                      >
+                        {volume === 0 ? (
+                          <VolumeX size={20} />
+                        ) : volume < 50 ? (
+                          <Volume1 size={20} />
+                        ) : (
+                          <Volume2 size={20} />
+                        )}
+                      </button>
+                      <div className="w-0 group-hover/vol:w-24 overflow-hidden transition-all duration-300">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={volume}
+                          onChange={(e) => setVolume(Number(e.target.value))}
+                          className="volume-slider w-20 ml-2"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
-              {/* Ayırıcı Çizgi (Sadece ses varsa) */}
-              {!isLocalSharing && (
+              {!isLocalSharing && !isAudioDisabled && (
                 <div className="w-[1px] h-5 bg-white/20"></div>
               )}
 
-              {/* Fullscreen (Kendi yayınımızsa gizli) */}
               {!isLocalSharing ? (
                 <button
                   onClick={toggleFullscreen}
@@ -742,7 +806,6 @@ function ScreenShareStage({
         </div>
       </div>
 
-      {/* Alt Şerit */}
       {!isFullscreen && (
         <div className="h-32 bg-[#1e1f22] p-2 flex gap-2 overflow-x-auto custom-scrollbar border-t border-[#111214] shrink-0">
           <ParticipantList
@@ -918,6 +981,7 @@ function BottomControls({
   isDeafened,
   setIsDeafened,
   playSound,
+  setActiveStreamId,
 }) {
   const { localParticipant } = useLocalParticipant();
   const [isMuted, setMuted] = useState(false);
@@ -1012,11 +1076,16 @@ function BottomControls({
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = stream.getVideoTracks()[0];
+
+      videoTrack.contentHint = fps > 15 ? "motion" : "detail";
+      const maxBitrate = fps > 15 ? 1000000 : 300000;
+
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
         videoCodec: "vp8",
-        simulcast: false,
+        simulcast: true,
+        videoEncoding: { maxBitrate, maxFramerate: fps },
       });
 
       const audioTrack = stream.getAudioTracks()[0];
@@ -1024,6 +1093,7 @@ function BottomControls({
         await localParticipant.publishTrack(audioTrack, {
           name: "screen_share_audio",
           source: Track.Source.ScreenShareAudio,
+          disableDtx: false,
         });
         videoTrack.onended = () => {
           localParticipant.unpublishTrack(videoTrack);
@@ -1037,6 +1107,8 @@ function BottomControls({
           localParticipant.unpublishTrack(videoTrack);
         };
       }
+
+      setActiveStreamId(localParticipant.identity);
     } catch (e) {
       console.error("Screen share error:", e);
       alert("Ekran paylaşımı başlatılamadı: " + e.message);
