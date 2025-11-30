@@ -27,6 +27,12 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "public/logo.ico",
+        "to": "logo.ico"
+      }
+    ],
     "files": [
       "out/**/*",
       "electron/**/*",

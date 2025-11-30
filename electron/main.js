@@ -138,15 +138,22 @@ const startLocalAuthServer = () => {
 
 // --- TRAY OLUŞTURMA ---
 function createTray() {
+  // Production (Paketlenmiş) ve Dev (Geliştirme) modları için farklı yollar
   const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, "public/logo.ico") // Prod
-    : path.join(__dirname, "../public/logo.ico"); // Dev
+    ? path.join(process.resourcesPath, "logo.ico") // Build sonrası buraya kopyalanacak
+    : path.join(__dirname, "../public/logo.ico"); // Dev modunda buradan alacak
+
+  // İkonun varlığını kontrol et (Hata ayıklama için terminale basar)
+  if (!fs.existsSync(iconPath)) {
+    console.error("Tray ikonu bulunamadı:", iconPath);
+    return;
+  }
 
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: "Netrex'i göster", click: () => mainWindow.show() },
+    { label: "Netrex'i Göster", click: () => mainWindow.show() },
     { type: "separator" },
     {
       label: "Çıkış Yap",
@@ -159,6 +166,8 @@ function createTray() {
 
   tray.setToolTip("Netrex");
   tray.setContextMenu(contextMenu);
+
+  // Çift tıklama ile aç
   tray.on("double-click", () => mainWindow.show());
 }
 
