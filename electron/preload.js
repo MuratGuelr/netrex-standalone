@@ -1,14 +1,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("netrex", {
-  // --- AUTH ---
+  // Auth
   startOAuth: () => ipcRenderer.invoke("start-oauth"),
   onOAuthSuccess: (callback) => {
     ipcRenderer.removeAllListeners("oauth-success");
     ipcRenderer.on("oauth-success", (_, token) => callback(token));
   },
 
-  // --- SETTINGS & HOTKEYS ---
+  // Settings & Hotkeys
   updateHotkey: (action, keybinding) =>
     ipcRenderer.invoke("update-hotkey", action, keybinding),
   getHotkey: (action) => ipcRenderer.invoke("get-hotkey", action),
@@ -19,27 +19,29 @@ contextBridge.exposeInMainWorld("netrex", {
   onRawKeydown: (callback) =>
     ipcRenderer.on("raw-keydown", (_, event) => callback(event)),
 
-  // --- LIVEKIT ---
+  // LiveKit
   getLiveKitToken: (room, user) =>
     ipcRenderer.invoke("get-livekit-token", room, user),
 
-  // --- UTILS ---
+  // Utils
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),
 
-  // --- AUTO UPDATE ---
+  // Auto Update
   onUpdateStatus: (callback) =>
     ipcRenderer.on("update-status", (_, status, details) =>
       callback(status, details)
     ),
-
   onUpdateProgress: (callback) =>
     ipcRenderer.on("update-progress", (_, percent) => callback(percent)),
-
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 
-  // --- EKRAN PAYLAŞIMI (YENİ) ---
+  // Screen Share
   getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
 
-  // --- CLEANUP ---
+  // --- YENİ: APP AYARLARI ---
+  setSetting: (key, value) => ipcRenderer.invoke("set-setting", key, value),
+  getSetting: (key) => ipcRenderer.invoke("get-setting", key),
+
+  // Cleanup
   removeListener: (channel) => ipcRenderer.removeAllListeners(channel),
 });

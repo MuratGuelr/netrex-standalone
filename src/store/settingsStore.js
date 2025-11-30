@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 export const useSettingsStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Ses Cihazları
       audioInputId: "default",
       audioOutputId: "default",
@@ -12,7 +12,7 @@ export const useSettingsStore = create(
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
-      rawAudioMode: false, // Ham ses modu (Kaspersky fix için)
+      rawAudioMode: false,
 
       // Seviyeler
       voiceThreshold: 15,
@@ -22,9 +22,8 @@ export const useSettingsStore = create(
       // Kullanıcı sesleri
       userVolumes: {},
 
-      // YENİ: Bas-Konuş (PTT) Ayarları
-      pushToTalk: false, // false = Ses Aktivitesi, true = Bas Konuş
-      pttKey: null, // Atanan tuş objesi
+      // --- YENİ AYAR: TRAY DAVRANIŞI ---
+      closeToTray: true,
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
@@ -48,13 +47,30 @@ export const useSettingsStore = create(
           userVolumes: { ...state.userVolumes, [identity]: volume },
         })),
 
-      // YENİ ACTIONLAR
-      setPushToTalk: (enabled) => set({ pushToTalk: enabled }),
-      setPttKey: (key) => set({ pttKey: key }),
+      // --- YENİ ACTION: ELECTRON İLE SENKRONİZE KAYIT ---
+      setCloseToTray: async (enabled) => {
+        set({ closeToTray: enabled });
+        if (window.netrex) {
+          await window.netrex.setSetting("closeToTray", enabled);
+        }
+      },
+
+      // Başlangıçta Electron'dan oku (Senkronizasyon için)
+      syncWithElectron: async () => {
+        if (window.netrex) {
+          const val = await window.netrex.getSetting("closeToTray");
+          if (val !== undefined) {
+            set({ closeToTray: val });
+          }
+        }
+      },
     }),
     {
       name: "netrex-user-settings",
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.syncWithElectron();
+      },
     }
   )
 );

@@ -12,26 +12,24 @@ import {
   Volume2,
   Palette,
   Mail,
-  Hash,
-  Pipette, // Renk seçici ikonu
-  Zap, // Gradient ikonu
+  Pipette,
+  Zap,
+  AppWindow, // YENİ İKON
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 
-// --- PRESET GRADIENTS ---
+// --- PRESET COLORS ---
 const PRESET_GRADIENTS = [
-  "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)", // Indigo -> Purple
-  "linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%)", // Blue -> Teal
-  "linear-gradient(135deg, #f97316 0%, #eab308 100%)", // Orange -> Yellow
-  "linear-gradient(135deg, #ec4899 0%, #ef4444 100%)", // Pink -> Red
-  "linear-gradient(135deg, #10b981 0%, #06b6d4 100%)", // Emerald -> Cyan
-  "linear-gradient(135deg, #111827 0%, #4b5563 100%)", // Dark Gray
+  "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+  "linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%)",
+  "linear-gradient(135deg, #f97316 0%, #eab308 100%)",
+  "linear-gradient(135deg, #ec4899 0%, #ef4444 100%)",
+  "linear-gradient(135deg, #10b981 0%, #06b6d4 100%)",
+  "linear-gradient(135deg, #111827 0%, #4b5563 100%)",
 ];
-
-// --- PRESET SOLID COLORS ---
 const SOLID_COLORS = [
   "#6366f1",
   "#ef4444",
@@ -45,27 +43,20 @@ const SOLID_COLORS = [
   "#14b8a6",
 ];
 
-// --- YARDIMCI FONKSİYONLAR ---
 const formatKeybinding = (keybinding) => {
   if (!keybinding) return "Atanmadı";
-  if (keybinding.type === "mouse" || keybinding.mouseButton) {
+  if (keybinding.type === "mouse" || keybinding.mouseButton)
     return getMouseLabel(keybinding.mouseButton);
-  }
   if (typeof keybinding.keycode !== "number") return "Atanmadı";
-
   const keyLabel = getKeyLabel(keybinding.keycode);
   const isStandaloneModifier = isModifierKey(keybinding.keycode);
   if (isStandaloneModifier) return keyLabel;
-
   const modifiers = [];
   if (keybinding.ctrlKey) modifiers.push("Ctrl");
   if (keybinding.shiftKey) modifiers.push("Shift");
   if (keybinding.altKey) modifiers.push("Alt");
   if (keybinding.metaKey) modifiers.push("Win");
-
-  if (modifiers.length > 0) {
-    return [...modifiers, keyLabel].join(" + ");
-  }
+  if (modifiers.length > 0) return [...modifiers, keyLabel].join(" + ");
   return keyLabel;
 };
 
@@ -77,7 +68,6 @@ export default function SettingsModal({ isOpen, onClose }) {
   useEffect(() => {
     setMounted(true);
   }, []);
-
   useEffect(() => {
     const handleEsc = (e) => {
       if (isOpen && e.key === "Escape") onClose();
@@ -86,20 +76,18 @@ export default function SettingsModal({ isOpen, onClose }) {
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isOpen, onClose]);
 
-  if (!mounted) return null;
-  if (!isOpen) return null;
+  if (!mounted || !isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-[#313338] w-[850px] h-[650px] rounded-lg shadow-2xl flex overflow-hidden border border-[#1e1f22]">
-        {/* SOL SIDEBAR */}
+        {/* SIDEBAR */}
         <div className="w-60 bg-[#2b2d31] p-3 flex flex-col gap-1 border-r border-[#1f2023]">
           <div className="px-3 pt-4 pb-2">
             <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
               Kullanıcı Ayarları
             </h2>
           </div>
-
           <SidebarItem
             label="Hesabım"
             icon={<User size={18} />}
@@ -114,6 +102,14 @@ export default function SettingsModal({ isOpen, onClose }) {
               Uygulama Ayarları
             </h2>
           </div>
+
+          {/* YENİ TAB: GENEL */}
+          <SidebarItem
+            label="Genel"
+            icon={<AppWindow size={18} />}
+            active={activeTab === "application"}
+            onClick={() => setActiveTab("application")}
+          />
 
           <SidebarItem
             label="Ses ve Görüntü"
@@ -135,7 +131,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* SAĞ İÇERİK ALANI */}
+        {/* CONTENT */}
         <div className="flex-1 bg-[#313338] relative flex flex-col min-w-0">
           <div
             className="absolute top-4 right-4 z-10 flex flex-col items-center group cursor-pointer"
@@ -151,6 +147,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-10 pr-16">
             {activeTab === "account" && <AccountSettings onClose={onClose} />}
+            {activeTab === "application" && <ApplicationSettings />}
             {activeTab === "voice" && <VoiceSettings />}
             {activeTab === "keybinds" && <KeybindSettings />}
           </div>
@@ -175,33 +172,70 @@ function SidebarItem({ label, icon, active, onClick }) {
   );
 }
 
-// --- YENİLENMİŞ HESABIM SEKME (RENK STÜDYOSU) ---
+// --- YENİ: UYGULAMA AYARLARI ---
+function ApplicationSettings() {
+  const { closeToTray, setCloseToTray } = useSettingsStore();
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <h3 className="text-xl font-bold text-white mb-6">Uygulama Ayarları</h3>
+
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Pencere Davranışı
+        </h4>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-[#dbdee1] mb-1">
+              Sistem Tepsisine Küçült
+            </div>
+            <div className="text-xs text-[#949ba4]">
+              Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt
+              köşedeki (saat yanı) simge durumuna küçülür.
+            </div>
+          </div>
+
+          <button
+            onClick={() => setCloseToTray(!closeToTray)}
+            className={`w-12 h-6 rounded-full relative transition-colors duration-200 ease-in-out border border-transparent shrink-0 ${
+              closeToTray ? "bg-[#23a559]" : "bg-[#80848e]"
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-200 ${
+                closeToTray
+                  ? "translate-x-6.5 left-0.5"
+                  : "translate-x-0.5 left-0.5"
+              }`}
+            ></div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- HESAP AYARLARI ---
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
-
-  // Renk Modu: "solid" veya "gradient"
   const [colorMode, setColorMode] = useState(
     profileColor.includes("gradient") ? "gradient" : "solid"
   );
-
-  // Gradient Builder State
   const [gradStart, setGradStart] = useState("#6366f1");
   const [gradEnd, setGradEnd] = useState("#a855f7");
   const [gradAngle, setGradAngle] = useState(135);
 
-  // Gradient state değişince ana rengi güncelle
   useEffect(() => {
-    if (colorMode === "gradient") {
+    if (colorMode === "gradient")
       setProfileColor(
         `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`
       );
-    }
   }, [gradStart, gradEnd, gradAngle, colorMode]);
 
   const handleLogout = async () => {
-    const confirm = window.confirm("Çıkış yapmak istediğinize emin misiniz?");
-    if (confirm) {
+    if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
       await logout();
       onClose();
     }
@@ -210,14 +244,11 @@ function AccountSettings({ onClose }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
       <h3 className="text-xl font-bold text-white mb-6">Hesabım</h3>
-
-      {/* Profil Önizleme Kartı */}
       <div className="bg-[#1e1f22] rounded-lg overflow-hidden border border-[#1f2023] shadow-md mb-8">
         <div
           className="h-24 w-full transition-all duration-300"
-          style={{ background: profileColor }} // backgroundColor değil background (gradient için)
+          style={{ background: profileColor }}
         ></div>
-
         <div className="px-5 pb-5 relative">
           <div className="flex justify-between items-end -mt-10 mb-4">
             <div className="flex items-end gap-3">
@@ -247,8 +278,6 @@ function AccountSettings({ onClose }) {
               </div>
             </div>
           </div>
-
-          {/* Kullanıcı Bilgileri */}
           <div className="bg-[#2b2d31] rounded-lg p-4 space-y-4">
             <div className="flex justify-between items-center group">
               <div>
@@ -260,7 +289,6 @@ function AccountSettings({ onClose }) {
                 </div>
               </div>
             </div>
-
             <div className="flex justify-between items-center group">
               <div>
                 <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1 flex items-center gap-1">
@@ -276,16 +304,11 @@ function AccountSettings({ onClose }) {
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
-      {/* --- PROFİL RENGİ STÜDYOSU --- */}
       <div className="mb-8">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
           <Palette size={14} /> Profil Teması
         </h4>
-
-        {/* Tab Seçimi */}
         <div className="flex gap-2 mb-4 bg-[#1e1f22] p-1 rounded-lg w-fit">
           <button
             onClick={() => setColorMode("solid")}
@@ -308,12 +331,9 @@ function AccountSettings({ onClose }) {
             <Zap size={14} /> Gradient
           </button>
         </div>
-
-        {/* 1. SOLID COLOR MODU */}
         {colorMode === "solid" && (
           <div className="animate-in fade-in zoom-in-95 duration-200">
             <div className="flex flex-wrap gap-3 mb-4">
-              {/* Custom Renk Seçici */}
               <label className="w-10 h-10 rounded-full bg-[#1e1f22] border-2 border-dashed border-[#4e5058] flex items-center justify-center cursor-pointer hover:border-white transition group relative overflow-hidden">
                 <input
                   type="color"
@@ -325,8 +345,6 @@ function AccountSettings({ onClose }) {
                   className="text-[#949ba4] group-hover:text-white"
                 />
               </label>
-
-              {/* Hazır Renkler */}
               {SOLID_COLORS.map((color) => (
                 <button
                   key={color}
@@ -350,17 +368,10 @@ function AccountSettings({ onClose }) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-[#949ba4]">
-              Artı ikonuna tıklayarak renk paletinden 16 milyon renkten
-              istediğini seçebilirsin.
-            </p>
           </div>
         )}
-
-        {/* 2. GRADIENT MODU */}
         {colorMode === "gradient" && (
           <div className="animate-in fade-in zoom-in-95 duration-200 bg-[#1e1f22] p-4 rounded-lg border border-[#2b2d31]">
-            {/* Gradient Oluşturucu */}
             <div className="flex items-center gap-4 mb-6">
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold text-[#949ba4] uppercase">
@@ -378,7 +389,6 @@ function AccountSettings({ onClose }) {
                   </span>
                 </div>
               </div>
-
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold text-[#949ba4] uppercase">
                   Bitiş
@@ -395,7 +405,6 @@ function AccountSettings({ onClose }) {
                   </span>
                 </div>
               </div>
-
               <div className="flex flex-col gap-1 flex-1 ml-4">
                 <span className="text-[10px] font-bold text-[#949ba4] uppercase">
                   Açı ({gradAngle}°)
@@ -410,8 +419,6 @@ function AccountSettings({ onClose }) {
                 />
               </div>
             </div>
-
-            {/* Hazır Gradientler */}
             <div className="space-y-2">
               <span className="text-[10px] font-bold text-[#949ba4] uppercase">
                 Hızlı Seçim
@@ -444,9 +451,7 @@ function AccountSettings({ onClose }) {
           </div>
         )}
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="flex flex-col gap-2">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2">
           Hesap İşlemleri
@@ -476,22 +481,18 @@ function VoiceSettings() {
   try {
     room = useRoomContext();
   } catch (e) {}
-
   const [inputs, setInputs] = useState([]);
   const [outputs, setOutputs] = useState([]);
   const [micVolume, setMicVolume] = useState(0);
-
   const settings = useSettingsStore();
   const { playSound } = useSoundEffects();
   const animationRef = useRef();
-
   const [localSfxVolume, setLocalSfxVolume] = useState(settings.sfxVolume);
   const [localThreshold, setLocalThreshold] = useState(settings.voiceThreshold);
 
   useEffect(() => {
     setLocalSfxVolume(settings.sfxVolume);
   }, [settings.sfxVolume]);
-
   useEffect(() => {
     setLocalThreshold(settings.voiceThreshold);
   }, [settings.voiceThreshold]);
@@ -504,64 +505,46 @@ function VoiceSettings() {
         setInputs(devs.filter((d) => d.kind === "audioinput"));
         setOutputs(devs.filter((d) => d.kind === "audiooutput"));
       } catch (err) {
-        console.error("Cihaz erişim hatası:", err);
+        console.error(err);
       }
     };
     getDevices();
   }, []);
 
   useEffect(() => {
-    let audioContext;
-    let analyser;
-    let source;
-    let stream;
-
+    let audioContext, analyser, stream;
     const initAudio = async () => {
       try {
         if (!settings.audioInputId) return;
-
-        const constraints = {
+        stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId:
               settings.audioInputId !== "default"
                 ? { exact: settings.audioInputId }
                 : undefined,
           },
-        };
-
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-
+        });
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
-        source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-
+        audioContext.createMediaStreamSource(stream).connect(analyser);
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
         const updateMeter = () => {
           analyser.getByteTimeDomainData(dataArray);
-
           let sum = 0;
           for (let i = 0; i < dataArray.length; i++) {
             const x = (dataArray[i] - 128) / 128.0;
             sum += x * x;
           }
-          const rms = Math.sqrt(sum / dataArray.length);
-          const volume = Math.min(100, rms * 400);
-
-          setMicVolume(volume);
+          setMicVolume(Math.min(100, Math.sqrt(sum / dataArray.length) * 400));
           animationRef.current = requestAnimationFrame(updateMeter);
         };
-
         updateMeter();
       } catch (error) {
-        console.error("Audio Meter Hatası:", error);
+        console.error(error);
       }
     };
-
     initAudio();
-
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (stream) stream.getTracks().forEach((t) => t.stop());
@@ -572,7 +555,6 @@ function VoiceSettings() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Ses Ayarları</h3>
-
       <div className="space-y-6">
         <div>
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
@@ -599,7 +581,6 @@ function VoiceSettings() {
             </div>
           </div>
         </div>
-
         <div>
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
             Çıkış Cihazı (Hoparlör)
@@ -626,9 +607,7 @@ function VoiceSettings() {
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <label className="text-xs font-bold text-[#b5bac1] uppercase flex items-center gap-2">
@@ -638,7 +617,6 @@ function VoiceSettings() {
             %{localSfxVolume}
           </span>
         </div>
-
         <div className="relative w-full h-8 flex items-center select-none">
           <div className="absolute w-full h-2 bg-[#1e1f22] rounded-full overflow-hidden">
             <div
@@ -646,7 +624,6 @@ function VoiceSettings() {
               style={{ width: `${localSfxVolume}%` }}
             ></div>
           </div>
-
           <input
             type="range"
             min="0"
@@ -663,7 +640,6 @@ function VoiceSettings() {
             }}
             className="w-full absolute z-20 opacity-0 cursor-pointer h-full"
           />
-
           <div
             className="absolute h-4 w-4 bg-white rounded-full shadow pointer-events-none transition-all z-30"
             style={{
@@ -676,9 +652,7 @@ function VoiceSettings() {
           Giriş, çıkış, mute ve diğer bildirim seslerinin yüksekliği.
         </p>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="mb-6">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Giriş Hassasiyeti (Noise Gate)
@@ -687,7 +661,6 @@ function VoiceSettings() {
           Mikrofonunuz ne kadar ses algıladığında devreye girsin? Sarı bölge
           gürültüdür, yeşil bölge konuşmadır.
         </p>
-
         <div className="bg-[#1e1f22] p-4 rounded-lg border border-[#2b2d31]">
           <div className="h-3 w-full bg-[#313338] rounded-full overflow-hidden relative mb-4">
             <div
@@ -698,12 +671,10 @@ function VoiceSettings() {
                 opacity: 0.2,
               }}
             ></div>
-
             <div
               className="absolute top-0 bottom-0 w-1 bg-white z-20 shadow-[0_0_10px_rgba(255,255,255,0.8)]"
               style={{ left: `${localThreshold}%` }}
             ></div>
-
             <div
               className="h-full transition-all duration-75 ease-out z-10"
               style={{
@@ -714,7 +685,6 @@ function VoiceSettings() {
               }}
             ></div>
           </div>
-
           <div className="flex items-center gap-4">
             <input
               type="range"
@@ -730,21 +700,17 @@ function VoiceSettings() {
               {localThreshold}%
             </span>
           </div>
-
           <div className="mt-2 flex justify-between text-[10px] text-gray-500 font-bold uppercase">
             <span>Duyarlı (Her Sesi Alır)</span>
             <span>Sağır (Sadece Bağırma)</span>
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="space-y-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Gelişmiş Ses İşleme
         </h4>
-
         <ToggleSwitch
           label="Yankı Engelleme"
           description="Sesinin yankılanmasını önler. Kulaklık kullanmıyorsan kesinlikle aç."
@@ -752,7 +718,6 @@ function VoiceSettings() {
           onChange={settings.toggleEchoCancellation}
         />
         <div className="h-[1px] bg-[#2b2d31]"></div>
-
         <ToggleSwitch
           label="Gürültü Bastırma (Noise Suppression)"
           description="Klavye sesi, fan sesi gibi arka plan gürültülerini filtreler."
@@ -760,7 +725,6 @@ function VoiceSettings() {
           onChange={settings.toggleNoiseSuppression}
         />
         <div className="h-[1px] bg-[#2b2d31]"></div>
-
         <ToggleSwitch
           label="Otomatik Kazanç Kontrolü"
           description="Ses seviyeni otomatik olarak dengeler (Bağırdığında kısar, fısıldadığında açar)."
@@ -822,16 +786,13 @@ function KeybindSettings() {
 
   useEffect(() => {
     if (!recording || !window.netrex) return;
-
     window.netrex.setRecordingMode(true);
-
     const handleRawKeydown = async (event) => {
       setError(null);
       let keybinding;
-
-      if (event.type === "mouse") {
+      if (event.type === "mouse")
         keybinding = { type: "mouse", mouseButton: event.mouseButton };
-      } else {
+      else {
         const isModifier = isModifierKey(event.keycode);
         keybinding = {
           type: "keyboard",
@@ -842,7 +803,6 @@ function KeybindSettings() {
           metaKey: isModifier ? false : event.metaKey || false,
         };
       }
-
       try {
         const result = await window.netrex.updateHotkey(recording, keybinding);
         if (result.success) {
@@ -858,7 +818,6 @@ function KeybindSettings() {
         setRecording(null);
       }
     };
-
     window.netrex.onRawKeydown(handleRawKeydown);
     return () => {
       window.netrex.setRecordingMode(false);
@@ -869,19 +828,16 @@ function KeybindSettings() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Tuş Atamaları</h3>
-
       {error && (
         <div className="bg-[#f04747]/10 text-[#f04747] p-3 rounded mb-4 flex items-center gap-2 text-sm border border-[#f04747]/30">
-          <AlertCircle size={16} /> {error}
+          <Info size={16} /> {error}
         </div>
       )}
-
       <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden">
         <div className="flex bg-[#2b2d31] p-3 border-b border-[#1f2023] text-xs font-bold text-[#949ba4] uppercase">
           <div className="flex-1">Eylem</div>
           <div className="w-40 text-center">Tuş Kombinasyonu</div>
         </div>
-
         <KeybindRow
           label="Mikrofonu Sustur (Mute)"
           description="Kendi sesini kapatır/açar."
@@ -892,9 +848,7 @@ function KeybindSettings() {
             setError(null);
           }}
         />
-
         <div className="h-[1px] bg-[#1f2023] mx-4"></div>
-
         <KeybindRow
           label="Sağırlaştır (Deafen)"
           description="Hem mikrofonu hem hoparlörü kapatır."
@@ -906,7 +860,6 @@ function KeybindSettings() {
           }}
         />
       </div>
-
       <div className="mt-4 flex items-center gap-2 px-1">
         <Info size={14} className="text-[#949ba4]" />
         <p className="text-xs text-[#949ba4]">
@@ -927,14 +880,11 @@ function KeybindRow({ label, description, shortcut, isRecording, onClick }) {
       </div>
       <button
         onClick={onClick}
-        className={`
-          w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden
-          ${
-            isRecording
-              ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
-              : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
-          }
-        `}
+        className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
+          isRecording
+            ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
+            : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
+        }`}
       >
         <span className="relative z-10">
           {isRecording ? "Tuşa Basın..." : shortcut}
