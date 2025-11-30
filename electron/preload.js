@@ -4,7 +4,6 @@ contextBridge.exposeInMainWorld("netrex", {
   // Auth
   startOAuth: () => ipcRenderer.invoke("start-oauth"),
   onOAuthSuccess: (callback) => {
-    // Listener'ı temizleyip yeniden ekleyelim ki dublike olmasın
     ipcRenderer.removeAllListeners("oauth-success");
     ipcRenderer.on("oauth-success", (_, token) => callback(token));
   },
@@ -26,6 +25,17 @@ contextBridge.exposeInMainWorld("netrex", {
 
   // External Links
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),
+
+  // --- AUTO UPDATE ---
+  onUpdateStatus: (callback) =>
+    ipcRenderer.on("update-status", (_, status, details) =>
+      callback(status, details)
+    ),
+
+  onUpdateProgress: (callback) =>
+    ipcRenderer.on("update-progress", (_, percent) => callback(percent)),
+
+  quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 
   // Cleanup
   removeListener: (channel) => ipcRenderer.removeAllListeners(channel),

@@ -4,6 +4,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import RoomList from "@/src/components/RoomList";
 import ActiveRoom from "@/src/components/ActiveRoom";
 import SettingsModal from "@/src/components/SettingsModal";
+import UpdateNotification from "@/src/components/UpdateNotification"; // EKLENDİ
 import { Radio, Mic, Headphones } from "lucide-react";
 
 export default function Home() {
@@ -27,7 +28,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Google Token Dinleyicisi (Electron'dan gelen)
+  // 2. Google Token Dinleyicisi
   useEffect(() => {
     if (window.netrex) {
       window.netrex.onOAuthSuccess((token) => {
@@ -60,7 +61,10 @@ export default function Home() {
   // --- LOGIN EKRANI ---
   if (!isAuth) {
     return (
-      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center text-white select-none">
+      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center text-white select-none relative">
+        {/* Bildirimi buraya da ekleyelim ki login ekranında güncelleme olursa görünsün */}
+        <UpdateNotification />
+
         <div className="w-96 p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
           <h1 className="text-3xl font-bold text-center mb-6 text-indigo-400">
             Netrex
@@ -122,7 +126,10 @@ export default function Home() {
 
   // --- ANA UYGULAMA ---
   return (
-    <div className="flex h-screen w-screen bg-gray-800 overflow-hidden text-white">
+    <div className="flex h-screen w-screen bg-gray-800 overflow-hidden text-white relative">
+      {/* GÜNCELLEME BİLDİRİMİ */}
+      <UpdateNotification />
+
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
@@ -165,22 +172,16 @@ export default function Home() {
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-[#313338] select-none p-4">
-            {/* Merkez İkonu (Mat ve Şık) */}
             <div className="w-24 h-24 bg-[#2b2d31] rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-[#1f2023]">
               <Radio size={40} className="text-indigo-500" />
             </div>
-
-            {/* Başlık ve Karşılama */}
             <h2 className="text-2xl font-bold text-white mb-2">
               Hoş Geldin, {user?.displayName || "Misafir"}!
             </h2>
-
             <p className="text-[#949ba4] text-sm text-center max-w-md mb-10 leading-relaxed">
               Arkadaşlarınla konuşmaya başlamak için sol taraftaki ses
               kanallarından birine tıklayabilirsin.
             </p>
-
-            {/* Minimalist Kısayol Çubuğu */}
             <div className="flex items-center gap-6 bg-[#2b2d31] px-8 py-3 rounded-full border border-[#1f2023] shadow-sm">
               <div className="flex items-center gap-3 group">
                 <div className="p-1.5 bg-[#313338] rounded-md text-[#949ba4] group-hover:text-white transition-colors">
@@ -195,9 +196,7 @@ export default function Home() {
                   </span>
                 </div>
               </div>
-
               <div className="w-px h-6 bg-[#3f4147]"></div>
-
               <div className="flex items-center gap-3 group">
                 <div className="p-1.5 bg-[#313338] rounded-md text-[#949ba4] group-hover:text-white transition-colors">
                   <Headphones size={14} />
@@ -212,8 +211,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            {/* Versiyon Bilgisi */}
             <div className="absolute bottom-4 text-[10px] text-[#5e626a] font-mono">
               Netrex Client v1.0.0
             </div>
