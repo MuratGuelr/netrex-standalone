@@ -7,6 +7,7 @@ import {
   useLocalParticipant,
   useRoomContext,
   useTracks,
+  VideoTrack,
 } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 import "@livekit/components-styles";
@@ -15,41 +16,60 @@ import {
   MicOff,
   Headphones,
   VolumeX,
-  Settings,
   PhoneOff,
-  Signal,
   MessageSquare,
   Users,
   ChevronLeft,
   ChevronRight,
   Volume2,
+  Monitor,
+  MonitorOff,
+  Maximize,
+  Minimize,
+  Eye,
+  EyeOff,
+  Volume1,
+  Layers,
+  StopCircle,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
 import UserContextMenu from "./UserContextMenu";
+import ScreenShareModal from "./ScreenShareModal";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useVoiceProcessor } from "@/src/hooks/useVoiceProcessor";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useChatStore } from "@/src/store/chatStore";
 import { useAuthStore } from "@/src/store/authStore";
 
-// --- CSS Animasyonları ---
+// --- STYLES ---
 const styleInjection = `
   @keyframes pulse-ring {
     0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
     70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
   }
-  @keyframes card-glow {
-    0% { border-color: rgba(74, 222, 128, 0.2); box-shadow: 0 0 10px rgba(74, 222, 128, 0.1); }
-    50% { border-color: rgba(74, 222, 128, 0.8); box-shadow: 0 0 20px rgba(74, 222, 128, 0.2); }
-    100% { border-color: rgba(74, 222, 128, 0.2); box-shadow: 0 0 10px rgba(74, 222, 128, 0.1); }
-  }
   .speaking-avatar { animation: pulse-ring 2s infinite; }
-  .speaking-card { background: linear-gradient(to bottom right, #2b2d31, #1e1f22); }
+  
+  .volume-slider {
+    -webkit-appearance: none;
+    height: 4px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+    outline: none;
+  }
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    cursor: pointer;
+  }
 `;
 
-// --- 1. GLOBAL CHAT LISTENER (Okunmamış Mesajlar & Ses) ---
+// --- YARDIMCI BİLEŞENLER ---
+
 function GlobalChatListener({ showChatPanel }) {
   const room = useRoomContext();
   const { incrementUnread, currentChannel } = useChatStore();
@@ -63,13 +83,10 @@ function GlobalChatListener({ showChatPanel }) {
       try {
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload));
-
         if (data.type === "chat" && data.message.userId !== user?.uid) {
-          // Eğer o an o kanalda değilsek VEYA panel kapalıysa
           const isDifferentChannel =
             !currentChannel || currentChannel.id !== data.channelId;
           const isPanelClosed = !showChatPanel;
-
           if (isDifferentChannel || isPanelClosed) {
             incrementUnread(data.channelId);
             playSound("message");
@@ -85,12 +102,10 @@ function GlobalChatListener({ showChatPanel }) {
   return null;
 }
 
-// --- 2. SES YÖNETİCİSİ (Volume Manager) ---
 function VolumeManager() {
   const room = useRoomContext();
   const { userVolumes } = useSettingsStore();
   const tracks = useTracks([Track.Source.Microphone]);
-
   useEffect(() => {
     if (!room) return;
     tracks.forEach((trackRef) => {
@@ -107,17 +122,12 @@ function VolumeManager() {
   return null;
 }
 
-// --- 3. VOICE PROCESSOR HANDLER (PTT Çıkarıldı) ---
 function VoiceProcessorHandler() {
   const { rawAudioMode } = useSettingsStore();
-  // Sadece Ham Ses modu kapalıysa işlemciyi çalıştır
-  if (!rawAudioMode) {
-    useVoiceProcessor();
-  }
+  if (!rawAudioMode) useVoiceProcessor();
   return null;
 }
 
-// --- 4. ROOM EVENTS (Giriş/Çıkış Sesleri) ---
 function RoomEventsHandler() {
   const room = useRoomContext();
   const { playSound } = useSoundEffects();
@@ -150,7 +160,6 @@ function DeafenManager({ isDeafened }) {
   return null;
 }
 
-// Görsel Aktivite için (UserCard'da yeşil yanması için)
 function useAudioActivity(participant) {
   const [isActive, setIsActive] = useState(false);
   const { isMuted } = useParticipantInfo({ participant });
@@ -198,6 +207,8 @@ function useAudioActivity(participant) {
   return isActive;
 }
 
+// --- ANA BİLEŞEN ---
+
 export default function ActiveRoom({
   roomName,
   username,
@@ -213,6 +224,7 @@ export default function ActiveRoom({
   const [chatPosition, setChatPosition] = useState("right");
   const [contextMenu, setContextMenu] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isWatchingScreen, setIsWatchingScreen] = useState(true);
 
   const { noiseSuppression, echoCancellation, autoGainControl } =
     useSettingsStore();
@@ -222,9 +234,7 @@ export default function ActiveRoom({
     if (currentTextChannel) setShowChatPanel(true);
   }, [currentTextChannel]);
   useEffect(() => {
-    const closeMenu = (e) => {
-      setContextMenu(null);
-    };
+    const closeMenu = () => setContextMenu(null);
     window.addEventListener("mousedown", closeMenu);
     return () => window.removeEventListener("mousedown", closeMenu);
   }, []);
@@ -247,12 +257,10 @@ export default function ActiveRoom({
     playSound("left");
     onLeave();
   };
-
   const handleDisconnect = (reason) => {
     console.log("Bağlantı koptu:", reason);
     setIsReconnecting(true);
   };
-
   useEffect(() => {
     if (token) playSound("join");
   }, [token]);
@@ -278,7 +286,7 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
-      video={false}
+      video={true}
       audio={true}
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
@@ -295,8 +303,6 @@ export default function ActiveRoom({
       }}
     >
       <GlobalChatListener showChatPanel={showChatPanel} />
-
-      {/* PTT (MicControlManager) KALDIRILDI */}
       <VoiceProcessorHandler />
       <RoomEventsHandler />
       <VolumeManager />
@@ -305,7 +311,6 @@ export default function ActiveRoom({
         <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
           <h2 className="text-xl font-bold">Bağlantı Koptu</h2>
-          <p className="text-gray-400">Tekrar bağlanılıyor...</p>
           <button
             onClick={handleManualLeave}
             className="mt-6 px-6 py-2 bg-red-600 rounded hover:bg-red-700 transition"
@@ -339,12 +344,7 @@ export default function ActiveRoom({
               <div className="w-[3px] h-2 bg-[#23a559] rounded-sm"></div>
               <div className="w-[3px] h-3 bg-[#23a559] rounded-sm"></div>
             </div>
-            <span className="text-xs font-bold text-[#23a559] group-hover:underline">
-              Bağlandı
-            </span>
-            <span className="text-[10px] text-[#949ba4] hidden group-hover:block ml-1">
-              (RTC Bağlantısı)
-            </span>
+            <span className="text-xs font-bold text-[#23a559]">Bağlandı</span>
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-5">
@@ -352,7 +352,7 @@ export default function ActiveRoom({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowVoicePanel(!showVoicePanel)}
-              className={`p-1.5 rounded transition-all relative group ${
+              className={`p-1.5 rounded transition-all ${
                 showVoicePanel
                   ? "text-[#dbdee1]"
                   : "text-[#b5bac1] hover:text-[#dbdee1]"
@@ -366,7 +366,7 @@ export default function ActiveRoom({
             {currentTextChannel && (
               <button
                 onClick={() => setShowChatPanel(!showChatPanel)}
-                className={`p-1.5 rounded transition-all relative group ${
+                className={`p-1.5 rounded transition-all ${
                   showChatPanel
                     ? "text-[#dbdee1]"
                     : "text-[#b5bac1] hover:text-[#dbdee1]"
@@ -396,49 +396,17 @@ export default function ActiveRoom({
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="flex-1 flex overflow-hidden min-h-0 relative bg-black">
-        {showVoicePanel && (
-          <div
-            className={`flex-1 overflow-y-auto custom-scrollbar min-w-0 ${
-              showChatPanel && currentTextChannel
-                ? chatPosition === "left"
-                  ? "order-2"
-                  : "order-1"
-                : ""
-            }`}
-            style={{
-              flexBasis: showChatPanel && currentTextChannel ? "60%" : "100%",
-            }}
-          >
-            <div className="w-full h-full flex flex-col items-center justify-center p-4">
-              <ParticipantList onUserContextMenu={handleUserContextMenu} />
-            </div>
-          </div>
-        )}
-        {showChatPanel && currentTextChannel && (
-          <div
-            className={`flex-1 overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
-              chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
-            }`}
-            style={{ flexBasis: showVoicePanel ? "40%" : "100%" }}
-          >
-            <ChatView
-              channelId={currentTextChannel}
-              username={username}
-              userId={userId}
-            />
-          </div>
-        )}
-        {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-[#313338]">
-            <div className="w-16 h-16 bg-[#2b2d31] rounded-full flex items-center justify-center mb-4">
-              <Users size={32} className="opacity-50" />
-            </div>
-            <p>Görünüm gizli.</p>
-          </div>
-        )}
-      </div>
+      <StageManager
+        showVoicePanel={showVoicePanel}
+        showChatPanel={showChatPanel}
+        currentTextChannel={currentTextChannel}
+        chatPosition={chatPosition}
+        username={username}
+        userId={userId}
+        onUserContextMenu={handleUserContextMenu}
+        isWatchingScreen={isWatchingScreen}
+        setIsWatchingScreen={setIsWatchingScreen}
+      />
 
       <BottomControls
         username={username}
@@ -462,10 +430,350 @@ export default function ActiveRoom({
   );
 }
 
-function ParticipantList({ onUserContextMenu }) {
+// --- STAGE MANAGER ---
+function StageManager({
+  showVoicePanel,
+  showChatPanel,
+  currentTextChannel,
+  chatPosition,
+  username,
+  userId,
+  onUserContextMenu,
+  isWatchingScreen,
+  setIsWatchingScreen,
+}) {
+  const screenTracks = useTracks([Track.Source.ScreenShare]);
+  const hasScreenShare = screenTracks.length > 0;
+
+  const isLocalSharing =
+    screenTracks.length > 0 && screenTracks[0].participant.isLocal;
+
+  // Yerel önizleme gizleme durumu
+  const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
+
+  // Eğer ekran paylaşımı bittiyse izleme modunu otomatik aç
+  useEffect(() => {
+    if (!hasScreenShare) {
+      setIsWatchingScreen(true);
+      setLocalPreviewHidden(false); // Resetle
+    }
+  }, [hasScreenShare, setIsWatchingScreen]);
+
+  return (
+    <div className="flex-1 flex overflow-hidden min-h-0 relative bg-black">
+      {showVoicePanel && (
+        <div
+          className={`flex-1 overflow-y-auto custom-scrollbar min-w-0 flex flex-col ${
+            showChatPanel && currentTextChannel
+              ? chatPosition === "left"
+                ? "order-2"
+                : "order-1"
+              : ""
+          }`}
+          style={{
+            flexBasis: showChatPanel && currentTextChannel ? "60%" : "100%",
+          }}
+        >
+          {hasScreenShare && isWatchingScreen ? (
+            // --- EKRAN PAYLAŞIM ALANI ---
+            isLocalSharing && localPreviewHidden ? (
+              // Durum A: Kendi yayınımı gizledim
+              <LocalHiddenPlaceholder
+                onShow={() => setLocalPreviewHidden(false)}
+                onStopSharing={() => {
+                  const tracks =
+                    screenTracks[0].participant.getTrackPublications();
+                  for (const t of tracks) {
+                    if (
+                      t.source === Track.Source.ScreenShare ||
+                      t.source === Track.Source.ScreenShareAudio
+                    ) {
+                      t.track?.stop();
+                      screenTracks[0].participant.unpublishTrack(t.track);
+                    }
+                  }
+                }}
+              />
+            ) : (
+              // Durum B: Yayın izleniyor (Kendi yayınım veya başkasının)
+              <ScreenShareStage
+                screenTracks={screenTracks}
+                onStopWatching={() => setIsWatchingScreen(false)}
+                onUserContextMenu={onUserContextMenu}
+                isLocalSharing={isLocalSharing}
+                onHideLocal={() => setLocalPreviewHidden(true)} // Kendini gizle butonu için
+              />
+            )
+          ) : (
+            // --- STANDART IZGARA MODU ---
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 relative">
+              {hasScreenShare && !isWatchingScreen && (
+                <div className="absolute top-4 right-4 z-20">
+                  <button
+                    onClick={() => setIsWatchingScreen(true)}
+                    className="bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-2 rounded-full shadow-lg text-sm font-bold flex items-center gap-2 animate-bounce"
+                  >
+                    <Monitor size={16} /> Yayına Dön
+                  </button>
+                </div>
+              )}
+              <ParticipantList
+                onUserContextMenu={onUserContextMenu}
+                compact={false}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {showChatPanel && currentTextChannel && (
+        <div
+          className={`flex-1 overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
+            chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
+          }`}
+          style={{ flexBasis: showVoicePanel ? "40%" : "100%" }}
+        >
+          <ChatView
+            channelId={currentTextChannel}
+            username={username}
+            userId={userId}
+          />
+        </div>
+      )}
+
+      {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
+        <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-[#313338]">
+          <Users size={32} className="opacity-50 mb-4" />
+          <p>Görünüm gizli.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- YEREL YAYIN GİZLENDİĞİNDE GÖRÜNEN EKRAN ---
+function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
+  return (
+    <div className="flex flex-col h-full w-full bg-[#313338] items-center justify-center p-8 text-center relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/10 via-[#313338] to-[#313338]"></div>
+
+      <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-300">
+        <div className="w-24 h-24 bg-[#2b2d31] rounded-full flex items-center justify-center mb-6 shadow-xl border border-[#3f4147]">
+          <EyeOff size={40} className="text-[#949ba4]" />
+        </div>
+
+        <h2 className="text-xl font-bold text-white mb-2">Önizleme Gizlendi</h2>
+        <p className="text-gray-400 text-sm max-w-sm mb-8">
+          Yayının devam ediyor ancak performans için önizlemeyi kapattın.
+        </p>
+
+        <div className="flex gap-4">
+          <button
+            onClick={onShow}
+            className="bg-[#2b2d31] hover:bg-[#35373c] text-white px-6 py-2.5 rounded font-medium shadow-md transition flex items-center gap-2"
+          >
+            <Eye size={18} /> Önizlemeyi Aç
+          </button>
+          <button
+            onClick={onStopSharing}
+            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded font-medium shadow-md transition flex items-center gap-2"
+          >
+            <StopCircle size={18} /> Yayını Durdur
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- SCREEN SHARE PLAYER (STAGE) ---
+function ScreenShareStage({
+  screenTracks,
+  onStopWatching,
+  onUserContextMenu,
+  isLocalSharing,
+  onHideLocal,
+}) {
+  const [volume, setVolume] = useState(50);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef(null);
+
+  const participants = useParticipants();
+  const viewerCount = Math.max(0, participants.length - 1);
+
+  const trackRef = screenTracks[0];
+  const participant = trackRef?.participant;
+
+  const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
+  const audioTrackRef = audioTracks.find(
+    (t) => t.participant.sid === participant?.sid
+  );
+
+  useEffect(() => {
+    if (audioTrackRef?.publication?.track) {
+      const el = audioTrackRef.publication.track.attachedElements?.[0];
+      if (el) el.volume = volume / 100;
+    }
+  }, [volume, audioTrackRef]);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-black">
+      <div
+        ref={containerRef}
+        className="flex-1 relative flex items-center justify-center bg-black group overflow-hidden"
+      >
+        <VideoTrack
+          trackRef={trackRef}
+          className="max-w-full max-h-full object-contain shadow-2xl"
+        />
+
+        {/* Kendi yayınımızı duyma (echo prevention), başkasıysa duy */}
+        {!isLocalSharing && audioTrackRef && <RoomAudioRenderer />}
+
+        {/* --- OVERLAY --- */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
+          {/* Üst Bar */}
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#5865f2] px-3 py-1 rounded text-xs font-bold text-white shadow-md uppercase">
+                Canlı
+              </div>
+              <span className="text-white font-semibold drop-shadow-md text-lg">
+                {isLocalSharing
+                  ? "Senin Yayının"
+                  : `${participant?.identity} yayını`}
+              </span>
+            </div>
+
+            <div className="flex gap-2">
+              {/* Kendi yayınımızsa "Gizle" butonu göster */}
+              {isLocalSharing && (
+                <button
+                  onClick={onHideLocal}
+                  className="bg-black/50 hover:bg-black/80 text-gray-300 hover:text-white p-2 rounded-full backdrop-blur-md transition-colors"
+                  title="Önizlemeyi Gizle"
+                >
+                  <EyeOff size={20} />
+                </button>
+              )}
+
+              {/* İzlemeyi durdur (Sadece grid'e döner) */}
+              <button
+                onClick={onStopWatching}
+                className="bg-black/50 hover:bg-red-500/80 text-gray-300 hover:text-white p-2 rounded-full backdrop-blur-md transition-colors"
+                title="Küçült / Izgaraya Dön"
+              >
+                <Minimize size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Alt Bar */}
+          <div className="flex justify-between items-end">
+            <div className="flex items-center gap-2 text-gray-300 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
+              <Users size={16} />
+              <span className="text-sm font-bold">{viewerCount} izliyor</span>
+            </div>
+
+            <div className="flex items-center gap-4 bg-black/60 p-2 rounded-lg backdrop-blur-md">
+              {/* Ses Kontrolü (Sadece Başkasını İzlerken) */}
+              {!isLocalSharing && (
+                <div className="flex items-center gap-2 group/vol">
+                  <button
+                    onClick={() => setVolume(volume === 0 ? 50 : 0)}
+                    className="text-white hover:text-indigo-400 transition"
+                  >
+                    {volume === 0 ? (
+                      <VolumeX size={20} />
+                    ) : volume < 50 ? (
+                      <Volume1 size={20} />
+                    ) : (
+                      <Volume2 size={20} />
+                    )}
+                  </button>
+                  <div className="w-0 group-hover/vol:w-24 overflow-hidden transition-all duration-300">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={volume}
+                      onChange={(e) => setVolume(Number(e.target.value))}
+                      className="volume-slider w-20 ml-2"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Ayırıcı Çizgi (Sadece ses varsa) */}
+              {!isLocalSharing && (
+                <div className="w-[1px] h-5 bg-white/20"></div>
+              )}
+
+              {/* Fullscreen (Kendi yayınımızsa gizli) */}
+              {!isLocalSharing ? (
+                <button
+                  onClick={toggleFullscreen}
+                  className="text-white hover:text-indigo-400 transition"
+                  title="Tam Ekran"
+                >
+                  {isFullscreen ? (
+                    <Minimize size={20} />
+                  ) : (
+                    <Maximize size={20} />
+                  )}
+                </button>
+              ) : (
+                <span className="text-[10px] text-gray-400 px-2 select-none cursor-default">
+                  Önizleme
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Alt Şerit */}
+      {!isFullscreen && (
+        <div className="h-32 bg-[#1e1f22] p-2 flex gap-2 overflow-x-auto custom-scrollbar border-t border-[#111214] shrink-0">
+          <ParticipantList
+            onUserContextMenu={onUserContextMenu}
+            compact={true}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- KATILIMCI LİSTESİ ---
+function ParticipantList({ onUserContextMenu, compact }) {
   const participants = useParticipants();
   const count = participants.length;
   if (count === 0) return null;
+
+  if (compact) {
+    return participants.map((p) => (
+      <div key={p.sid} className="min-w-[140px] h-full">
+        <UserCard
+          participant={p}
+          totalCount={count}
+          onContextMenu={(e) => onUserContextMenu(e, p)}
+          compact={true}
+        />
+      </div>
+    ));
+  }
+
   let gridClass = "";
   if (count === 1)
     gridClass = "grid-cols-1 w-full max-w-[800px] aspect-video max-h-[600px]";
@@ -478,7 +786,7 @@ function ParticipantList({ onUserContextMenu }) {
 
   return (
     <div
-      className={`grid ${gridClass} items-center justify-center content-center`}
+      className={`grid ${gridClass} items-center justify-center content-center w-full`}
     >
       {participants.map((p) => (
         <div key={p.sid} className="w-full h-full aspect-[16/9] min-h-[180px]">
@@ -493,7 +801,7 @@ function ParticipantList({ onUserContextMenu }) {
   );
 }
 
-function UserCard({ participant, totalCount, onContextMenu }) {
+function UserCard({ participant, totalCount, onContextMenu, compact }) {
   const { identity, metadata } = useParticipantInfo({ participant });
   const audioActive = useAudioActivity(participant);
   const remoteState = useMemo(() => {
@@ -503,16 +811,21 @@ function UserCard({ participant, totalCount, onContextMenu }) {
       return {};
     }
   }, [metadata]);
+
   const userColor = remoteState.profileColor || "#6366f1";
   const isMuted = remoteState.isMuted;
   const isSpeaking = audioActive && !isMuted && !remoteState.isDeafened;
-  const avatarSize =
-    totalCount <= 2 ? "w-28 h-28 text-4xl" : "w-16 h-16 text-xl";
+
+  const avatarSize = compact
+    ? "w-10 h-10 text-base"
+    : totalCount <= 2
+    ? "w-28 h-28 text-4xl"
+    : "w-16 h-16 text-xl";
 
   return (
     <div
       onContextMenu={onContextMenu}
-      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-300 overflow-hidden group cursor-context-menu ${
+      className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center transition-all duration-300 overflow-hidden group cursor-context-menu ${
         isSpeaking
           ? "speaking-card border-[3px] shadow-lg bg-[#2b2d31]"
           : "bg-[#2b2d31] hover:bg-[#32343a] border-[3px] border-transparent"
@@ -530,7 +843,7 @@ function UserCard({ participant, totalCount, onContextMenu }) {
           : "none",
       }}
     >
-      <div className="relative mb-3">
+      <div className="relative mb-2">
         <div
           className={`${avatarSize} rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 relative transition-transform duration-200 group-hover:scale-105 ${
             isSpeaking
@@ -553,48 +866,40 @@ function UserCard({ participant, totalCount, onContextMenu }) {
         </div>
         <div className="absolute -bottom-1 -right-1 z-20">
           {remoteState.isDeafened ? (
-            <div className="w-8 h-8 bg-[#2b2d31] rounded-full flex items-center justify-center border-[3px] border-[#2b2d31]">
+            <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div className="w-full h-full bg-red-500 rounded-full flex items-center justify-center">
-                <VolumeX size={14} className="text-white fill-white" />
+                <VolumeX size={10} className="text-white fill-white" />
               </div>
             </div>
           ) : isMuted ? (
-            <div className="w-8 h-8 bg-[#2b2d31] rounded-full flex items-center justify-center border-[3px] border-[#2b2d31]">
+            <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div className="w-full h-full bg-red-500 rounded-full flex items-center justify-center">
-                <MicOff size={14} className="text-white" />
+                <MicOff size={10} className="text-white" />
               </div>
             </div>
           ) : isSpeaking ? (
-            <div className="w-8 h-8 bg-[#2b2d31] rounded-full flex items-center justify-center border-[3px] border-[#2b2d31]">
+            <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div
                 className="w-full h-full rounded-full flex items-center justify-center animate-pulse"
                 style={{ background: userColor }}
               >
-                <Mic size={14} className="text-white fill-white" />
+                <Mic size={10} className="text-white fill-white" />
               </div>
             </div>
           ) : null}
         </div>
       </div>
-      <div className="flex flex-col items-center gap-1 z-10 max-w-[80%]">
-        <span className="text-base font-bold text-white tracking-wide truncate w-full text-center drop-shadow-md">
+
+      <div className="flex flex-col items-center gap-0.5 z-10 max-w-[90%]">
+        <span
+          className={`font-bold text-white tracking-wide truncate w-full text-center drop-shadow-md ${
+            compact ? "text-xs" : "text-base"
+          }`}
+        >
           {identity}
         </span>
-        {totalCount <= 6 && (
-          <span
-            className="text-xs font-medium px-2 py-0.5 rounded-md text-gray-300"
-            style={{
-              background: isSpeaking
-                ? userColor.includes("gradient")
-                  ? "rgba(255,255,255,0.1)"
-                  : `${userColor}30`
-                : "rgba(0,0,0,0.2)",
-            }}
-          >
-            {isSpeaking ? "Konuşuyor" : "Bağlı"}
-          </span>
-        )}
       </div>
+
       {isSpeaking && (
         <div
           className="absolute inset-0 pointer-events-none animate-pulse"
@@ -605,6 +910,7 @@ function UserCard({ participant, totalCount, onContextMenu }) {
   );
 }
 
+// --- ALT KONTROLLER ---
 function BottomControls({
   username,
   onLeave,
@@ -614,16 +920,18 @@ function BottomControls({
   playSound,
 }) {
   const { localParticipant } = useLocalParticipant();
-  const localMicActive = useAudioActivity(localParticipant);
   const [isMuted, setMuted] = useState(false);
   const { profileColor } = useSettingsStore();
+  const [showScreenShareModal, setShowScreenShareModal] = useState(false);
+
+  const isScreenSharing = localParticipant?.isScreenShareEnabled;
+
   const stateRef = useRef({
     isMuted,
     isDeafened,
     localParticipant,
     profileColor,
   });
-
   useEffect(() => {
     stateRef.current = { isMuted, isDeafened, localParticipant, profileColor };
   }, [isMuted, isDeafened, localParticipant, profileColor]);
@@ -639,10 +947,6 @@ function BottomControls({
           profileColor,
         });
         if (localParticipant.metadata === newMetadata) return;
-        if (localParticipant.connectionQuality === "unknown") {
-          await new Promise((r) => setTimeout(r, 1000));
-          if (!mounted) return;
-        }
         await localParticipant.setMetadata(newMetadata);
       } catch (error) {
         console.warn("Metadata error:", error);
@@ -679,6 +983,79 @@ function BottomControls({
     }
   };
 
+  const startScreenShare = async ({ resolution, fps, sourceId, withAudio }) => {
+    try {
+      const { width, height } =
+        resolution === 1080
+          ? { width: 1920, height: 1080 }
+          : resolution === 720
+          ? { width: 1280, height: 720 }
+          : { width: 854, height: 480 };
+
+      const constraints = {
+        audio: withAudio
+          ? { mandatory: { chromeMediaSource: "desktop" } }
+          : false,
+        video: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: sourceId,
+            minWidth: width,
+            maxWidth: width,
+            minHeight: height,
+            maxHeight: height,
+            minFrameRate: fps,
+            maxFrameRate: fps,
+          },
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const videoTrack = stream.getVideoTracks()[0];
+      await localParticipant.publishTrack(videoTrack, {
+        name: "screen_share_video",
+        source: Track.Source.ScreenShare,
+        videoCodec: "vp8",
+        simulcast: false,
+      });
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (withAudio && audioTrack) {
+        await localParticipant.publishTrack(audioTrack, {
+          name: "screen_share_audio",
+          source: Track.Source.ScreenShareAudio,
+        });
+        videoTrack.onended = () => {
+          localParticipant.unpublishTrack(videoTrack);
+          if (audioTrack) {
+            audioTrack.stop();
+            localParticipant.unpublishTrack(audioTrack);
+          }
+        };
+      } else {
+        videoTrack.onended = () => {
+          localParticipant.unpublishTrack(videoTrack);
+        };
+      }
+    } catch (e) {
+      console.error("Screen share error:", e);
+      alert("Ekran paylaşımı başlatılamadı: " + e.message);
+    }
+  };
+
+  const stopScreenShare = async () => {
+    const tracks = localParticipant.getTrackPublications();
+    for (const trackPub of tracks) {
+      if (
+        trackPub.source === Track.Source.ScreenShare ||
+        trackPub.source === Track.Source.ScreenShareAudio
+      ) {
+        if (trackPub.track) trackPub.track.stop();
+        await localParticipant.unpublishTrack(trackPub.track);
+      }
+    }
+  };
+
   useEffect(() => {
     const handleHotkey = (action) => {
       if (action === "toggle-mute") toggleMute();
@@ -691,37 +1068,69 @@ function BottomControls({
   }, [playSound]);
 
   return (
-    <div className="h-[60px] bg-[#1e1f22] flex items-center px-4 justify-between shrink-0 select-none border-t border-[#1a1b1e]">
-      <div></div>
-      <div className="flex items-center gap-2">
-        <ControlButton
-          isActive={!isMuted}
-          activeIcon={<Mic size={20} />}
-          inactiveIcon={<MicOff size={20} />}
-          onClick={toggleMute}
-          tooltip="Sustur"
-          danger={isMuted}
-          disabled={isDeafened}
-        />
-        <ControlButton
-          isActive={!isDeafened}
-          activeIcon={<Headphones size={20} />}
-          inactiveIcon={<VolumeX size={20} />}
-          onClick={toggleDeaf}
-          tooltip="Sağırlaştır"
-          danger={isDeafened}
-        />
-        <div className="w-[1px] h-6 bg-[#3f4147] mx-1"></div>
-        <button
-          onClick={onLeave}
-          className="w-10 h-10 flex items-center justify-center rounded-lg hover:text-red-600 hover:bg-red-500/10 text-red-500 transition border border-transparent hover:border-red-500/20"
-          title="Bağlantıyı Kes"
-        >
-          <PhoneOff size={20} />
-        </button>
+    <>
+      <ScreenShareModal
+        isOpen={showScreenShareModal}
+        onClose={() => setShowScreenShareModal(false)}
+        onStart={startScreenShare}
+      />
+      <div className="h-[60px] bg-[#1e1f22] flex items-center px-4 justify-between shrink-0 select-none border-t border-[#1a1b1e]">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-[#23a559] flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-[#23a559] animate-pulse"></div>
+              Ses Bağlı
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {localParticipant?.identity}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <ControlButton
+            isActive={!isMuted}
+            activeIcon={<Mic size={20} />}
+            inactiveIcon={<MicOff size={20} />}
+            onClick={toggleMute}
+            tooltip="Sustur"
+            danger={isMuted}
+            disabled={isDeafened}
+          />
+          <ControlButton
+            isActive={!isDeafened}
+            activeIcon={<Headphones size={20} />}
+            inactiveIcon={<VolumeX size={20} />}
+            onClick={toggleDeaf}
+            tooltip="Sağırlaştır"
+            danger={isDeafened}
+          />
+          <button
+            onClick={
+              isScreenSharing
+                ? stopScreenShare
+                : () => setShowScreenShareModal(true)
+            }
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition relative group ${
+              isScreenSharing
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-[#35373c] text-gray-200"
+            }`}
+            title={isScreenSharing ? "Paylaşımı Durdur" : "Ekran Paylaş"}
+          >
+            {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
+          </button>
+          <div className="w-[1px] h-6 bg-[#3f4147] mx-1"></div>
+          <button
+            onClick={onLeave}
+            className="w-10 h-10 flex items-center justify-center rounded-lg hover:text-red-600 hover:bg-red-500/10 text-red-500 transition border border-transparent hover:border-red-500/20"
+            title="Bağlantıyı Kes"
+          >
+            <PhoneOff size={20} />
+          </button>
+        </div>
+        <div></div>
       </div>
-      <div></div>
-    </div>
+    </>
   );
 }
 

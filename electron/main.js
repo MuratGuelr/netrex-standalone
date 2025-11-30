@@ -6,6 +6,7 @@ const {
   session,
   systemPreferences,
   dialog,
+  desktopCapturer, // Ekran paylaşımı için gerekli
 } = require("electron");
 const path = require("path");
 const http = require("http");
@@ -48,7 +49,7 @@ let mainWindow;
 let authServer;
 let isRecordingMode = false;
 
-// --- MODERN HTML ŞABLONU ---
+// --- MODERN HTML ŞABLONU (Auth için) ---
 const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
 <!DOCTYPE html>
 <html lang="tr">
@@ -58,17 +59,18 @@ const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* ... (CSS Kodları aynen kalacak) ... */
     :root { --bg-primary: #313338; --bg-secondary: #2b2d31; --text-normal: #dbdee1; --text-header: #f2f3f5; --brand: #5865F2; --brand-hover: #4752c4; --danger: #da373c; --success: #23a559; }
     body { background-color: #111214; color: var(--text-normal); font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; user-select: none; }
-    /* ... (Diğer stiller aynen kalacak, yer kaplamaması için kısalttım) ... */
+    .card { background-color: var(--bg-primary); padding: 40px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 100%; max-width: 420px; text-align: center; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px; border: none; border-radius: 4px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; box-sizing: border-box; }
+    .btn-google { background-color: #ffffff; color: #1f1f1f; border: 1px solid #e5e5e5; }
+    .btn-google:hover { background-color: #f2f2f2; }
+    .btn-primary { background-color: var(--brand); color: white; }
+    .btn-primary:hover { background-color: var(--brand-hover); }
   </style>
 </head>
 <body>
-  <div class="bg-shape"></div>
-  <div class="card">
-    ${bodyContent}
-  </div>
+  <div class="card">${bodyContent}</div>
   ${scriptContent}
 </body>
 </html>
@@ -85,7 +87,6 @@ const startLocalAuthServer = () => {
     const server = http.createServer((req, res) => {
       const parsedUrl = url.parse(req.url, true);
 
-      // 1. LOGIN SAYFASI
       if (parsedUrl.pathname === "/login") {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -93,11 +94,11 @@ const startLocalAuthServer = () => {
 
         const bodyContent = `
           <h1>Netrex'e Hoşgeldin!</h1>
-          <p>Hesabına güvenli bir şekilde giriş yapmak için aşağıya tıkla.</p>
+          <p>Giriş yapmak için butona tıkla.</p>
           <button id="loginBtn" class="btn btn-google">Google ile Giriş Yap</button>
-          <div id="errorMsg" class="error-msg"></div>
+          <div id="errorMsg" style="color:red;margin-top:10px;"></div>
         `;
-        // ... (Script içeriği aynen kalacak)
+
         const scriptContent = `
           <script type="module">
             import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -113,12 +114,8 @@ const startLocalAuthServer = () => {
             };
           </script>
         `;
-        res.end(
-          getHtmlTemplate("Giriş Yap - Netrex", bodyContent, scriptContent)
-        );
-      }
-      // 2. CALLBACK SAYFASI
-      else if (parsedUrl.pathname === "/oauth/callback") {
+        res.end(getHtmlTemplate("Giriş Yap", bodyContent, scriptContent));
+      } else if (parsedUrl.pathname === "/oauth/callback") {
         const token = parsedUrl.query.token;
         if (token) {
           if (mainWindow) mainWindow.webContents.send("oauth-success", token);
@@ -136,7 +133,7 @@ const startLocalAuthServer = () => {
         }
       } else {
         res.writeHead(404);
-        res.end("Sayfa Bulunamadı");
+        res.end("Not Found");
       }
     });
 
@@ -147,7 +144,7 @@ const startLocalAuthServer = () => {
   });
 };
 
-// ... (Keybinding Helper Functions - getKeybinding, setKeybinding, matchesKeybinding, handleInputEvent - AYNI KALACAK) ...
+// --- Hotkey Helpers ---
 function getKeybinding(action) {
   const stored = store.get(`hotkeys.${action}`);
   return stored || null;
@@ -230,12 +227,13 @@ function createWindow() {
 
   if (app.isPackaged) mainWindow.setMenu(null);
 
+  // CSP Güncellemesi: blob ve data şemalarına izin ver (Resimler ve Video için)
   session.defaultSession.webRequest.onHeadersReceived((d, c) => {
     c({
       responseHeaders: {
         ...d.responseHeaders,
         "Content-Security-Policy": [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: wss:;",
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: wss:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:;",
         ],
       },
     });
@@ -254,19 +252,15 @@ function createWindow() {
 
 // --- AUTO UPDATER EVENTS ---
 autoUpdater.on("checking-for-update", () => {
-  log.info("Checking for update...");
   if (mainWindow) mainWindow.webContents.send("update-status", "checking");
 });
-autoUpdater.on("update-available", (info) => {
-  log.info("Update available.");
+autoUpdater.on("update-available", () => {
   if (mainWindow) mainWindow.webContents.send("update-status", "available");
 });
-autoUpdater.on("update-not-available", (info) => {
-  log.info("Update not available.");
+autoUpdater.on("update-not-available", () => {
   if (mainWindow) mainWindow.webContents.send("update-status", "not-available");
 });
 autoUpdater.on("error", (err) => {
-  log.error("Error in auto-updater. " + err);
   if (mainWindow)
     mainWindow.webContents.send("update-status", "error", err.toString());
 });
@@ -274,15 +268,19 @@ autoUpdater.on("download-progress", (progressObj) => {
   if (mainWindow)
     mainWindow.webContents.send("update-progress", progressObj.percent);
 });
-autoUpdater.on("update-downloaded", (info) => {
-  log.info("Update downloaded");
+autoUpdater.on("update-downloaded", () => {
   if (mainWindow) mainWindow.webContents.send("update-status", "downloaded");
 });
 
 app.on("ready", async () => {
-  if (process.platform === "darwin")
+  // macOS için izinler
+  if (process.platform === "darwin") {
     systemPreferences.askForMediaAccess("microphone");
+    systemPreferences.askForMediaAccess("camera");
+  }
+
   createWindow();
+
   try {
     setupUiohookListeners();
     uIOhook.start();
@@ -293,23 +291,26 @@ app.on("ready", async () => {
 
 app.on("will-quit", () => uIOhook.stop());
 
-// --- IPC Handlers ---
+// --- IPC HANDLERS ---
+
+// Auth
 ipcMain.handle("start-oauth", async () => {
   try {
     const server = await startLocalAuthServer();
     const port = server.address().port;
-    const loginUrl = `http://127.0.0.1:${port}/login`;
-    await shell.openExternal(loginUrl);
+    await shell.openExternal(`http://127.0.0.1:${port}/login`);
   } catch (err) {
     console.error("OAuth Error:", err);
   }
 });
 
+// External Link
 ipcMain.handle("open-external-link", async (event, url) => {
   if (url.startsWith("http://") || url.startsWith("https://"))
     await shell.openExternal(url);
 });
 
+// LiveKit Token
 ipcMain.handle("get-livekit-token", async (e, room, user) => {
   try {
     const at = new AccessToken(
@@ -332,19 +333,36 @@ ipcMain.handle("get-livekit-token", async (e, room, user) => {
   }
 });
 
+// Hotkeys
 ipcMain.handle("update-hotkey", (event, action, keybinding) => {
   if (!keybinding) return { success: false, error: "Invalid key." };
   setKeybinding(action, keybinding);
   return { success: true };
 });
-
 ipcMain.handle("get-hotkey", (e, action) => getKeybinding(action));
 ipcMain.handle("set-recording-mode", (event, enabled) => {
   isRecordingMode = enabled;
   return { success: true };
 });
 
-// -- UPDATE IPC --
+// Auto Update
 ipcMain.handle("quit-and-install", () => {
   autoUpdater.quitAndInstall();
+});
+
+// --- YENİ EKLENEN: DESKTOP SOURCES (EKRAN PAYLAŞIMI) ---
+ipcMain.handle("get-desktop-sources", async () => {
+  // Pencereleri ve Ekranları getir
+  const sources = await desktopCapturer.getSources({
+    types: ["window", "screen"],
+    thumbnailSize: { width: 400, height: 400 }, // Küçük resim boyutu
+  });
+
+  // JSON olarak dönebilecek formata çevir (NativeImage objesi doğrudan gönderilemez)
+  return sources.map((s) => ({
+    id: s.id,
+    name: s.name,
+    thumbnail: s.thumbnail.toDataURL(), // Resmi Base64 string'e çevir
+    appIcon: s.appIcon ? s.appIcon.toDataURL() : null,
+  }));
 });

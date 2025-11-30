@@ -1,14 +1,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("netrex", {
-  // Auth
+  // --- AUTH ---
   startOAuth: () => ipcRenderer.invoke("start-oauth"),
   onOAuthSuccess: (callback) => {
     ipcRenderer.removeAllListeners("oauth-success");
     ipcRenderer.on("oauth-success", (_, token) => callback(token));
   },
 
-  // Settings & Hotkeys
+  // --- SETTINGS & HOTKEYS ---
   updateHotkey: (action, keybinding) =>
     ipcRenderer.invoke("update-hotkey", action, keybinding),
   getHotkey: (action) => ipcRenderer.invoke("get-hotkey", action),
@@ -19,11 +19,11 @@ contextBridge.exposeInMainWorld("netrex", {
   onRawKeydown: (callback) =>
     ipcRenderer.on("raw-keydown", (_, event) => callback(event)),
 
-  // LiveKit
+  // --- LIVEKIT ---
   getLiveKitToken: (room, user) =>
     ipcRenderer.invoke("get-livekit-token", room, user),
 
-  // External Links
+  // --- UTILS ---
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),
 
   // --- AUTO UPDATE ---
@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld("netrex", {
 
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 
-  // Cleanup
+  // --- EKRAN PAYLAŞIMI (YENİ) ---
+  getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
+
+  // --- CLEANUP ---
   removeListener: (channel) => ipcRenderer.removeAllListeners(channel),
 });
