@@ -15,9 +15,9 @@ import {
   Pipette,
   Zap,
   AppWindow,
-  Video, // Yeni
-  VideoOff, // Yeni
-  Camera, // Yeni
+  Video,
+  VideoOff,
+  Camera,
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
@@ -488,7 +488,7 @@ function VoiceSettings() {
   const settings = useSettingsStore();
   const { playSound } = useSoundEffects();
   const animationRef = useRef();
-  const videoRef = useRef(null); // Kamera önizleme için
+  const videoRef = useRef(null);
 
   const [localSfxVolume, setLocalSfxVolume] = useState(settings.sfxVolume);
   const [localThreshold, setLocalThreshold] = useState(settings.voiceThreshold);
@@ -504,7 +504,8 @@ function VoiceSettings() {
   useEffect(() => {
     const getDevices = async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); // İzin iste
+        // İzin iste
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         const devs = await navigator.mediaDevices.enumerateDevices();
         setAudioInputs(devs.filter((d) => d.kind === "audioinput"));
         setAudioOutputs(devs.filter((d) => d.kind === "audiooutput"));
@@ -584,7 +585,6 @@ function VoiceSettings() {
 
     initVideo();
 
-    // Temizlik: Modal kapanınca kamerayı kapat
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
     };
@@ -640,7 +640,7 @@ function VoiceSettings() {
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover transform scale-x-[-1]" // Ayna efekti
+                className="w-full h-full object-cover transform scale-x-[-1]"
               />
             ) : (
               <div className="flex flex-col items-center text-[#949ba4] opacity-50">
@@ -649,7 +649,6 @@ function VoiceSettings() {
               </div>
             )}
 
-            {/* Canlı İkonu */}
             {videoInputs.length > 0 && (
               <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
                 ÖNİZLEME
@@ -678,7 +677,8 @@ function VoiceSettings() {
               className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
             >
               <option value="default">Varsayılan</option>
-              {inputs.map((d) => (
+              {/* DÜZELTİLDİ: inputs -> audioInputs */}
+              {audioInputs.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Mikrofon ${d.deviceId.slice(0, 5)}`}
                 </option>
@@ -689,6 +689,7 @@ function VoiceSettings() {
             </div>
           </div>
         </div>
+
         <div>
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
             Çıkış Cihazı (Hoparlör)
@@ -704,7 +705,8 @@ function VoiceSettings() {
               className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
             >
               <option value="default">Varsayılan</option>
-              {outputs.map((d) => (
+              {/* DÜZELTİLDİ: outputs -> audioOutputs */}
+              {audioOutputs.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Hoparlör ${d.deviceId.slice(0, 5)}`}
                 </option>
