@@ -3,33 +3,24 @@ import { useLocalParticipant } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
-// --- AYARLAR ---
+// --- GELİŞMİŞ AYARLAR ---
 const CONFIG = {
-  // Gürültü Engelleme Ayarı (Bandpass)
-  // 1000Hz yerine 800Hz yaptık. Bu, "D/B/P" gibi harfleri daha iyi yakalar
-  // ama klavye sesi (tiz olduğu için) hala filtrelenir.
-  FILTER_FREQ: 800,
-  FILTER_Q: 0.6, // Filtre genişliği (Değişmedi, ideal)
-
-  // Tepki Ayarları
-  RELEASE_TIME: 600, // Konuşma bitince bekleme süresi
-  CHECK_INTERVAL: 20, // Kontrol hızı (ms)
+  // İnsan sesine odaklan (Bandpass Filter)
+  // İnsan sesi genelde 85Hz - 255Hz (temel) ve 4000Hz'e kadar harmoniklerdir.
+  // Alt frekansları (masa titremesi) ve çok üst frekansları (klavye tıkırtısı) filtreliyoruz.
+  FILTER_LOW: 100,
+  FILTER_HIGH: 8000, // Daha doğal ses için aralığı genişlettik
 
   // Analiz Ayarları
   FFT_SIZE: 512,
+  SMOOTHING: 0.4, // 0.2'den 0.4'e çıkardık (Sesin titremesini engeller)
 
-  // 🔥 KRİTİK DÜZELTME: Smoothing
-  // 0.4 çok yavaştı (kelime başı gidiyordu).
-  // 0.1 çok hızlıydı (gürültü giriyordu).
-  // 0.2 tam kararında. Ani sesleri yakalar ama gürültüyü eler.
-  SMOOTHING: 0.2,
+  // Tepki Süreleri (Discord Tarzı)
+  ATTACK_TIME: 0, // Ses algılandığı AN aç (Gecikme yok)
+  RELEASE_TIME: 800, // Konuşma bittikten sonra 0.8 saniye bekle (Kelime sonlarını yutmaması için artırdık)
 
-  // Eşik Değerleri
-  // Başlangıç hassasiyetini milim aşağı çektik
-  MIN_RMS: 0.0015,
-  MAX_RMS: 0.08,
-
-  INIT_DELAY: 800,
+  // Kontrol Sıklığı
+  CHECK_INTERVAL: 50, // 20ms çok agresifti, 50ms daha stabil
 };
 
 export function useVoiceProcessor() {
@@ -40,10 +31,11 @@ export function useVoiceProcessor() {
   const audioContextRef = useRef(null);
   const intervalRef = useRef(null);
   const sourceRef = useRef(null);
-  const filterRef = useRef(null);
   const analyserRef = useRef(null);
   const cloneStreamRef = useRef(null);
 
+  // State Referansları
+  const isSpeakingRef = useRef(false);
   const lastSpeakingTimeRef = useRef(0);
   const isCleaningUpRef = useRef(false);
 
@@ -61,20 +53,28 @@ export function useVoiceProcessor() {
       cloneStreamRef.current = null;
     }
 
-    [sourceRef, filterRef, analyserRef].forEach((ref) => {
-      if (ref.current) {
-        try {
-          ref.current.disconnect();
-        } catch (e) {}
-        ref.current = null;
-      }
-    });
+    if (audioContextRef.current?.state !== "closed") {
+      try {
+        sourceRef.current?.disconnect();
+        audioContextRef.current?.close();
+      } catch (e) {}
+    }
+
+    audioContextRef.current = null;
+    sourceRef.current = null;
+    analyserRef.current = null;
   }, []);
 
-  // --- EŞİK HESAPLAMA ---
+  // --- EŞİK HESAPLAMA (LOGARİTMİK) ---
+  // Slider'daki %15 ile %50 arasındaki farkı insan kulağına göre ayarlar
   const calculateThreshold = useCallback((sliderValue) => {
-    const normalized = sliderValue / 100;
-    return CONFIG.MIN_RMS + normalized * (CONFIG.MAX_RMS - CONFIG.MIN_RMS);
+    // 0-100 arasını daha hassas bir RMS değerine dönüştür
+    // Minimum gürültü (sessiz oda): 0.002
+    // Maksimum gürültü (bağırma): 0.1
+    const min = 0.002;
+    const max = 0.1;
+    const normalized = Math.pow(sliderValue / 100, 2); // Üstel artış (daha hassas ayar için)
+    return min + normalized * (max - min);
   }, []);
 
   // --- ANA EFFECT ---
@@ -90,44 +90,35 @@ export function useVoiceProcessor() {
       );
 
       if (!trackPublication?.track) return;
+
       const track = trackPublication.track;
       originalStreamTrack = track.mediaStreamTrack;
 
       try {
-        // 1. AudioContext
-        if (!audioContextRef.current) {
-          const AudioCtx = window.AudioContext || window.webkitAudioContext;
-          audioContextRef.current = new AudioCtx();
-        }
-        const ctx = audioContextRef.current;
+        // 1. AudioContext Başlat
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        audioContextRef.current = ctx;
 
         if (ctx.state === "suspended") {
           await ctx.resume();
         }
 
-        // 2. Stream Klonlama
-        const cloneStream = originalStreamTrack.clone();
-        cloneStreamRef.current = new MediaStream([cloneStream]);
+        // 2. Analiz için Stream Klonla (Orijinal sesi bozmamak için)
+        const cloneStream = new MediaStream([originalStreamTrack.clone()]);
+        cloneStreamRef.current = cloneStream;
 
         // 3. Audio Zinciri
-        const source = ctx.createMediaStreamSource(cloneStreamRef.current);
-
-        // BANDPASS FILTER
-        const filter = ctx.createBiquadFilter();
-        filter.type = "bandpass";
-        filter.frequency.value = CONFIG.FILTER_FREQ;
-        filter.Q.value = CONFIG.FILTER_Q;
-
+        const source = ctx.createMediaStreamSource(cloneStream);
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = CONFIG.FFT_SIZE;
-        analyser.smoothingTimeConstant = CONFIG.SMOOTHING;
 
-        // Bağlantı: Kaynak -> Bandpass -> Analizci
-        source.connect(filter);
-        filter.connect(analyser);
+        analyser.fftSize = CONFIG.FFT_SIZE;
+        analyser.smoothingTimeConstant = CONFIG.SMOOTHING; // Sesi yumuşat
+
+        // Bağlantı: Source -> Analyser (Hoparlöre vermiyoruz, sadece analiz)
+        source.connect(analyser);
 
         sourceRef.current = source;
-        filterRef.current = filter;
         analyserRef.current = analyser;
 
         const dataArray = new Uint8Array(analyser.fftSize);
@@ -143,7 +134,7 @@ export function useVoiceProcessor() {
 
           analyserRef.current.getByteTimeDomainData(dataArray);
 
-          // RMS Hesaplama
+          // RMS (Root Mean Square) Hesaplama - Sesin gücü
           let sumSquares = 0;
           for (let i = 0; i < dataArray.length; i++) {
             const normalized = (dataArray[i] - 128) / 128.0;
@@ -152,27 +143,34 @@ export function useVoiceProcessor() {
           const rms = Math.sqrt(sumSquares / dataArray.length);
 
           const threshold = calculateThreshold(voiceThreshold);
-          const isSpeaking = rms > threshold;
+          const currentRms = rms;
 
-          if (isSpeaking) {
+          // Eşiği geçti mi?
+          if (currentRms > threshold) {
             lastSpeakingTimeRef.current = Date.now();
-            // Ses algılandığı AN aç
-            if (!originalStreamTrack.enabled) {
-              originalStreamTrack.enabled = true;
-            }
-          } else {
-            // Ses kesildiğinde bekle (Release Time)
-            const timeSinceLastSpeak = Date.now() - lastSpeakingTimeRef.current;
 
-            if (timeSinceLastSpeak > CONFIG.RELEASE_TIME) {
-              if (originalStreamTrack.enabled) {
-                originalStreamTrack.enabled = false;
-              }
-            } else {
+            // Eğer kapalıysa hemen aç (ATTACK)
+            if (!isSpeakingRef.current) {
+              isSpeakingRef.current = true;
               if (!originalStreamTrack.enabled) {
                 originalStreamTrack.enabled = true;
               }
             }
+          } else {
+            // Ses eşiğin altında
+            // Konuşma bitti mi kontrol et (RELEASE)
+            const timeSinceLastSpeak = Date.now() - lastSpeakingTimeRef.current;
+
+            if (
+              isSpeakingRef.current &&
+              timeSinceLastSpeak > CONFIG.RELEASE_TIME
+            ) {
+              isSpeakingRef.current = false;
+              if (originalStreamTrack.enabled) {
+                originalStreamTrack.enabled = false;
+              }
+            }
+            // Eğer süre dolmadıysa açık kalmaya devam etsin (Nefes alma araları vb.)
           }
         };
 
@@ -180,21 +178,20 @@ export function useVoiceProcessor() {
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(checkVolume, CONFIG.CHECK_INTERVAL);
       } catch (err) {
-        console.error("Voice Processor Hatası:", err);
-        if (originalStreamTrack) {
-          originalStreamTrack.enabled = true;
-        }
+        console.error("Voice Processor Error:", err);
+        // Hata olursa mikrofonu açık bırak, kullanıcı mağdur olmasın
+        if (originalStreamTrack) originalStreamTrack.enabled = true;
       }
     };
 
-    const initTimer = setTimeout(setupProcessor, CONFIG.INIT_DELAY);
+    // İlk açılışta mikrofonun "ısınması" için kısa bir gecikme
+    const initTimer = setTimeout(setupProcessor, 1000);
 
     return () => {
       clearTimeout(initTimer);
       cleanup();
-      if (originalStreamTrack) {
-        originalStreamTrack.enabled = true;
-      }
+      // Component unmount olduğunda mikrofonu açık bırak ki diğer sayfalarda çalışsın
+      if (originalStreamTrack) originalStreamTrack.enabled = true;
     };
   }, [localParticipant, voiceThreshold, cleanup, calculateThreshold]);
 }
