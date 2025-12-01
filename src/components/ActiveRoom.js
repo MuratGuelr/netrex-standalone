@@ -267,7 +267,8 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
-      video={isCameraOn}
+      // DÜZELTME: video={false} yapıyoruz ki otomatik yönetim manuel fonksiyonumuzla çakışmasın.
+      video={false}
       audio={true}
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
@@ -280,11 +281,6 @@ export default function ActiveRoom({
           echoCancellation,
           noiseSuppression,
           autoGainControl,
-        },
-        videoCaptureDefaults: {
-          resolution: { width: 640, height: 360 },
-          maxBitrate: 200_000,
-          deviceId: "",
         },
         reconnect: true,
       }}
@@ -870,8 +866,7 @@ function UserCard({
   const videoTrack = useTracks([Track.Source.Camera]).find(
     (t) => t.participant.sid === participant.sid
   );
-
-  // DÜZELTME: videoTrack varsa VE muted değilse göster
+  // DÜZELTME: videoTrack var mı? Muted değil mi? Gelen videoyu gizle ayarı kapalı mı?
   const shouldShowVideo =
     videoTrack &&
     !videoTrack.publication.isMuted &&
@@ -995,7 +990,7 @@ function BottomControls({
 }) {
   const { localParticipant } = useLocalParticipant();
   const [isMuted, setMuted] = useState(false);
-  const { profileColor, enableCamera } = useSettingsStore();
+  const { profileColor, enableCamera, videoId } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const stateRef = useRef({
@@ -1069,12 +1064,19 @@ function BottomControls({
     const { isCameraOn, localParticipant } = stateRef.current;
     const newState = !isCameraOn;
     setIsCameraOn(newState);
-    await localParticipant.setCameraEnabled(newState, {
-      resolution: { width: 640, height: 360 },
-      frameRate: 15,
-      maxBitrate: 150000,
-      simulcast: false,
-    });
+
+    // HATA DÜZELTME: Eğer kamera kapanıyorsa video track'i de durdurmamız gerekebilir
+    if (newState) {
+      await localParticipant.setCameraEnabled(true, {
+        resolution: { width: 640, height: 360 },
+        frameRate: 15,
+        maxBitrate: 150000,
+        simulcast: false,
+        deviceId: videoId !== "default" ? videoId : undefined,
+      });
+    } else {
+      await localParticipant.setCameraEnabled(false);
+    }
   };
 
   const startScreenShare = async ({ resolution, fps, sourceId, withAudio }) => {
@@ -1105,9 +1107,7 @@ function BottomControls({
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
-      // Dengeli Mod: 1.2 Mbps (Hareketli), 400 kbps (Statik)
       const maxBitrate = fps > 15 ? 1200000 : 400000;
-
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
@@ -1115,7 +1115,6 @@ function BottomControls({
         simulcast: true,
         videoEncoding: { maxBitrate, maxFramerate: fps },
       });
-
       const audioTrack = stream.getAudioTracks()[0];
       if (withAudio && audioTrack) {
         await localParticipant.publishTrack(audioTrack, {

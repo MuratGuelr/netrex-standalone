@@ -3,24 +3,25 @@ import { useLocalParticipant } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
-// --- GELİŞMİŞ AYARLAR ---
+// --- GELİŞMİŞ GÜRÜLTÜ ENGELLEME AYARLARI ---
 const CONFIG = {
-  // İnsan sesine odaklan (Bandpass Filter)
-  // İnsan sesi genelde 85Hz - 255Hz (temel) ve 4000Hz'e kadar harmoniklerdir.
-  // Alt frekansları (masa titremesi) ve çok üst frekansları (klavye tıkırtısı) filtreliyoruz.
-  FILTER_LOW: 100,
-  FILTER_HIGH: 8000, // Daha doğal ses için aralığı genişlettik
+  // İnsan sesi frekans aralığı (Bandpass)
+  // Alt frekansı 150Hz'e çektik (Masa titreşimi ve "thud" seslerini keser)
+  // Üst frekansı 6500Hz'e çektik (Mekanik klavye "tık" seslerini yumuşatır)
+  FILTER_LOW: 150,
+  FILTER_HIGH: 6500,
 
-  // Analiz Ayarları
+  // Analiz Hassasiyeti
   FFT_SIZE: 512,
-  SMOOTHING: 0.4, // 0.2'den 0.4'e çıkardık (Sesin titremesini engeller)
+  // Sesi ne kadar hızlı takip etsin?
+  // 0.1 çok hızlı (pırpır eder), 0.8 çok yavaş (gecikmeli). 0.2 ideal.
+  SMOOTHING: 0.2,
 
-  // Tepki Süreleri (Discord Tarzı)
-  ATTACK_TIME: 0, // Ses algılandığı AN aç (Gecikme yok)
-  RELEASE_TIME: 800, // Konuşma bittikten sonra 0.8 saniye bekle (Kelime sonlarını yutmaması için artırdık)
+  // Tepki Süreleri
+  ATTACK_TIME: 0, // Anında aç
+  RELEASE_TIME: 250, // 800ms'den 250ms'e düşürdük. (Tıkırtı sonrası hemen kapansın)
 
-  // Kontrol Sıklığı
-  CHECK_INTERVAL: 50, // 20ms çok agresifti, 50ms daha stabil
+  CHECK_INTERVAL: 40, // 40ms'de bir kontrol et
 };
 
 export function useVoiceProcessor() {
@@ -34,7 +35,7 @@ export function useVoiceProcessor() {
   const analyserRef = useRef(null);
   const cloneStreamRef = useRef(null);
 
-  // State Referansları
+  // Durum Referansları
   const isSpeakingRef = useRef(false);
   const lastSpeakingTimeRef = useRef(0);
   const isCleaningUpRef = useRef(false);
@@ -65,16 +66,22 @@ export function useVoiceProcessor() {
     analyserRef.current = null;
   }, []);
 
-  // --- EŞİK HESAPLAMA (LOGARİTMİK) ---
-  // Slider'daki %15 ile %50 arasındaki farkı insan kulağına göre ayarlar
-  const calculateThreshold = useCallback((sliderValue) => {
-    // 0-100 arasını daha hassas bir RMS değerine dönüştür
-    // Minimum gürültü (sessiz oda): 0.002
-    // Maksimum gürültü (bağırma): 0.1
-    const min = 0.002;
-    const max = 0.1;
-    const normalized = Math.pow(sliderValue / 100, 2); // Üstel artış (daha hassas ayar için)
-    return min + normalized * (max - min);
+  // --- AKILLI EŞİK HESAPLAMA (HYSTERESIS) ---
+  const calculateThresholds = useCallback((sliderValue) => {
+    // Slider 0-100 arasını logaritmik RMS değerine çevir
+    // Min (Sessiz): 0.002, Max (Bağırma): 0.08
+    const normalized = Math.pow(sliderValue / 100, 1.5); // Üstel eğri
+
+    // 1. OPEN THRESHOLD (Tetikleme): Mikrofonu açmak için gereken ses
+    // Slider değerine göre artar.
+    const openThreshold = 0.004 + normalized * 0.08;
+
+    // 2. CLOSE THRESHOLD (Sürdürme): Mikrofonu açık tutmak için gereken ses
+    // Tetikleme eşiğinin %60'ı kadardır.
+    // Yani konuşmaya başlamak için sesli konuşmalısın ama devam ederken fısıldayabilirsin.
+    const closeThreshold = openThreshold * 0.6;
+
+    return { openThreshold, closeThreshold };
   }, []);
 
   // --- ANA EFFECT ---
@@ -95,28 +102,32 @@ export function useVoiceProcessor() {
       originalStreamTrack = track.mediaStreamTrack;
 
       try {
-        // 1. AudioContext Başlat
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         const ctx = new AudioCtx();
         audioContextRef.current = ctx;
 
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
+        if (ctx.state === "suspended") await ctx.resume();
 
-        // 2. Analiz için Stream Klonla (Orijinal sesi bozmamak için)
+        // Analiz için Stream Klonla
         const cloneStream = new MediaStream([originalStreamTrack.clone()]);
         cloneStreamRef.current = cloneStream;
 
-        // 3. Audio Zinciri
         const source = ctx.createMediaStreamSource(cloneStream);
+
+        // Highpass + Lowpass yerine Bandpass Filter
+        // Bu filtre klavye seslerinin (tiz) ve masa darbelerinin (bas) gücünü kırar
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 1000; // Merkez frekans (İnsan sesi ortalaması)
+        filter.Q.value = 0.7; // Genişlik (Çok dar olmasın, robotlaşır)
+
         const analyser = ctx.createAnalyser();
-
         analyser.fftSize = CONFIG.FFT_SIZE;
-        analyser.smoothingTimeConstant = CONFIG.SMOOTHING; // Sesi yumuşat
+        analyser.smoothingTimeConstant = CONFIG.SMOOTHING;
 
-        // Bağlantı: Source -> Analyser (Hoparlöre vermiyoruz, sadece analiz)
-        source.connect(analyser);
+        // Bağlantı: Kaynak -> Filtre -> Analizci
+        source.connect(filter);
+        filter.connect(analyser);
 
         sourceRef.current = source;
         analyserRef.current = analyser;
@@ -134,7 +145,7 @@ export function useVoiceProcessor() {
 
           analyserRef.current.getByteTimeDomainData(dataArray);
 
-          // RMS (Root Mean Square) Hesaplama - Sesin gücü
+          // RMS Hesaplama
           let sumSquares = 0;
           for (let i = 0; i < dataArray.length; i++) {
             const normalized = (dataArray[i] - 128) / 128.0;
@@ -142,56 +153,55 @@ export function useVoiceProcessor() {
           }
           const rms = Math.sqrt(sumSquares / dataArray.length);
 
-          const threshold = calculateThreshold(voiceThreshold);
-          const currentRms = rms;
+          // Akıllı Eşikleri Al
+          const { openThreshold, closeThreshold } =
+            calculateThresholds(voiceThreshold);
 
-          // Eşiği geçti mi?
-          if (currentRms > threshold) {
-            lastSpeakingTimeRef.current = Date.now();
-
-            // Eğer kapalıysa hemen aç (ATTACK)
-            if (!isSpeakingRef.current) {
+          // HYSTERESIS MANTIĞI
+          if (isSpeakingRef.current) {
+            // Zaten konuşuyorsa: Kapanma eşiğini (daha düşük) kullan
+            if (rms > closeThreshold) {
+              lastSpeakingTimeRef.current = Date.now(); // Süreyi uzat
+            }
+          } else {
+            // Konuşmuyorsa: Açılma eşiğini (daha yüksek) kullan
+            // Bu sayede klavye "tık" sesi bu eşiği geçemez ama "Merhaba" sesi geçer.
+            if (rms > openThreshold) {
               isSpeakingRef.current = true;
+              lastSpeakingTimeRef.current = Date.now();
               if (!originalStreamTrack.enabled) {
                 originalStreamTrack.enabled = true;
               }
             }
-          } else {
-            // Ses eşiğin altında
-            // Konuşma bitti mi kontrol et (RELEASE)
-            const timeSinceLastSpeak = Date.now() - lastSpeakingTimeRef.current;
+          }
 
-            if (
-              isSpeakingRef.current &&
-              timeSinceLastSpeak > CONFIG.RELEASE_TIME
-            ) {
-              isSpeakingRef.current = false;
-              if (originalStreamTrack.enabled) {
-                originalStreamTrack.enabled = false;
-              }
+          // Kapanma Kontrolü (Release Time)
+          const timeSinceLastSpeak = Date.now() - lastSpeakingTimeRef.current;
+          if (
+            isSpeakingRef.current &&
+            timeSinceLastSpeak > CONFIG.RELEASE_TIME
+          ) {
+            isSpeakingRef.current = false;
+            if (originalStreamTrack.enabled) {
+              originalStreamTrack.enabled = false;
             }
-            // Eğer süre dolmadıysa açık kalmaya devam etsin (Nefes alma araları vb.)
           }
         };
 
-        // Döngüyü başlat
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(checkVolume, CONFIG.CHECK_INTERVAL);
       } catch (err) {
         console.error("Voice Processor Error:", err);
-        // Hata olursa mikrofonu açık bırak, kullanıcı mağdur olmasın
         if (originalStreamTrack) originalStreamTrack.enabled = true;
       }
     };
 
-    // İlk açılışta mikrofonun "ısınması" için kısa bir gecikme
     const initTimer = setTimeout(setupProcessor, 1000);
 
     return () => {
       clearTimeout(initTimer);
       cleanup();
-      // Component unmount olduğunda mikrofonu açık bırak ki diğer sayfalarda çalışsın
       if (originalStreamTrack) originalStreamTrack.enabled = true;
     };
-  }, [localParticipant, voiceThreshold, cleanup, calculateThreshold]);
+  }, [localParticipant, voiceThreshold, cleanup, calculateThresholds]);
 }
