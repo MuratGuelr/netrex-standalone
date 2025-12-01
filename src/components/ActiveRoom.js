@@ -281,10 +281,9 @@ export default function ActiveRoom({
           noiseSuppression,
           autoGainControl,
         },
-        // VARSAYILAN KOTA DOSTU AYARLAR
         videoCaptureDefaults: {
-          resolution: { width: 640, height: 360 }, // Max 360p
-          maxBitrate: 200_000, // 200 kbps limit
+          resolution: { width: 640, height: 360 },
+          maxBitrate: 200_000,
           deviceId: "",
         },
         reconnect: true,
@@ -591,7 +590,8 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Önizleme Gizlendi</h2>
         <p className="text-gray-400 text-sm max-w-sm mb-8">
-          Yayının devam ediyor.
+          Yayının devam ediyor. Performansı artırmak ve ayna etkisini önlemek
+          için önizlemeyi kapattın.
         </p>
         <div className="flex gap-4">
           <button
@@ -636,13 +636,16 @@ function ScreenShareStage({
   const isAudioDisabled = amISharing && !isLocalSharing;
 
   useEffect(() => {
-    if (audioTrackRef?.publication?.track && audioRef.current)
+    if (audioTrackRef?.publication?.track && audioRef.current) {
       audioTrackRef.publication.track.attach(audioRef.current);
+    }
     return () => {
-      if (audioTrackRef?.publication?.track && audioRef.current)
+      if (audioTrackRef?.publication?.track && audioRef.current) {
         audioTrackRef.publication.track.detach(audioRef.current);
+      }
     };
   }, [audioTrackRef]);
+
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
@@ -867,8 +870,11 @@ function UserCard({
   const videoTrack = useTracks([Track.Source.Camera]).find(
     (t) => t.participant.sid === participant.sid
   );
+
+  // DÜZELTME: videoTrack varsa VE muted değilse göster
   const shouldShowVideo =
     videoTrack &&
+    !videoTrack.publication.isMuted &&
     !hideIncomingVideo &&
     (participant.isLocal || videoTrack.isSubscribed);
 
@@ -989,7 +995,7 @@ function BottomControls({
 }) {
   const { localParticipant } = useLocalParticipant();
   const [isMuted, setMuted] = useState(false);
-  const { profileColor } = useSettingsStore();
+  const { profileColor, enableCamera } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const stateRef = useRef({
@@ -1054,11 +1060,15 @@ function BottomControls({
       if (localParticipant) localParticipant.setMicrophoneEnabled(true);
     }
   };
+
   const toggleCamera = async () => {
+    if (!enableCamera) {
+      alert("Kamera erişimi Ayarlar'dan kapatılmış.");
+      return;
+    }
     const { isCameraOn, localParticipant } = stateRef.current;
     const newState = !isCameraOn;
     setIsCameraOn(newState);
-    // OPTİMİZASYON: 360p, 15fps, 150kbps, NO SIMULCAST
     await localParticipant.setCameraEnabled(newState, {
       resolution: { width: 640, height: 360 },
       frameRate: 15,
@@ -1095,7 +1105,9 @@ function BottomControls({
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
+      // Dengeli Mod: 1.2 Mbps (Hareketli), 400 kbps (Statik)
       const maxBitrate = fps > 15 ? 1200000 : 400000;
+
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
@@ -1103,6 +1115,7 @@ function BottomControls({
         simulcast: true,
         videoEncoding: { maxBitrate, maxFramerate: fps },
       });
+
       const audioTrack = stream.getAudioTracks()[0];
       if (withAudio && audioTrack) {
         await localParticipant.publishTrack(audioTrack, {
@@ -1191,12 +1204,21 @@ function BottomControls({
           />
           <button
             onClick={toggleCamera}
+            disabled={!enableCamera}
             className={`w-10 h-10 flex items-center justify-center rounded-lg transition relative group ${
-              isCameraOn
+              !enableCamera
+                ? "opacity-50 cursor-not-allowed bg-[#3f4147] text-red-500"
+                : isCameraOn
                 ? "bg-white text-black hover:bg-gray-200"
                 : "hover:bg-[#35373c] text-gray-200"
             }`}
-            title={isCameraOn ? "Kamerayı Kapat" : "Kamerayı Aç"}
+            title={
+              !enableCamera
+                ? "Kamera Devre Dışı"
+                : isCameraOn
+                ? "Kamerayı Kapat"
+                : "Kamerayı Aç"
+            }
           >
             {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
           </button>

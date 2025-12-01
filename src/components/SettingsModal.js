@@ -18,6 +18,7 @@ import {
   Video,
   VideoOff,
   Camera,
+  ShieldAlert, // Yeni ikon
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
@@ -165,7 +166,7 @@ function SidebarItem({ label, icon, active, onClick }) {
   );
 }
 
-// --- DÜZELTİLEN TOGGLE SWITCH ---
+// ... (ToggleSwitch, ApplicationSettings, AccountSettings, KeybindSettings AYNI KALSIN) ...
 function ToggleSwitch({ label, description, checked, onChange }) {
   return (
     <div className="flex items-center justify-between py-1">
@@ -195,7 +196,6 @@ function ToggleSwitch({ label, description, checked, onChange }) {
   );
 }
 
-// ... (ApplicationSettings, AccountSettings, KeybindSettings AYNI KALSIN) ...
 function ApplicationSettings() {
   const { closeToTray, setCloseToTray } = useSettingsStore();
   return (
@@ -471,356 +471,6 @@ function AccountSettings({ onClose }) {
   );
 }
 
-function VoiceSettings() {
-  let room;
-  try {
-    room = useRoomContext();
-  } catch (e) {}
-
-  const [audioInputs, setAudioInputs] = useState([]);
-  const [audioOutputs, setAudioOutputs] = useState([]);
-  const [videoInputs, setVideoInputs] = useState([]);
-  const [micVolume, setMicVolume] = useState(0);
-
-  const settings = useSettingsStore();
-  const { playSound } = useSoundEffects();
-  const animationRef = useRef();
-  const videoRef = useRef(null);
-
-  const [localSfxVolume, setLocalSfxVolume] = useState(settings.sfxVolume);
-  const [localThreshold, setLocalThreshold] = useState(settings.voiceThreshold);
-
-  useEffect(() => {
-    setLocalSfxVolume(settings.sfxVolume);
-  }, [settings.sfxVolume]);
-  useEffect(() => {
-    setLocalThreshold(settings.voiceThreshold);
-  }, [settings.voiceThreshold]);
-
-  useEffect(() => {
-    const getDevices = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        const devs = await navigator.mediaDevices.enumerateDevices();
-        setAudioInputs(devs.filter((d) => d.kind === "audioinput"));
-        setAudioOutputs(devs.filter((d) => d.kind === "audiooutput"));
-        setVideoInputs(devs.filter((d) => d.kind === "videoinput"));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    getDevices();
-  }, []);
-
-  useEffect(() => {
-    let audioContext, analyser, stream;
-    const initAudio = async () => {
-      try {
-        if (!settings.audioInputId) return;
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId:
-              settings.audioInputId !== "default"
-                ? { exact: settings.audioInputId }
-                : undefined,
-          },
-        });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-        audioContext.createMediaStreamSource(stream).connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateMeter = () => {
-          analyser.getByteTimeDomainData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const x = (dataArray[i] - 128) / 128.0;
-            sum += x * x;
-          }
-          setMicVolume(Math.min(100, Math.sqrt(sum / dataArray.length) * 400));
-          animationRef.current = requestAnimationFrame(updateMeter);
-        };
-        updateMeter();
-      } catch (error) {
-        console.error(error);
-      }
-    };
-    initAudio();
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-      if (audioContext) audioContext.close();
-    };
-  }, [settings.audioInputId]);
-
-  useEffect(() => {
-    let stream;
-    const initVideo = async () => {
-      if (videoInputs.length === 0) return;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId:
-              settings.videoId !== "default"
-                ? { exact: settings.videoId }
-                : undefined,
-            width: { ideal: 640 },
-            height: { ideal: 360 },
-          },
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (e) {
-        console.error("Kamera önizleme hatası:", e);
-      }
-    };
-    initVideo();
-    return () => {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-    };
-  }, [settings.videoId, videoInputs]);
-
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Ses ve Görüntü</h3>
-      <div className="mb-6">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2">
-          <Camera size={14} /> Video Ayarları
-        </h4>
-        <div className="bg-[#2b2d31] p-4 rounded-lg border border-[#1f2023]">
-          <div className="mb-4">
-            <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
-              Kamera
-            </label>
-            <div className="relative">
-              <select
-                value={settings.videoId}
-                onChange={(e) => {
-                  settings.setVideoInput(e.target.value);
-                  if (room?.localParticipant)
-                    room.switchActiveDevice("videoinput", e.target.value);
-                }}
-                className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer pl-9"
-              >
-                {videoInputs.length > 0 ? (
-                  videoInputs.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Kamera ${d.deviceId.slice(0, 5)}`}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled>Kamera Bulunamadı</option>
-                )}
-              </select>
-              <div className="absolute left-3 top-2.5 pointer-events-none text-gray-400">
-                <Video size={16} />
-              </div>
-            </div>
-          </div>
-          <div className="relative w-full aspect-video bg-[#111214] rounded-lg overflow-hidden border border-[#1e1f22] flex items-center justify-center">
-            {videoInputs.length > 0 ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover transform scale-x-[-1]"
-              />
-            ) : (
-              <div className="flex flex-col items-center text-[#949ba4] opacity-50">
-                <VideoOff size={48} className="mb-2" />
-                <span className="text-sm font-bold">Kamera Yok</span>
-              </div>
-            )}
-            {videoInputs.length > 0 && (
-              <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
-                ÖNİZLEME
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
-      <div className="space-y-6">
-        <div>
-          <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
-            Giriş Cihazı (Mikrofon)
-          </label>
-          <div className="relative">
-            <select
-              value={settings.audioInputId}
-              onChange={(e) => {
-                settings.setAudioInput(e.target.value);
-                if (room?.localParticipant)
-                  room.switchActiveDevice("audioinput", e.target.value);
-              }}
-              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
-            >
-              <option value="default">Varsayılan</option>
-              {audioInputs.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Mikrofon ${d.deviceId.slice(0, 5)}`}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
-              <Mic size={16} />
-            </div>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
-            Çıkış Cihazı (Hoparlör)
-          </label>
-          <div className="relative">
-            <select
-              value={settings.audioOutputId}
-              onChange={(e) => {
-                settings.setAudioOutput(e.target.value);
-                if (room)
-                  room.switchActiveDevice("audiooutput", e.target.value);
-              }}
-              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
-            >
-              <option value="default">Varsayılan</option>
-              {audioOutputs.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Hoparlör ${d.deviceId.slice(0, 5)}`}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
-              <Speaker size={16} />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-xs font-bold text-[#b5bac1] uppercase flex items-center gap-2">
-            Uygulama Sesleri <Volume2 size={14} className="text-indigo-400" />
-          </label>
-          <span className="text-xs text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded">
-            %{localSfxVolume}
-          </span>
-        </div>
-        <div className="relative w-full h-8 flex items-center select-none">
-          <div className="absolute w-full h-2 bg-[#1e1f22] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-indigo-500 transition-all duration-75"
-              style={{ width: `${localSfxVolume}%` }}
-            ></div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={localSfxVolume}
-            onChange={(e) => setLocalSfxVolume(parseInt(e.target.value))}
-            onMouseUp={() => {
-              settings.setSfxVolume(localSfxVolume);
-              playSound("join");
-            }}
-            onTouchEnd={() => {
-              settings.setSfxVolume(localSfxVolume);
-              playSound("join");
-            }}
-            className="w-full absolute z-20 opacity-0 cursor-pointer h-full"
-          />
-          <div
-            className="absolute h-4 w-4 bg-white rounded-full shadow pointer-events-none transition-all z-30"
-            style={{
-              left: `${localSfxVolume}%`,
-              transform: "translateX(-50%)",
-            }}
-          ></div>
-        </div>
-        <p className="text-xs text-[#949ba4] mt-1">
-          Giriş, çıkış, mute ve diğer bildirim seslerinin yüksekliği.
-        </p>
-      </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
-      <div className="mb-6">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
-          Giriş Hassasiyeti (Noise Gate)
-        </h4>
-        <p className="text-xs text-[#949ba4] mb-4">
-          Mikrofonunuz ne kadar ses algıladığında devreye girsin? Sarı bölge
-          gürültüdür, yeşil bölge konuşmadır.
-        </p>
-        <div className="bg-[#1e1f22] p-4 rounded-lg border border-[#2b2d31]">
-          <div className="h-3 w-full bg-[#313338] rounded-full overflow-hidden relative mb-4">
-            <div
-              className="absolute inset-0 w-full h-full"
-              style={{
-                background:
-                  "linear-gradient(to right, #da373c 0%, #da373c 10%, #f0b232 40%, #23a559 100%)",
-                opacity: 0.2,
-              }}
-            ></div>
-            <div
-              className="absolute top-0 bottom-0 w-1 bg-white z-20 shadow-[0_0_10px_rgba(255,255,255,0.8)]"
-              style={{ left: `${localThreshold}%` }}
-            ></div>
-            <div
-              className="h-full transition-all duration-75 ease-out z-10"
-              style={{
-                width: `${micVolume}%`,
-                backgroundColor:
-                  micVolume > localThreshold ? "#23a559" : "#da373c",
-                boxShadow: "0 0 10px rgba(0,0,0,0.5)",
-              }}
-            ></div>
-          </div>
-          <div className="flex items-center gap-4">
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={localThreshold}
-              onChange={(e) => setLocalThreshold(Number(e.target.value))}
-              onMouseUp={() => settings.setVoiceThreshold(localThreshold)}
-              onTouchEnd={() => settings.setVoiceThreshold(localThreshold)}
-              className="w-full h-2 bg-[#404249] rounded-lg appearance-none cursor-pointer accent-indigo-500"
-            />
-            <span className="text-sm font-mono text-white w-8 text-right">
-              {localThreshold}%
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
-      <div className="space-y-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
-          Gelişmiş Ses İşleme
-        </h4>
-        <ToggleSwitch
-          label="Yankı Engelleme"
-          description="Sesinin yankılanmasını önler."
-          checked={settings.echoCancellation}
-          onChange={settings.toggleEchoCancellation}
-        />
-        <div className="h-[1px] bg-[#2b2d31]"></div>
-        <ToggleSwitch
-          label="Gürültü Bastırma (Noise Suppression)"
-          description="Klavye sesi, fan sesi gibi arka plan gürültülerini filtreler."
-          checked={settings.noiseSuppression}
-          onChange={settings.toggleNoiseSuppression}
-        />
-        <div className="h-[1px] bg-[#2b2d31]"></div>
-        <ToggleSwitch
-          label="Otomatik Kazanç Kontrolü"
-          description="Ses seviyeni otomatik olarak dengeler."
-          checked={settings.autoGainControl}
-          onChange={settings.toggleAutoGainControl}
-        />
-      </div>
-    </div>
-  );
-}
-
 function KeybindSettings() {
   const [recording, setRecording] = useState(null);
   const [muteKeybinding, setMuteKeybinding] = useState(null);
@@ -942,6 +592,411 @@ function KeybindRow({ label, description, shortcut, isRecording, onClick }) {
           <div className="absolute inset-0 bg-[#f04747]/5 animate-pulse"></div>
         )}
       </button>
+    </div>
+  );
+}
+
+// --- SES VE GÖRÜNTÜ AYARLARI ---
+function VoiceSettings() {
+  let room;
+  try {
+    room = useRoomContext();
+  } catch (e) {}
+
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [audioOutputs, setAudioOutputs] = useState([]);
+  const [videoInputs, setVideoInputs] = useState([]);
+  const [micVolume, setMicVolume] = useState(0);
+
+  const settings = useSettingsStore();
+  const { playSound } = useSoundEffects();
+  const animationRef = useRef();
+  const videoRef = useRef(null);
+
+  const [localSfxVolume, setLocalSfxVolume] = useState(settings.sfxVolume);
+  const [localThreshold, setLocalThreshold] = useState(settings.voiceThreshold);
+
+  useEffect(() => {
+    setLocalSfxVolume(settings.sfxVolume);
+  }, [settings.sfxVolume]);
+  useEffect(() => {
+    setLocalThreshold(settings.voiceThreshold);
+  }, [settings.voiceThreshold]);
+
+  useEffect(() => {
+    const getDevices = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        setAudioInputs(devs.filter((d) => d.kind === "audioinput"));
+        setAudioOutputs(devs.filter((d) => d.kind === "audiooutput"));
+        setVideoInputs(devs.filter((d) => d.kind === "videoinput"));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    getDevices();
+  }, []);
+
+  useEffect(() => {
+    let audioContext, analyser, stream;
+    const initAudio = async () => {
+      try {
+        if (!settings.audioInputId) return;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId:
+              settings.audioInputId !== "default"
+                ? { exact: settings.audioInputId }
+                : undefined,
+          },
+        });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        audioContext.createMediaStreamSource(stream).connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateMeter = () => {
+          analyser.getByteTimeDomainData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const x = (dataArray[i] - 128) / 128.0;
+            sum += x * x;
+          }
+          setMicVolume(Math.min(100, Math.sqrt(sum / dataArray.length) * 400));
+          animationRef.current = requestAnimationFrame(updateMeter);
+        };
+        updateMeter();
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    initAudio();
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (audioContext) audioContext.close();
+    };
+  }, [settings.audioInputId]);
+
+  // Kamera Önizleme
+  useEffect(() => {
+    let stream;
+    // YENİ: Eğer kamera devre dışıysa stream başlatma
+    if (!settings.enableCamera) return;
+
+    const initVideo = async () => {
+      if (videoInputs.length === 0) return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId:
+              settings.videoId !== "default"
+                ? { exact: settings.videoId }
+                : undefined,
+            width: { ideal: 640 },
+            height: { ideal: 360 },
+          },
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (e) {
+        console.error("Kamera önizleme hatası:", e);
+      }
+    };
+
+    initVideo();
+    return () => {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+    };
+  }, [settings.videoId, videoInputs, settings.enableCamera]); // dependency'e enableCamera ekledik
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <h3 className="text-xl font-bold text-white mb-6">Ses ve Görüntü</h3>
+
+      {/* KAMERA AYARLARI */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
+            <Camera size={14} /> Video Ayarları
+          </h4>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+              settings.enableCamera
+                ? "bg-green-500/10 text-green-500"
+                : "bg-red-500/10 text-red-500"
+            }`}
+          >
+            {settings.enableCamera ? "AÇIK" : "DEVRE DIŞI"}
+          </span>
+        </div>
+
+        <div className="bg-[#2b2d31] p-4 rounded-lg border border-[#1f2023]">
+          {/* YENİ: KAMERA AÇ/KAPA TOGGLE */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#1f2023]">
+            <div>
+              <div className="font-bold text-sm text-white">
+                Kamerayı Etkinleştir
+              </div>
+              <div className="text-xs text-[#949ba4]">
+                Kapatırsanız uygulama içinde kamera butonu devre dışı kalır.
+              </div>
+            </div>
+            <ToggleSwitch
+              checked={settings.enableCamera}
+              onChange={settings.toggleEnableCamera}
+            />
+          </div>
+
+          {/* Sadece kamera etkinse göster */}
+          {settings.enableCamera ? (
+            <>
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+                  Kamera
+                </label>
+                <div className="relative">
+                  <select
+                    value={settings.videoId}
+                    onChange={(e) => {
+                      settings.setVideoInput(e.target.value);
+                      if (room?.localParticipant)
+                        room.switchActiveDevice("videoinput", e.target.value);
+                    }}
+                    className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer pl-9"
+                  >
+                    {videoInputs.length > 0 ? (
+                      videoInputs.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Kamera ${d.deviceId.slice(0, 5)}`}
+                        </option>
+                      ))
+                    ) : (
+                      <option disabled>Kamera Bulunamadı</option>
+                    )}
+                  </select>
+                  <div className="absolute left-3 top-2.5 pointer-events-none text-gray-400">
+                    <Video size={16} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative w-full aspect-video bg-[#111214] rounded-lg overflow-hidden border border-[#1e1f22] flex items-center justify-center">
+                {videoInputs.length > 0 ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center text-[#949ba4] opacity-50">
+                    <VideoOff size={48} className="mb-2" />
+                    <span className="text-sm font-bold">Kamera Yok</span>
+                  </div>
+                )}
+                {videoInputs.length > 0 && (
+                  <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
+                    ÖNİZLEME
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            // Kamera Devre Dışı İse Gösterilecek Mesaj
+            <div className="flex flex-col items-center justify-center py-8 text-[#949ba4] opacity-70">
+              <ShieldAlert size={48} className="mb-3 text-[#da373c]" />
+              <p className="text-sm font-medium text-center max-w-[200px]">
+                Gizlilik ayarlarından kamera erişimi kapatıldı.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+
+      {/* SES AYARLARI (AYNI) */}
+      <div className="space-y-6">
+        <div>
+          <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+            Giriş Cihazı (Mikrofon)
+          </label>
+          <div className="relative">
+            <select
+              value={settings.audioInputId}
+              onChange={(e) => {
+                settings.setAudioInput(e.target.value);
+                if (room?.localParticipant)
+                  room.switchActiveDevice("audioinput", e.target.value);
+              }}
+              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
+            >
+              <option value="default">Varsayılan</option>
+              {audioInputs.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Mikrofon ${d.deviceId.slice(0, 5)}`}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
+              <Mic size={16} />
+            </div>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+            Çıkış Cihazı (Hoparlör)
+          </label>
+          <div className="relative">
+            <select
+              value={settings.audioOutputId}
+              onChange={(e) => {
+                settings.setAudioOutput(e.target.value);
+                if (room)
+                  room.switchActiveDevice("audiooutput", e.target.value);
+              }}
+              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
+            >
+              <option value="default">Varsayılan</option>
+              {audioOutputs.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Hoparlör ${d.deviceId.slice(0, 5)}`}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
+              <Speaker size={16} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ... (Diğer ses ayarları aynı kalacak) ... */}
+      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-xs font-bold text-[#b5bac1] uppercase flex items-center gap-2">
+            Uygulama Sesleri <Volume2 size={14} className="text-indigo-400" />
+          </label>
+          <span className="text-xs text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded">
+            %{localSfxVolume}
+          </span>
+        </div>
+        <div className="relative w-full h-8 flex items-center select-none">
+          <div className="absolute w-full h-2 bg-[#1e1f22] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-indigo-500 transition-all duration-75"
+              style={{ width: `${localSfxVolume}%` }}
+            ></div>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={localSfxVolume}
+            onChange={(e) => setLocalSfxVolume(parseInt(e.target.value))}
+            onMouseUp={() => {
+              settings.setSfxVolume(localSfxVolume);
+              playSound("join");
+            }}
+            onTouchEnd={() => {
+              settings.setSfxVolume(localSfxVolume);
+              playSound("join");
+            }}
+            className="w-full absolute z-20 opacity-0 cursor-pointer h-full"
+          />
+          <div
+            className="absolute h-4 w-4 bg-white rounded-full shadow pointer-events-none transition-all z-30"
+            style={{
+              left: `${localSfxVolume}%`,
+              transform: "translateX(-50%)",
+            }}
+          ></div>
+        </div>
+        <p className="text-xs text-[#949ba4] mt-1">
+          Giriş, çıkış, mute ve diğer bildirim seslerinin yüksekliği.
+        </p>
+      </div>
+      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="mb-6">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
+          Giriş Hassasiyeti (Noise Gate)
+        </h4>
+        <p className="text-xs text-[#949ba4] mb-4">
+          Mikrofonunuz ne kadar ses algıladığında devreye girsin? Sarı bölge
+          gürültüdür, yeşil bölge konuşmadır.
+        </p>
+        <div className="bg-[#1e1f22] p-4 rounded-lg border border-[#2b2d31]">
+          <div className="h-3 w-full bg-[#313338] rounded-full overflow-hidden relative mb-4">
+            <div
+              className="absolute inset-0 w-full h-full"
+              style={{
+                background:
+                  "linear-gradient(to right, #da373c 0%, #da373c 10%, #f0b232 40%, #23a559 100%)",
+                opacity: 0.2,
+              }}
+            ></div>
+            <div
+              className="absolute top-0 bottom-0 w-1 bg-white z-20 shadow-[0_0_10px_rgba(255,255,255,0.8)]"
+              style={{ left: `${localThreshold}%` }}
+            ></div>
+            <div
+              className="h-full transition-all duration-75 ease-out z-10"
+              style={{
+                width: `${micVolume}%`,
+                backgroundColor:
+                  micVolume > localThreshold ? "#23a559" : "#da373c",
+                boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+              }}
+            ></div>
+          </div>
+          <div className="flex items-center gap-4">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={localThreshold}
+              onChange={(e) => setLocalThreshold(Number(e.target.value))}
+              onMouseUp={() => settings.setVoiceThreshold(localThreshold)}
+              onTouchEnd={() => settings.setVoiceThreshold(localThreshold)}
+              className="w-full h-2 bg-[#404249] rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+            <span className="text-sm font-mono text-white w-8 text-right">
+              {localThreshold}%
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="space-y-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
+          Gelişmiş Ses İşleme
+        </h4>
+        <ToggleSwitch
+          label="Yankı Engelleme"
+          description="Sesinin yankılanmasını önler. Kulaklık kullanmıyorsan kesinlikle aç."
+          checked={settings.echoCancellation}
+          onChange={settings.toggleEchoCancellation}
+        />
+        <div className="h-[1px] bg-[#2b2d31]"></div>
+        <ToggleSwitch
+          label="Gürültü Bastırma (Noise Suppression)"
+          description="Klavye sesi, fan sesi gibi arka plan gürültülerini filtreler."
+          checked={settings.noiseSuppression}
+          onChange={settings.toggleNoiseSuppression}
+        />
+        <div className="h-[1px] bg-[#2b2d31]"></div>
+        <ToggleSwitch
+          label="Otomatik Kazanç Kontrolü"
+          description="Ses seviyeni otomatik olarak dengeler (Bağırdığında kısar, fısıldadığında açar)."
+          checked={settings.autoGainControl}
+          onChange={settings.toggleAutoGainControl}
+        />
+      </div>
     </div>
   );
 }

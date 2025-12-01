@@ -7,8 +7,10 @@ export const useSettingsStore = create(
       // Ses Cihazları
       audioInputId: "default",
       audioOutputId: "default",
-      // YENİ: Video Cihazı
       videoId: "default",
+
+      // YENİ: KAMERA İZNİ (Varsayılan Açık)
+      enableCamera: true,
 
       // Ses İşleme
       noiseSuppression: true,
@@ -24,14 +26,17 @@ export const useSettingsStore = create(
       // Kullanıcı sesleri
       userVolumes: {},
 
-      // Tray Davranışı
+      // Tray
       closeToTray: true,
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
-      // YENİ: Video Action
       setVideoInput: (deviceId) => set({ videoId: deviceId }),
+
+      // YENİ: KAMERA İZNİ TOGGLE
+      toggleEnableCamera: () =>
+        set((state) => ({ enableCamera: !state.enableCamera })),
 
       toggleNoiseSuppression: () =>
         set((state) => ({ noiseSuppression: !state.noiseSuppression })),
