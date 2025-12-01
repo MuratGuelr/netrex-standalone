@@ -34,8 +34,9 @@ import {
   StopCircle,
   Tv,
   AlertTriangle,
-  Video, // EKLENDİ: Kamera Açık İkonu
-  VideoOff, // EKLENDİ: Kamera Kapalı İkonu
+  Video,
+  VideoOff,
+  CameraOff,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
@@ -49,36 +50,16 @@ import { useAuthStore } from "@/src/store/authStore";
 
 // --- STYLES ---
 const styleInjection = `
-  @keyframes pulse-ring {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
-    70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
-  }
+  @keyframes pulse-ring { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } }
   .speaking-avatar { animation: pulse-ring 2s infinite; }
-  
-  .volume-slider {
-    -webkit-appearance: none;
-    height: 4px;
-    background: rgba(255,255,255,0.3);
-    border-radius: 2px;
-    outline: none;
-  }
-  .volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
-    background: white;
-    border-radius: 50%;
-    cursor: pointer;
-  }
+  .volume-slider { -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; outline: none; }
+  .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; cursor: pointer; }
 `;
 
-// --- YARDIMCI BİLEŞENLER ---
-
+// --- MIKROFON YÖNETİCİSİ ---
 function MicrophoneManager() {
   const audioTracks = useTracks([Track.Source.Microphone]);
   const { userVolumes } = useSettingsStore();
-
   return (
     <>
       {audioTracks.map((trackRef) => (
@@ -92,12 +73,12 @@ function MicrophoneManager() {
   );
 }
 
+// --- GLOBAL CHAT & EVENTS ---
 function GlobalChatListener({ showChatPanel }) {
   const room = useRoomContext();
   const { incrementUnread, currentChannel } = useChatStore();
   const { user } = useAuthStore();
   const { playSound } = useSoundEffects();
-
   useEffect(() => {
     if (!room) return;
     const handleData = (payload, participant, kind, topic) => {
@@ -106,10 +87,11 @@ function GlobalChatListener({ showChatPanel }) {
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload));
         if (data.type === "chat" && data.message.userId !== user?.uid) {
-          const isDifferentChannel =
-            !currentChannel || currentChannel.id !== data.channelId;
-          const isPanelClosed = !showChatPanel;
-          if (isDifferentChannel || isPanelClosed) {
+          if (
+            !currentChannel ||
+            currentChannel.id !== data.channelId ||
+            !showChatPanel
+          ) {
             incrementUnread(data.channelId);
             playSound("message");
           }
@@ -129,7 +111,6 @@ function VoiceProcessorHandler() {
   if (!rawAudioMode) useVoiceProcessor();
   return null;
 }
-
 function RoomEventsHandler() {
   const room = useRoomContext();
   const { playSound } = useSoundEffects();
@@ -146,22 +127,20 @@ function RoomEventsHandler() {
   }, [room, playSound]);
   return null;
 }
-
 function DeafenManager({ isDeafened }) {
   useEffect(() => {
-    const muteAllAudio = () => {
+    const muteAll = () => {
       document.querySelectorAll("audio").forEach((el) => {
         el.muted = isDeafened;
       });
     };
-    muteAllAudio();
-    const obs = new MutationObserver(muteAllAudio);
+    muteAll();
+    const obs = new MutationObserver(muteAll);
     obs.observe(document.body, { childList: true, subtree: true });
     return () => obs.disconnect();
   }, [isDeafened]);
   return null;
 }
-
 function useAudioActivity(participant) {
   const [isActive, setIsActive] = useState(false);
   const { isMuted } = useParticipantInfo({ participant });
@@ -210,7 +189,6 @@ function useAudioActivity(participant) {
 }
 
 // --- ANA BİLEŞEN ---
-
 export default function ActiveRoom({
   roomName,
   username,
@@ -221,9 +199,8 @@ export default function ActiveRoom({
   const [token, setToken] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
-
-  // YENİ: Kamera Durumu (Varsayılan FALSE - Yani kapalı)
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [hideIncomingVideo, setHideIncomingVideo] = useState(false);
 
   const [showVoicePanel, setShowVoicePanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(false);
@@ -263,14 +240,12 @@ export default function ActiveRoom({
     playSound("left");
     onLeave();
   };
-  const handleDisconnect = (reason) => {
-    console.log("Bağlantı koptu:", reason);
+  const handleDisconnect = () => {
     setIsReconnecting(true);
   };
   useEffect(() => {
     if (token) playSound("join");
   }, [token]);
-
   const handleUserContextMenu = (e, participant) => {
     e.preventDefault();
     e.stopPropagation();
@@ -292,7 +267,7 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
-      video={isCameraOn} // ARTIK STATE'E BAĞLI (Varsayılan: False)
+      video={isCameraOn}
       audio={true}
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
@@ -305,6 +280,12 @@ export default function ActiveRoom({
           echoCancellation,
           noiseSuppression,
           autoGainControl,
+        },
+        // VARSAYILAN KOTA DOSTU AYARLAR
+        videoCaptureDefaults: {
+          resolution: { width: 640, height: 360 }, // Max 360p
+          maxBitrate: 200_000, // 200 kbps limit
+          deviceId: "",
         },
         reconnect: true,
       }}
@@ -335,7 +316,6 @@ export default function ActiveRoom({
         onClose={() => setShowSettings(false)}
       />
 
-      {/* HEADER */}
       <div className="h-12 bg-[#313338] flex items-center px-4 justify-between shrink-0 shadow-sm border-b border-[#26272d] z-20 select-none">
         <div className="flex items-center gap-4 overflow-hidden">
           <div className="flex items-center gap-2 min-w-0">
@@ -355,6 +335,17 @@ export default function ActiveRoom({
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-5">
+          <button
+            onClick={() => setHideIncomingVideo(!hideIncomingVideo)}
+            className={`p-1.5 rounded transition-all ${
+              hideIncomingVideo
+                ? "bg-red-500/20 text-red-500"
+                : "text-[#b5bac1] hover:text-[#dbdee1]"
+            }`}
+            title="Gelen kameraları kapat (Veri tasarrufu)"
+          >
+            {hideIncomingVideo ? <CameraOff size={20} /> : <Video size={20} />}
+          </button>
           <div className="w-[1px] h-6 bg-[#3f4147] hidden md:block"></div>
           <div className="flex items-center gap-2">
             <button
@@ -413,6 +404,7 @@ export default function ActiveRoom({
         onUserContextMenu={handleUserContextMenu}
         activeStreamId={activeStreamId}
         setActiveStreamId={setActiveStreamId}
+        hideIncomingVideo={hideIncomingVideo}
       />
 
       <BottomControls
@@ -423,10 +415,9 @@ export default function ActiveRoom({
         setIsDeafened={setIsDeafened}
         playSound={playSound}
         setActiveStreamId={setActiveStreamId}
-        isCameraOn={isCameraOn} // State'i gönder
-        setIsCameraOn={setIsCameraOn} // Setter'ı gönder
+        isCameraOn={isCameraOn}
+        setIsCameraOn={setIsCameraOn}
       />
-
       {contextMenu && (
         <UserContextMenu
           x={contextMenu.x}
@@ -440,7 +431,6 @@ export default function ActiveRoom({
   );
 }
 
-// --- STAGE MANAGER ---
 function StageManager({
   showVoicePanel,
   showChatPanel,
@@ -451,31 +441,27 @@ function StageManager({
   onUserContextMenu,
   activeStreamId,
   setActiveStreamId,
+  hideIncomingVideo,
 }) {
   const screenTracks = useTracks([Track.Source.ScreenShare]);
-
   const activeTrack = activeStreamId
     ? screenTracks.find((t) => t.participant.identity === activeStreamId)
     : null;
-
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
 
   useEffect(() => {
-    if (screenTracks.length > 0 && !activeStreamId) {
+    if (screenTracks.length > 0 && !activeStreamId)
       setActiveStreamId(screenTracks[0].participant.identity);
-    }
     if (
       activeStreamId &&
       !screenTracks.find((t) => t.participant.identity === activeStreamId)
-    ) {
+    )
       setActiveStreamId(null);
-    }
   }, [screenTracks, activeStreamId, setActiveStreamId]);
 
   const isLocalSharing = activeTrack?.participant.isLocal;
   const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
-
   useEffect(() => {
     if (!activeTrack) setLocalPreviewHidden(false);
   }, [activeTrack]);
@@ -495,7 +481,6 @@ function StageManager({
             flexBasis: showChatPanel && currentTextChannel ? "60%" : "100%",
           }}
         >
-          {/* ÇOKLU YAYIN SEÇİCİ BAR */}
           {screenTracks.length > 1 && activeStreamId && (
             <div className="bg-[#1e1f22] p-2 flex gap-2 overflow-x-auto border-b border-[#111214] shrink-0">
               {screenTracks.map((t) => (
@@ -505,14 +490,11 @@ function StageManager({
                     setActiveStreamId(t.participant.identity);
                     setLocalPreviewHidden(false);
                   }}
-                  className={`
-                    px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-all
-                    ${
-                      activeStreamId === t.participant.identity
-                        ? "bg-[#5865f2] text-white"
-                        : "bg-[#2b2d31] text-[#949ba4] hover:text-white"
-                    }
-                  `}
+                  className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-all ${
+                    activeStreamId === t.participant.identity
+                      ? "bg-[#5865f2] text-white"
+                      : "bg-[#2b2d31] text-[#949ba4] hover:text-white"
+                  }`}
                 >
                   <Monitor size={12} />
                   {t.participant.isLocal
@@ -522,7 +504,6 @@ function StageManager({
               ))}
             </div>
           )}
-
           {activeTrack ? (
             isLocalSharing && localPreviewHidden ? (
               <LocalHiddenPlaceholder
@@ -558,7 +539,7 @@ function StageManager({
                         }
                         className="bg-[#5865f2] hover:bg-[#4752c4] text-white w-full px-4 py-2 rounded-md shadow-sm text-sm font-bold flex items-center gap-2 mb-1"
                       >
-                        <Tv size={14} />
+                        <Tv size={14} />{" "}
                         {t.participant.isLocal
                           ? "Yayınına Dön"
                           : `${t.participant.identity} izle`}
@@ -570,12 +551,12 @@ function StageManager({
               <ParticipantList
                 onUserContextMenu={onUserContextMenu}
                 compact={false}
+                hideIncomingVideo={hideIncomingVideo}
               />
             </div>
           )}
         </div>
       )}
-
       {showChatPanel && currentTextChannel && (
         <div
           className={`flex-1 overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
@@ -590,7 +571,6 @@ function StageManager({
           />
         </div>
       )}
-
       {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-[#313338]">
           <Users size={32} className="opacity-50 mb-4" />
@@ -611,8 +591,7 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Önizleme Gizlendi</h2>
         <p className="text-gray-400 text-sm max-w-sm mb-8">
-          Yayının devam ediyor. Performansı artırmak ve ayna etkisini önlemek
-          için önizlemeyi kapattın.
+          Yayının devam ediyor.
         </p>
         <div className="flex gap-4">
           <button
@@ -633,7 +612,6 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   );
 }
 
-// --- SCREEN SHARE PLAYER ---
 function ScreenShareStage({
   trackRef,
   onStopWatching,
@@ -651,25 +629,20 @@ function ScreenShareStage({
   const participants = useParticipants();
   const viewerCount = Math.max(0, participants.length - 1);
   const participant = trackRef?.participant;
-
   const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
   const audioTrackRef = audioTracks.find(
     (t) => t.participant.sid === participant?.sid
   );
-
   const isAudioDisabled = amISharing && !isLocalSharing;
 
   useEffect(() => {
-    if (audioTrackRef?.publication?.track && audioRef.current) {
+    if (audioTrackRef?.publication?.track && audioRef.current)
       audioTrackRef.publication.track.attach(audioRef.current);
-    }
     return () => {
-      if (audioTrackRef?.publication?.track && audioRef.current) {
+      if (audioTrackRef?.publication?.track && audioRef.current)
         audioTrackRef.publication.track.detach(audioRef.current);
-      }
     };
   }, [audioTrackRef]);
-
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
@@ -686,7 +659,6 @@ function ScreenShareStage({
       setVolume(prevVolume > 0 ? prevVolume : 50);
     }
   };
-
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen();
@@ -707,9 +679,7 @@ function ScreenShareStage({
           trackRef={trackRef}
           className="max-w-full max-h-full object-contain shadow-2xl"
         />
-
         {!isLocalSharing && <audio ref={audioRef} autoPlay />}
-
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-3">
@@ -741,7 +711,6 @@ function ScreenShareStage({
               </button>
             </div>
           </div>
-
           <div className="flex justify-between items-end">
             <div className="flex items-center gap-2 text-gray-300 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
               <Users size={16} />
@@ -757,7 +726,7 @@ function ScreenShareStage({
                     >
                       <AlertTriangle size={16} />
                       <span className="hidden group-hover/vol:inline">
-                        Yayın Yaptığın İçin Ses Kapalı
+                        Ses Kapalı
                       </span>
                     </div>
                   ) : (
@@ -826,11 +795,10 @@ function ScreenShareStage({
 }
 
 // --- KATILIMCI LİSTESİ ---
-function ParticipantList({ onUserContextMenu, compact }) {
+function ParticipantList({ onUserContextMenu, compact, hideIncomingVideo }) {
   const participants = useParticipants();
   const count = participants.length;
   if (count === 0) return null;
-
   if (compact) {
     return participants.map((p) => (
       <div key={p.sid} className="min-w-[140px] h-full">
@@ -839,11 +807,11 @@ function ParticipantList({ onUserContextMenu, compact }) {
           totalCount={count}
           onContextMenu={(e) => onUserContextMenu(e, p)}
           compact={true}
+          hideIncomingVideo={hideIncomingVideo}
         />
       </div>
     ));
   }
-
   let gridClass = "";
   if (count === 1)
     gridClass = "grid-cols-1 w-full max-w-[800px] aspect-video max-h-[600px]";
@@ -853,7 +821,6 @@ function ParticipantList({ onUserContextMenu, compact }) {
   else if (count <= 6)
     gridClass = "grid-cols-2 md:grid-cols-3 w-full max-w-[1100px] gap-4";
   else gridClass = "grid-cols-3 md:grid-cols-4 w-full max-w-[1200px] gap-3";
-
   return (
     <div
       className={`grid ${gridClass} items-center justify-center content-center w-full`}
@@ -864,6 +831,7 @@ function ParticipantList({ onUserContextMenu, compact }) {
             participant={p}
             totalCount={count}
             onContextMenu={(e) => onUserContextMenu(e, p)}
+            hideIncomingVideo={hideIncomingVideo}
           />
         </div>
       ))}
@@ -871,8 +839,13 @@ function ParticipantList({ onUserContextMenu, compact }) {
   );
 }
 
-// --- USER CARD (YENİ: KAMERA GÖSTERİMİ) ---
-function UserCard({ participant, totalCount, onContextMenu, compact }) {
+function UserCard({
+  participant,
+  totalCount,
+  onContextMenu,
+  compact,
+  hideIncomingVideo,
+}) {
   const { identity, metadata } = useParticipantInfo({ participant });
   const audioActive = useAudioActivity(participant);
   const remoteState = useMemo(() => {
@@ -882,7 +855,6 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
       return {};
     }
   }, [metadata]);
-
   const userColor = remoteState.profileColor || "#6366f1";
   const isMuted = remoteState.isMuted;
   const isSpeaking = audioActive && !isMuted && !remoteState.isDeafened;
@@ -892,10 +864,13 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
     ? "w-28 h-28 text-4xl"
     : "w-16 h-16 text-xl";
 
-  // KAMERA TRACK KONTROLÜ
   const videoTrack = useTracks([Track.Source.Camera]).find(
     (t) => t.participant.sid === participant.sid
   );
+  const shouldShowVideo =
+    videoTrack &&
+    !hideIncomingVideo &&
+    (participant.isLocal || videoTrack.isSubscribed);
 
   return (
     <div
@@ -919,14 +894,12 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
       }}
     >
       <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center">
-        {videoTrack ? (
-          // KAMERA AÇIKSA VİDEO GÖSTER
+        {shouldShowVideo ? (
           <VideoTrack
             trackRef={videoTrack}
             className="w-full h-full object-cover absolute inset-0"
           />
         ) : (
-          // KAMERA KAPALIYSA AVATAR GÖSTER
           <div
             className={`${avatarSize} rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 relative transition-transform duration-200 group-hover:scale-105 ${
               isSpeaking
@@ -948,11 +921,9 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
             {identity?.charAt(0).toUpperCase()}
           </div>
         )}
-
-        {/* İkonlar (Mute, Deafen) - Video varsa sol alta, yoksa avatarın yanına */}
         <div
           className={`absolute ${
-            videoTrack ? "bottom-2 right-2" : "-bottom-1 -right-1"
+            shouldShowVideo ? "bottom-2 right-2" : "-bottom-1 -right-1"
           } z-20`}
         >
           {remoteState.isDeafened ? (
@@ -967,7 +938,7 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
                 <MicOff size={10} className="text-white" />
               </div>
             </div>
-          ) : isSpeaking && !videoTrack ? (
+          ) : isSpeaking && !shouldShowVideo ? (
             <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div
                 className="w-full h-full rounded-full flex items-center justify-center animate-pulse"
@@ -978,11 +949,11 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
             </div>
           ) : null}
         </div>
-
-        {/* İsim - Video varsa gradient üzerine */}
         <div
           className={`absolute bottom-2 left-2 z-10 max-w-[80%] ${
-            videoTrack ? "bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm" : ""
+            shouldShowVideo
+              ? "bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm"
+              : ""
           }`}
         >
           <span
@@ -994,8 +965,7 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
           </span>
         </div>
       </div>
-
-      {!videoTrack && isSpeaking && (
+      {!shouldShowVideo && isSpeaking && (
         <div
           className="absolute inset-0 pointer-events-none animate-pulse"
           style={{ background: userColor, opacity: 0.08 }}
@@ -1022,7 +992,6 @@ function BottomControls({
   const { profileColor } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
-
   const stateRef = useRef({
     isMuted,
     isDeafened,
@@ -1070,7 +1039,6 @@ function BottomControls({
     if (localParticipant) localParticipant.setMicrophoneEnabled(!newState);
     playSound(newState ? "mute" : "unmute");
   };
-
   const toggleDeaf = () => {
     const { isDeafened, isMuted, localParticipant } = stateRef.current;
     const newState = !isDeafened;
@@ -1086,13 +1054,17 @@ function BottomControls({
       if (localParticipant) localParticipant.setMicrophoneEnabled(true);
     }
   };
-
-  // YENİ: KAMERA TOGGLE
   const toggleCamera = async () => {
     const { isCameraOn, localParticipant } = stateRef.current;
     const newState = !isCameraOn;
     setIsCameraOn(newState);
-    await localParticipant.setCameraEnabled(newState);
+    // OPTİMİZASYON: 360p, 15fps, 150kbps, NO SIMULCAST
+    await localParticipant.setCameraEnabled(newState, {
+      resolution: { width: 640, height: 360 },
+      frameRate: 15,
+      maxBitrate: 150000,
+      simulcast: false,
+    });
   };
 
   const startScreenShare = async ({ resolution, fps, sourceId, withAudio }) => {
@@ -1103,7 +1075,6 @@ function BottomControls({
           : resolution === 720
           ? { width: 1280, height: 720 }
           : { width: 854, height: 480 };
-
       const constraints = {
         audio: withAudio
           ? { mandatory: { chromeMediaSource: "desktop" } }
@@ -1121,13 +1092,10 @@ function BottomControls({
           },
         },
       };
-
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = stream.getVideoTracks()[0];
-
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
-      const maxBitrate = fps > 15 ? 1000000 : 300000;
-
+      const maxBitrate = fps > 15 ? 1200000 : 400000;
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
@@ -1135,7 +1103,6 @@ function BottomControls({
         simulcast: true,
         videoEncoding: { maxBitrate, maxFramerate: fps },
       });
-
       const audioTrack = stream.getAudioTracks()[0];
       if (withAudio && audioTrack) {
         await localParticipant.publishTrack(audioTrack, {
@@ -1155,7 +1122,6 @@ function BottomControls({
           localParticipant.unpublishTrack(videoTrack);
         };
       }
-
       setActiveStreamId(localParticipant.identity);
     } catch (e) {
       console.error("Screen share error:", e);
@@ -1175,7 +1141,6 @@ function BottomControls({
       }
     }
   };
-
   useEffect(() => {
     const handleHotkey = (action) => {
       if (action === "toggle-mute") toggleMute();
@@ -1224,8 +1189,6 @@ function BottomControls({
             tooltip="Sağırlaştır"
             danger={isDeafened}
           />
-
-          {/* YENİ KAMERA BUTONU */}
           <button
             onClick={toggleCamera}
             className={`w-10 h-10 flex items-center justify-center rounded-lg transition relative group ${
@@ -1237,7 +1200,6 @@ function BottomControls({
           >
             {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
-
           <button
             onClick={
               isScreenSharing
@@ -1253,7 +1215,6 @@ function BottomControls({
           >
             {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
           </button>
-
           <div className="w-[1px] h-6 bg-[#3f4147] mx-1"></div>
           <button
             onClick={onLeave}

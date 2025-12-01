@@ -24,7 +24,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 
-// --- PRESET COLORS ---
+// ... (PRESET_GRADIENTS, SOLID_COLORS, formatKeybinding AYNI KALSIN) ...
 const PRESET_GRADIENTS = [
   "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
   "linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%)",
@@ -84,7 +84,6 @@ export default function SettingsModal({ isOpen, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-[#313338] w-[850px] h-[650px] rounded-lg shadow-2xl flex overflow-hidden border border-[#1e1f22]">
-        {/* SIDEBAR */}
         <div className="w-60 bg-[#2b2d31] p-3 flex flex-col gap-1 border-r border-[#1f2023]">
           <div className="px-3 pt-4 pb-2">
             <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
@@ -97,15 +96,12 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "account"}
             onClick={() => setActiveTab("account")}
           />
-
           <div className="h-[1px] bg-[#1f2023] mx-2 my-2"></div>
-
           <div className="px-3 pt-2 pb-2">
             <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
               Uygulama Ayarları
             </h2>
           </div>
-
           <SidebarItem
             label="Genel"
             icon={<AppWindow size={18} />}
@@ -124,15 +120,12 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "keybinds"}
             onClick={() => setActiveTab("keybinds")}
           />
-
           <div className="mt-auto px-2 pb-2">
             <div className="text-[10px] text-[#5e626a] text-center">
               Netrex v1.0.0
             </div>
           </div>
         </div>
-
-        {/* CONTENT */}
         <div className="flex-1 bg-[#313338] relative flex flex-col min-w-0">
           <div
             className="absolute top-4 right-4 z-10 flex flex-col items-center group cursor-pointer"
@@ -145,7 +138,6 @@ export default function SettingsModal({ isOpen, onClose }) {
               ESC
             </span>
           </div>
-
           <div className="flex-1 overflow-y-auto custom-scrollbar p-10 pr-16">
             {activeTab === "account" && <AccountSettings onClose={onClose} />}
             {activeTab === "application" && <ApplicationSettings />}
@@ -173,10 +165,39 @@ function SidebarItem({ label, icon, active, onClick }) {
   );
 }
 
-// --- UYGULAMA AYARLARI ---
+// --- DÜZELTİLEN TOGGLE SWITCH ---
+function ToggleSwitch({ label, description, checked, onChange }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="pr-4">
+        <div className="font-medium text-[#dbdee1] mb-0.5">{label}</div>
+        <div className="text-xs text-[#949ba4]">{description}</div>
+      </div>
+      <button
+        onClick={onChange}
+        className={`w-12 h-6 rounded-full relative transition-colors duration-300 ease-in-out border-2 border-transparent shrink-0 focus:outline-none ${
+          checked ? "bg-[#23a559]" : "bg-[#80848e]"
+        }`}
+      >
+        <div
+          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
+            checked ? "translate-x-6" : "translate-x-0"
+          }`}
+        >
+          {checked ? (
+            <Check size={10} className="text-[#23a559] stroke-[4]" />
+          ) : (
+            <X size={10} className="text-[#80848e] stroke-[4]" />
+          )}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+// ... (ApplicationSettings, AccountSettings, KeybindSettings AYNI KALSIN) ...
 function ApplicationSettings() {
   const { closeToTray, setCloseToTray } = useSettingsStore();
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Uygulama Ayarları</h3>
@@ -184,37 +205,17 @@ function ApplicationSettings() {
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
           Pencere Davranışı
         </h4>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-[#dbdee1] mb-1">
-              Sistem Tepsisine Küçült
-            </div>
-            <div className="text-xs text-[#949ba4]">
-              Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt
-              köşedeki (saat yanı) simge durumuna küçülür.
-            </div>
-          </div>
-          <button
-            onClick={() => setCloseToTray(!closeToTray)}
-            className={`w-12 h-6 rounded-full relative transition-colors duration-200 ease-in-out border border-transparent shrink-0 ${
-              closeToTray ? "bg-[#23a559]" : "bg-[#80848e]"
-            }`}
-          >
-            <div
-              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-200 ${
-                closeToTray
-                  ? "translate-x-6.5 left-0.5"
-                  : "translate-x-0.5 left-0.5"
-              }`}
-            ></div>
-          </button>
-        </div>
+        <ToggleSwitch
+          label="Sistem Tepsisine Küçült"
+          description="Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt köşedeki (saat yanı) simge durumuna küçülür."
+          checked={closeToTray}
+          onChange={() => setCloseToTray(!closeToTray)}
+        />
       </div>
     </div>
   );
 }
 
-// --- HESAP AYARLARI ---
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
@@ -224,21 +225,18 @@ function AccountSettings({ onClose }) {
   const [gradStart, setGradStart] = useState("#6366f1");
   const [gradEnd, setGradEnd] = useState("#a855f7");
   const [gradAngle, setGradAngle] = useState(135);
-
   useEffect(() => {
     if (colorMode === "gradient")
       setProfileColor(
         `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`
       );
   }, [gradStart, gradEnd, gradAngle, colorMode]);
-
   const handleLogout = async () => {
     if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
       await logout();
       onClose();
     }
   };
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
       <h3 className="text-xl font-bold text-white mb-6">Hesabım</h3>
@@ -473,7 +471,6 @@ function AccountSettings({ onClose }) {
   );
 }
 
-// --- SES VE GÖRÜNTÜ AYARLARI ---
 function VoiceSettings() {
   let room;
   try {
@@ -500,11 +497,9 @@ function VoiceSettings() {
     setLocalThreshold(settings.voiceThreshold);
   }, [settings.voiceThreshold]);
 
-  // Cihazları Listele
   useEffect(() => {
     const getDevices = async () => {
       try {
-        // İzin iste
         await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         const devs = await navigator.mediaDevices.enumerateDevices();
         setAudioInputs(devs.filter((d) => d.kind === "audioinput"));
@@ -517,7 +512,6 @@ function VoiceSettings() {
     getDevices();
   }, []);
 
-  // Ses Metresi
   useEffect(() => {
     let audioContext, analyser, stream;
     const initAudio = async () => {
@@ -559,7 +553,6 @@ function VoiceSettings() {
     };
   }, [settings.audioInputId]);
 
-  // Kamera Önizleme
   useEffect(() => {
     let stream;
     const initVideo = async () => {
@@ -582,9 +575,7 @@ function VoiceSettings() {
         console.error("Kamera önizleme hatası:", e);
       }
     };
-
     initVideo();
-
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
     };
@@ -593,15 +584,11 @@ function VoiceSettings() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Ses ve Görüntü</h3>
-
-      {/* KAMERA AYARLARI */}
       <div className="mb-6">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2">
           <Camera size={14} /> Video Ayarları
         </h4>
-
         <div className="bg-[#2b2d31] p-4 rounded-lg border border-[#1f2023]">
-          {/* Kamera Seçimi */}
           <div className="mb-4">
             <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
               Kamera
@@ -631,8 +618,6 @@ function VoiceSettings() {
               </div>
             </div>
           </div>
-
-          {/* Önizleme Penceresi */}
           <div className="relative w-full aspect-video bg-[#111214] rounded-lg overflow-hidden border border-[#1e1f22] flex items-center justify-center">
             {videoInputs.length > 0 ? (
               <video
@@ -648,7 +633,6 @@ function VoiceSettings() {
                 <span className="text-sm font-bold">Kamera Yok</span>
               </div>
             )}
-
             {videoInputs.length > 0 && (
               <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
                 ÖNİZLEME
@@ -657,10 +641,7 @@ function VoiceSettings() {
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
-      {/* SES AYARLARI */}
       <div className="space-y-6">
         <div>
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
@@ -677,7 +658,6 @@ function VoiceSettings() {
               className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
             >
               <option value="default">Varsayılan</option>
-              {/* DÜZELTİLDİ: inputs -> audioInputs */}
               {audioInputs.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Mikrofon ${d.deviceId.slice(0, 5)}`}
@@ -689,7 +669,6 @@ function VoiceSettings() {
             </div>
           </div>
         </div>
-
         <div>
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
             Çıkış Cihazı (Hoparlör)
@@ -705,7 +684,6 @@ function VoiceSettings() {
               className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
             >
               <option value="default">Varsayılan</option>
-              {/* DÜZELTİLDİ: outputs -> audioOutputs */}
               {audioOutputs.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Hoparlör ${d.deviceId.slice(0, 5)}`}
@@ -718,9 +696,7 @@ function VoiceSettings() {
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <label className="text-xs font-bold text-[#b5bac1] uppercase flex items-center gap-2">
@@ -765,9 +741,7 @@ function VoiceSettings() {
           Giriş, çıkış, mute ve diğer bildirim seslerinin yüksekliği.
         </p>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="mb-6">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Giriş Hassasiyeti (Noise Gate)
@@ -817,16 +791,14 @@ function VoiceSettings() {
           </div>
         </div>
       </div>
-
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
-
       <div className="space-y-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Gelişmiş Ses İşleme
         </h4>
         <ToggleSwitch
           label="Yankı Engelleme"
-          description="Sesinin yankılanmasını önler. Kulaklık kullanmıyorsan kesinlikle aç."
+          description="Sesinin yankılanmasını önler."
           checked={settings.echoCancellation}
           onChange={settings.toggleEchoCancellation}
         />
@@ -849,45 +821,11 @@ function VoiceSettings() {
   );
 }
 
-function ToggleSwitch({ label, description, checked, onChange }) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <div className="pr-4">
-        <div className="font-medium text-[#dbdee1] mb-0.5">{label}</div>
-        <div className="text-xs text-[#949ba4]">{description}</div>
-      </div>
-      <button
-        onClick={onChange}
-        className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${
-          checked ? "bg-[#23a559]" : "bg-[#80848e]"
-        }`}
-      >
-        <div
-          className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-200 ${
-            checked ? "left-5" : "left-1"
-          }`}
-        >
-          {checked ? (
-            <Check
-              size={10}
-              className="text-[#23a559] absolute top-0.5 left-0.5"
-            />
-          ) : (
-            <X size={10} className="text-[#80848e] absolute top-0.5 left-0.5" />
-          )}
-        </div>
-      </button>
-    </div>
-  );
-}
-
-// --- TUŞ ATAMALARI ---
 function KeybindSettings() {
   const [recording, setRecording] = useState(null);
   const [muteKeybinding, setMuteKeybinding] = useState(null);
   const [deafenKeybinding, setDeafenKeybinding] = useState(null);
   const [error, setError] = useState(null);
-
   useEffect(() => {
     if (window.netrex) {
       window.netrex.getHotkey("mute").then((k) => setMuteKeybinding(k || null));
@@ -896,7 +834,6 @@ function KeybindSettings() {
         .then((k) => setDeafenKeybinding(k || null));
     }
   }, []);
-
   useEffect(() => {
     if (!recording || !window.netrex) return;
     window.netrex.setRecordingMode(true);
@@ -937,7 +874,6 @@ function KeybindSettings() {
       window.netrex.removeListener("raw-keydown");
     };
   }, [recording]);
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Tuş Atamaları</h3>
