@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import {
   LiveKitRoom,
+  RoomAudioRenderer,
   useParticipants,
   useParticipantInfo,
   useLocalParticipant,
   useRoomContext,
   useTracks,
   VideoTrack,
-  AudioTrack, // Sesleri manuel yönetmek için
+  AudioTrack,
 } from "@livekit/components-react";
 import { Track, RoomEvent, VideoPresets } from "livekit-client";
 import "@livekit/components-styles";
@@ -33,6 +34,8 @@ import {
   StopCircle,
   Tv,
   AlertTriangle,
+  Video, // EKLENDİ: Kamera Açık İkonu
+  VideoOff, // EKLENDİ: Kamera Kapalı İkonu
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
@@ -70,8 +73,8 @@ const styleInjection = `
   }
 `;
 
-// --- YENİ: MİKROFON YÖNETİCİSİ (RoomAudioRenderer yerine) ---
-// Sadece mikrofon seslerini çalar, ekran paylaşım seslerine karışmaz.
+// --- YARDIMCI BİLEŞENLER ---
+
 function MicrophoneManager() {
   const audioTracks = useTracks([Track.Source.Microphone]);
   const { userVolumes } = useSettingsStore();
@@ -89,7 +92,6 @@ function MicrophoneManager() {
   );
 }
 
-// --- GLOBAL CHAT & EVENTS ---
 function GlobalChatListener({ showChatPanel }) {
   const room = useRoomContext();
   const { incrementUnread, currentChannel } = useChatStore();
@@ -147,7 +149,6 @@ function RoomEventsHandler() {
 
 function DeafenManager({ isDeafened }) {
   useEffect(() => {
-    // Sadece Audio elementlerini etkiler
     const muteAllAudio = () => {
       document.querySelectorAll("audio").forEach((el) => {
         el.muted = isDeafened;
@@ -220,12 +221,15 @@ export default function ActiveRoom({
   const [token, setToken] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
+
+  // YENİ: Kamera Durumu (Varsayılan FALSE - Yani kapalı)
+  const [isCameraOn, setIsCameraOn] = useState(false);
+
   const [showVoicePanel, setShowVoicePanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [chatPosition, setChatPosition] = useState("right");
   const [contextMenu, setContextMenu] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
-
   const [activeStreamId, setActiveStreamId] = useState(null);
 
   const { noiseSuppression, echoCancellation, autoGainControl } =
@@ -288,7 +292,7 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
-      video={true}
+      video={isCameraOn} // ARTIK STATE'E BAĞLI (Varsayılan: False)
       audio={true}
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
@@ -308,8 +312,6 @@ export default function ActiveRoom({
       <GlobalChatListener showChatPanel={showChatPanel} />
       <VoiceProcessorHandler />
       <RoomEventsHandler />
-
-      {/* BURADA ARTIK RoomAudioRenderer YOK. Mikrofonlar için bunu kullanıyoruz: */}
       <MicrophoneManager />
 
       {isReconnecting && (
@@ -326,6 +328,7 @@ export default function ActiveRoom({
       )}
 
       <style>{styleInjection}</style>
+      <RoomAudioRenderer />
       <DeafenManager isDeafened={isDeafened} />
       <SettingsModal
         isOpen={showSettings}
@@ -420,6 +423,8 @@ export default function ActiveRoom({
         setIsDeafened={setIsDeafened}
         playSound={playSound}
         setActiveStreamId={setActiveStreamId}
+        isCameraOn={isCameraOn} // State'i gönder
+        setIsCameraOn={setIsCameraOn} // Setter'ı gönder
       />
 
       {contextMenu && (
@@ -453,7 +458,6 @@ function StageManager({
     ? screenTracks.find((t) => t.participant.identity === activeStreamId)
     : null;
 
-  // Tüm ekran paylaşımlarını kontrol et, eğer ben de paylaşıyorsam localSharing = true
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
 
@@ -534,7 +538,7 @@ function StageManager({
                 onStopWatching={() => setActiveStreamId(null)}
                 onUserContextMenu={onUserContextMenu}
                 isLocalSharing={isLocalSharing}
-                amISharing={amISharing} // Ben yayın yapıyor muyum bilgisini yolla (Anti-loop için)
+                amISharing={amISharing}
                 onHideLocal={() => setLocalPreviewHidden(true)}
               />
             )
@@ -601,18 +605,15 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   return (
     <div className="flex flex-col h-full w-full bg-[#313338] items-center justify-center p-8 text-center relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/10 via-[#313338] to-[#313338]"></div>
-
       <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-300">
         <div className="w-24 h-24 bg-[#2b2d31] rounded-full flex items-center justify-center mb-6 shadow-xl border border-[#3f4147]">
           <EyeOff size={40} className="text-[#949ba4]" />
         </div>
-
         <h2 className="text-xl font-bold text-white mb-2">Önizleme Gizlendi</h2>
         <p className="text-gray-400 text-sm max-w-sm mb-8">
           Yayının devam ediyor. Performansı artırmak ve ayna etkisini önlemek
           için önizlemeyi kapattın.
         </p>
-
         <div className="flex gap-4">
           <button
             onClick={onShow}
@@ -645,6 +646,7 @@ function ScreenShareStage({
   const [prevVolume, setPrevVolume] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
+  const audioRef = useRef(null);
 
   const participants = useParticipants();
   const viewerCount = Math.max(0, participants.length - 1);
@@ -655,11 +657,28 @@ function ScreenShareStage({
     (t) => t.participant.sid === participant?.sid
   );
 
-  // ANTI-LOOP MANTIĞI: Eğer ben de yayın yapıyorsam ve başkasını izliyorsam, sesi zorla kapat.
   const isAudioDisabled = amISharing && !isLocalSharing;
 
+  useEffect(() => {
+    if (audioTrackRef?.publication?.track && audioRef.current) {
+      audioTrackRef.publication.track.attach(audioRef.current);
+    }
+    return () => {
+      if (audioTrackRef?.publication?.track && audioRef.current) {
+        audioTrackRef.publication.track.detach(audioRef.current);
+      }
+    };
+  }, [audioTrackRef]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+      audioRef.current.muted = volume === 0;
+    }
+  }, [volume]);
+
   const toggleMuteStream = () => {
-    if (isAudioDisabled) return; // Yayın yaparken açamazsın
+    if (isAudioDisabled) return;
     if (volume > 0) {
       setPrevVolume(volume);
       setVolume(0);
@@ -689,15 +708,8 @@ function ScreenShareStage({
           className="max-w-full max-h-full object-contain shadow-2xl"
         />
 
-        {/* SES YÖNETİMİ - LiveKit'in AudioTrack'ini kullanıyoruz, volume prop'u %100 çalışır */}
-        {!isLocalSharing && audioTrackRef && (
-          <AudioTrack
-            trackRef={audioTrackRef}
-            volume={isAudioDisabled ? 0 : volume / 100}
-          />
-        )}
+        {!isLocalSharing && <audio ref={audioRef} autoPlay />}
 
-        {/* OVERLAY */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-3">
@@ -710,7 +722,6 @@ function ScreenShareStage({
                   : `${participant?.identity} yayını`}
               </span>
             </div>
-
             <div className="flex gap-2">
               {isLocalSharing && (
                 <button
@@ -736,7 +747,6 @@ function ScreenShareStage({
               <Users size={16} />
               <span className="text-sm font-bold">{viewerCount} izliyor</span>
             </div>
-
             <div className="flex items-center gap-4 bg-black/60 p-2 rounded-lg backdrop-blur-md">
               {!isLocalSharing && (
                 <div className="flex items-center gap-2 group/vol">
@@ -779,11 +789,9 @@ function ScreenShareStage({
                   )}
                 </div>
               )}
-
               {!isLocalSharing && !isAudioDisabled && (
                 <div className="w-[1px] h-5 bg-white/20"></div>
               )}
-
               {!isLocalSharing ? (
                 <button
                   onClick={toggleFullscreen}
@@ -805,7 +813,6 @@ function ScreenShareStage({
           </div>
         </div>
       </div>
-
       {!isFullscreen && (
         <div className="h-32 bg-[#1e1f22] p-2 flex gap-2 overflow-x-auto custom-scrollbar border-t border-[#111214] shrink-0">
           <ParticipantList
@@ -864,6 +871,7 @@ function ParticipantList({ onUserContextMenu, compact }) {
   );
 }
 
+// --- USER CARD (YENİ: KAMERA GÖSTERİMİ) ---
 function UserCard({ participant, totalCount, onContextMenu, compact }) {
   const { identity, metadata } = useParticipantInfo({ participant });
   const audioActive = useAudioActivity(participant);
@@ -878,12 +886,16 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
   const userColor = remoteState.profileColor || "#6366f1";
   const isMuted = remoteState.isMuted;
   const isSpeaking = audioActive && !isMuted && !remoteState.isDeafened;
-
   const avatarSize = compact
     ? "w-10 h-10 text-base"
     : totalCount <= 2
     ? "w-28 h-28 text-4xl"
     : "w-16 h-16 text-xl";
+
+  // KAMERA TRACK KONTROLÜ
+  const videoTrack = useTracks([Track.Source.Camera]).find(
+    (t) => t.participant.sid === participant.sid
+  );
 
   return (
     <div
@@ -906,28 +918,43 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
           : "none",
       }}
     >
-      <div className="relative mb-2">
+      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center">
+        {videoTrack ? (
+          // KAMERA AÇIKSA VİDEO GÖSTER
+          <VideoTrack
+            trackRef={videoTrack}
+            className="w-full h-full object-cover absolute inset-0"
+          />
+        ) : (
+          // KAMERA KAPALIYSA AVATAR GÖSTER
+          <div
+            className={`${avatarSize} rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 relative transition-transform duration-200 group-hover:scale-105 ${
+              isSpeaking
+                ? "speaking-avatar ring-4 ring-offset-2 ring-offset-[#2b2d31]"
+                : isMuted || remoteState.isDeafened
+                ? "bg-gray-600 ring-4 ring-red-500/30 grayscale"
+                : ""
+            }`}
+            style={{
+              background:
+                isMuted || remoteState.isDeafened ? undefined : userColor,
+              "--tw-ring-color": isSpeaking
+                ? userColor.includes("gradient")
+                  ? "#fff"
+                  : userColor
+                : undefined,
+            }}
+          >
+            {identity?.charAt(0).toUpperCase()}
+          </div>
+        )}
+
+        {/* İkonlar (Mute, Deafen) - Video varsa sol alta, yoksa avatarın yanına */}
         <div
-          className={`${avatarSize} rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 relative transition-transform duration-200 group-hover:scale-105 ${
-            isSpeaking
-              ? "speaking-avatar ring-4 ring-offset-2 ring-offset-[#2b2d31]"
-              : isMuted || remoteState.isDeafened
-              ? "bg-gray-600 ring-4 ring-red-500/30 grayscale"
-              : ""
-          }`}
-          style={{
-            background:
-              isMuted || remoteState.isDeafened ? undefined : userColor,
-            "--tw-ring-color": isSpeaking
-              ? userColor.includes("gradient")
-                ? "#fff"
-                : userColor
-              : undefined,
-          }}
+          className={`absolute ${
+            videoTrack ? "bottom-2 right-2" : "-bottom-1 -right-1"
+          } z-20`}
         >
-          {identity?.charAt(0).toUpperCase()}
-        </div>
-        <div className="absolute -bottom-1 -right-1 z-20">
           {remoteState.isDeafened ? (
             <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div className="w-full h-full bg-red-500 rounded-full flex items-center justify-center">
@@ -940,7 +967,7 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
                 <MicOff size={10} className="text-white" />
               </div>
             </div>
-          ) : isSpeaking ? (
+          ) : isSpeaking && !videoTrack ? (
             <div className="w-5 h-5 bg-[#2b2d31] rounded-full flex items-center justify-center border-[2px] border-[#2b2d31]">
               <div
                 className="w-full h-full rounded-full flex items-center justify-center animate-pulse"
@@ -951,19 +978,24 @@ function UserCard({ participant, totalCount, onContextMenu, compact }) {
             </div>
           ) : null}
         </div>
-      </div>
 
-      <div className="flex flex-col items-center gap-0.5 z-10 max-w-[90%]">
-        <span
-          className={`font-bold text-white tracking-wide truncate w-full text-center drop-shadow-md ${
-            compact ? "text-xs" : "text-base"
+        {/* İsim - Video varsa gradient üzerine */}
+        <div
+          className={`absolute bottom-2 left-2 z-10 max-w-[80%] ${
+            videoTrack ? "bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm" : ""
           }`}
         >
-          {identity}
-        </span>
+          <span
+            className={`font-bold text-white tracking-wide truncate block ${
+              compact ? "text-xs" : "text-base"
+            }`}
+          >
+            {identity}
+          </span>
+        </div>
       </div>
 
-      {isSpeaking && (
+      {!videoTrack && isSpeaking && (
         <div
           className="absolute inset-0 pointer-events-none animate-pulse"
           style={{ background: userColor, opacity: 0.08 }}
@@ -982,12 +1014,13 @@ function BottomControls({
   setIsDeafened,
   playSound,
   setActiveStreamId,
+  isCameraOn,
+  setIsCameraOn,
 }) {
   const { localParticipant } = useLocalParticipant();
   const [isMuted, setMuted] = useState(false);
   const { profileColor } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
-
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
 
   const stateRef = useRef({
@@ -995,10 +1028,17 @@ function BottomControls({
     isDeafened,
     localParticipant,
     profileColor,
+    isCameraOn,
   });
   useEffect(() => {
-    stateRef.current = { isMuted, isDeafened, localParticipant, profileColor };
-  }, [isMuted, isDeafened, localParticipant, profileColor]);
+    stateRef.current = {
+      isMuted,
+      isDeafened,
+      localParticipant,
+      profileColor,
+      isCameraOn,
+    };
+  }, [isMuted, isDeafened, localParticipant, profileColor, isCameraOn]);
 
   useEffect(() => {
     let mounted = true;
@@ -1045,6 +1085,14 @@ function BottomControls({
       setMuted(false);
       if (localParticipant) localParticipant.setMicrophoneEnabled(true);
     }
+  };
+
+  // YENİ: KAMERA TOGGLE
+  const toggleCamera = async () => {
+    const { isCameraOn, localParticipant } = stateRef.current;
+    const newState = !isCameraOn;
+    setIsCameraOn(newState);
+    await localParticipant.setCameraEnabled(newState);
   };
 
   const startScreenShare = async ({ resolution, fps, sourceId, withAudio }) => {
@@ -1176,6 +1224,20 @@ function BottomControls({
             tooltip="Sağırlaştır"
             danger={isDeafened}
           />
+
+          {/* YENİ KAMERA BUTONU */}
+          <button
+            onClick={toggleCamera}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition relative group ${
+              isCameraOn
+                ? "bg-white text-black hover:bg-gray-200"
+                : "hover:bg-[#35373c] text-gray-200"
+            }`}
+            title={isCameraOn ? "Kamerayı Kapat" : "Kamerayı Aç"}
+          >
+            {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+          </button>
+
           <button
             onClick={
               isScreenSharing
@@ -1191,6 +1253,7 @@ function BottomControls({
           >
             {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
           </button>
+
           <div className="w-[1px] h-6 bg-[#3f4147] mx-1"></div>
           <button
             onClick={onLeave}

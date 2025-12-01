@@ -7,6 +7,8 @@ export const useSettingsStore = create(
       // Ses Cihazları
       audioInputId: "default",
       audioOutputId: "default",
+      // YENİ: Video Cihazı
+      videoId: "default",
 
       // Ses İşleme
       noiseSuppression: true,
@@ -22,12 +24,14 @@ export const useSettingsStore = create(
       // Kullanıcı sesleri
       userVolumes: {},
 
-      // --- YENİ AYAR: TRAY DAVRANIŞI ---
+      // Tray Davranışı
       closeToTray: true,
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
+      // YENİ: Video Action
+      setVideoInput: (deviceId) => set({ videoId: deviceId }),
 
       toggleNoiseSuppression: () =>
         set((state) => ({ noiseSuppression: !state.noiseSuppression })),
@@ -47,7 +51,6 @@ export const useSettingsStore = create(
           userVolumes: { ...state.userVolumes, [identity]: volume },
         })),
 
-      // --- YENİ ACTION: ELECTRON İLE SENKRONİZE KAYIT ---
       setCloseToTray: async (enabled) => {
         set({ closeToTray: enabled });
         if (window.netrex) {
@@ -55,7 +58,6 @@ export const useSettingsStore = create(
         }
       },
 
-      // Başlangıçta Electron'dan oku (Senkronizasyon için)
       syncWithElectron: async () => {
         if (window.netrex) {
           const val = await window.netrex.getSetting("closeToTray");
