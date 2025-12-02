@@ -284,15 +284,29 @@ function SettingsUpdater() {
               oldTrack.stop();
 
               // Yeni track'i publish et
-              await localParticipant.publishTrack(newTrack, {
-                source: Track.Source.Camera,
-                videoEncoding: {
-                  maxBitrate: 120000,
-                  maxFramerate: 18,
-                },
-                videoCodec: "vp8",
-                simulcast: false,
-              });
+              const newPublication = await localParticipant.publishTrack(
+                newTrack,
+                {
+                  source: Track.Source.Camera,
+                  videoEncoding: {
+                    maxBitrate: 120000,
+                    maxFramerate: 18,
+                  },
+                  videoCodec: "vp8",
+                  simulcast: false,
+                }
+              );
+
+              // Track'in enabled olduğundan ve muted olmadığından emin ol
+              if (newPublication.track) {
+                newPublication.track.enabled = true;
+                if (newPublication.track.mediaStreamTrack) {
+                  newPublication.track.mediaStreamTrack.enabled = true;
+                }
+              }
+              if (newPublication.isMuted) {
+                await newPublication.setMuted(false);
+              }
 
               // Stream'deki diğer track'leri durdur
               newStream.getTracks().forEach((track) => {
@@ -440,11 +454,15 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
 
     // Bağlantı event'leri
     const onRoomConnected = () => {
-      console.log("Room connected");
+      // Sadece development'ta log göster (spam'i önlemek için)
+      if (process.env.NODE_ENV === "development") {
+        console.log("Room connected");
+      }
       if (onConnected) onConnected();
     };
 
     const onRoomDisconnected = (reason) => {
+      // Her zaman log göster (önemli bir event)
       console.log("Room disconnected:", reason);
       if (onDisconnected) onDisconnected(reason);
     };
@@ -456,7 +474,7 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
 
     // Video track publish/unpublish event'lerini dinle (debug için)
     const onTrackPublished = (pub) => {
-      if (pub.source === Track.Source.Camera && pub.participant.isLocal) {
+      if (pub?.source === Track.Source.Camera && pub?.participant?.isLocal) {
         // Sadece development'ta log göster
         if (process.env.NODE_ENV === "development") {
           console.log("📹 Camera track published:", pub.trackSid);
@@ -465,7 +483,7 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
     };
 
     const onTrackUnpublished = (pub) => {
-      if (pub.source === Track.Source.Camera && pub.participant.isLocal) {
+      if (pub?.source === Track.Source.Camera && pub?.participant?.isLocal) {
         if (process.env.NODE_ENV === "development") {
           console.log("📹 Camera track unpublished");
         }
@@ -474,21 +492,42 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
 
     // Remote participant'ların track'i subscribe ettiğinde
     const onTrackSubscribed = (track, publication, participant) => {
-      if (publication.source === Track.Source.Camera && !participant.isLocal) {
+      if (publication?.source === Track.Source.Camera && participant) {
         if (process.env.NODE_ENV === "development") {
-          console.log("📹 Remote participant subscribed to camera");
+          if (participant.isLocal) {
+            console.log(
+              "📹 Local participant'ın camera track'i remote tarafından subscribe edildi:",
+              {
+                trackSid: publication.trackSid,
+                subscriber: "remote participant",
+              }
+            );
+          } else {
+            console.log(
+              "📹 Remote participant'ın camera track'i subscribe edildi:",
+              {
+                participant: participant.identity,
+                trackSid: publication.trackSid,
+              }
+            );
+          }
         }
       }
     };
 
     // Room state değişikliklerini izle (güvenli yöntem)
+    let lastState = room?.state;
     const checkConnectionState = () => {
       if (!room) return;
-      const state = room.state;
-      if (state === ConnectionState.Connected) {
-        onRoomConnected();
-      } else if (state === ConnectionState.Disconnected) {
-        onRoomDisconnected("Connection state changed");
+      const currentState = room.state;
+      // Sadece state gerçekten değiştiğinde işlem yap
+      if (currentState !== lastState) {
+        lastState = currentState;
+        if (currentState === ConnectionState.Connected) {
+          onRoomConnected();
+        } else if (currentState === ConnectionState.Disconnected) {
+          onRoomDisconnected("Connection state changed");
+        }
       }
     };
 
@@ -499,10 +538,14 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
     room.on(RoomEvent.Connected, onRoomConnected);
     room.on(RoomEvent.Disconnected, onRoomDisconnected);
     room.on(RoomEvent.Reconnecting, () => {
-      console.log("Room reconnecting...");
+      if (process.env.NODE_ENV === "development") {
+        console.log("Room reconnecting...");
+      }
     });
     room.on(RoomEvent.Reconnected, () => {
-      console.log("Room reconnected");
+      if (process.env.NODE_ENV === "development") {
+        console.log("Room reconnected");
+      }
       if (onConnected) onConnected();
     });
     room.on(RoomEvent.ConnectionStateChanged, checkConnectionState);
@@ -1237,6 +1280,7 @@ function StageManager({
 }) {
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef(null);
+  const userStoppedWatchingRef = useRef(false); // Kullanıcı manuel olarak izlemeyi durdurdu mu?
 
   // Resize handler - throttle ile optimize edilmiş
   const resizeTimeoutRef = useRef(null);
@@ -1303,14 +1347,30 @@ function StageManager({
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
 
+  // activeStreamId'yi yönet - sadece track değiştiğinde veya track kaybolduğunda güncelle
+  // Kullanıcı manuel olarak durdurduğunda (null yaptığında) tekrar seçme
   useEffect(() => {
-    if (screenTracks.length > 0 && !activeStreamId)
-      setActiveStreamId(screenTracks[0].participant.identity);
+    // Kullanıcı manuel olarak durdurduysa, tekrar otomatik seçme
+    if (userStoppedWatchingRef.current && !activeStreamId) {
+      // Kullanıcı durdurdu, track'ler değişmediyse hiçbir şey yapma
+      return;
+    }
+
+    // Track kaybolduysa (artık yoksa) null yap
     if (
       activeStreamId &&
       !screenTracks.find((t) => t.participant.identity === activeStreamId)
-    )
+    ) {
+      userStoppedWatchingRef.current = false; // Track kayboldu, reset
       setActiveStreamId(null);
+      return;
+    }
+
+    // Yeni track geldiyse ve aktif track yoksa, ilk track'i seç
+    if (screenTracks.length > 0 && !activeStreamId) {
+      userStoppedWatchingRef.current = false; // Otomatik seçim, reset
+      setActiveStreamId(screenTracks[0].participant.identity);
+    }
   }, [screenTracks, activeStreamId, setActiveStreamId]);
 
   const isLocalSharing = activeTrack?.participant.isLocal;
@@ -1403,42 +1463,29 @@ function StageManager({
             ) : (
               <ScreenShareStage
                 trackRef={activeTrack}
-                onStopWatching={() => setActiveStreamId(null)}
+                onStopWatching={() => {
+                  console.log(
+                    "🛑 onStopWatching çağrıldı, activeStreamId null yapılıyor"
+                  );
+                  userStoppedWatchingRef.current = true; // Kullanıcı manuel olarak durdurdu
+                  setActiveStreamId(null);
+                }}
                 onUserContextMenu={onUserContextMenu}
                 isLocalSharing={isLocalSharing}
                 amISharing={amISharing}
                 onHideLocal={() => setLocalPreviewHidden(true)}
+                setActiveStreamId={setActiveStreamId}
+                activeStreamId={activeStreamId}
               />
             )
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 relative">
-              {screenTracks.length > 0 && (
-                <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
-                  <div className="bg-black/60 backdrop-blur-md p-2 rounded-lg border border-[#2b2d31]">
-                    <div className="text-[10px] uppercase font-bold text-[#949ba4] mb-1 px-1">
-                      Canlı Yayınlar
-                    </div>
-                    {screenTracks.map((t) => (
-                      <button
-                        key={t.participant.sid}
-                        onClick={() =>
-                          setActiveStreamId(t.participant.identity)
-                        }
-                        className="bg-[#5865f2] hover:bg-[#4752c4] text-white w-full px-4 py-2 rounded-md shadow-sm text-sm font-bold flex items-center gap-2 mb-1"
-                      >
-                        <Tv size={14} />{" "}
-                        {t.participant.isLocal
-                          ? "Yayınına Dön"
-                          : `${t.participant.identity} izle`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               <ParticipantList
                 onUserContextMenu={onUserContextMenu}
                 compact={false}
                 hideIncomingVideo={hideIncomingVideo}
+                setActiveStreamId={setActiveStreamId}
+                activeStreamId={activeStreamId}
               />
             </div>
           )}
@@ -1537,12 +1584,18 @@ function ScreenShareStage({
   isLocalSharing,
   onHideLocal,
   amISharing,
+  setActiveStreamId,
+  activeStreamId,
 }) {
   const [volume, setVolume] = useState(50);
   const [prevVolume, setPrevVolume] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [showCursor, setShowCursor] = useState(true);
   const containerRef = useRef(null);
   const audioRef = useRef(null);
+  const mouseMoveTimeoutRef = useRef(null);
+  const cursorTimeoutRef = useRef(null);
 
   const participants = useParticipants();
   const viewerCount = Math.max(0, participants.length - 1);
@@ -1610,11 +1663,63 @@ function ScreenShareStage({
     }
   };
 
+  // Mouse movement tracking - overlay ve cursor kontrolü
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseMove = () => {
+      // Overlay'i göster
+      setShowOverlay(true);
+      setShowCursor(true);
+
+      // Önceki timeout'ları temizle
+      if (mouseMoveTimeoutRef.current) {
+        clearTimeout(mouseMoveTimeoutRef.current);
+      }
+      if (cursorTimeoutRef.current) {
+        clearTimeout(cursorTimeoutRef.current);
+      }
+
+      // 1.5 saniye hareketsizlikten sonra overlay'i gizle
+      mouseMoveTimeoutRef.current = setTimeout(() => {
+        setShowOverlay(false);
+      }, 1500);
+
+      // 2 saniye hareketsizlikten sonra cursor'u gizle
+      cursorTimeoutRef.current = setTimeout(() => {
+        setShowCursor(false);
+      }, 2000);
+    };
+
+    const handleMouseEnter = () => {
+      setShowOverlay(true);
+      setShowCursor(true);
+    };
+
+    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mouseenter", handleMouseEnter);
+
+    return () => {
+      container.removeEventListener("mousemove", handleMouseMove);
+      container.removeEventListener("mouseenter", handleMouseEnter);
+      if (mouseMoveTimeoutRef.current) {
+        clearTimeout(mouseMoveTimeoutRef.current);
+      }
+      if (cursorTimeoutRef.current) {
+        clearTimeout(cursorTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0f0f0f] relative overflow-hidden">
       <div
         ref={containerRef}
-        className="flex-1 relative flex items-center justify-center group overflow-hidden"
+        className={`flex-1 relative flex items-center justify-center overflow-hidden ${
+          !showCursor ? "cursor-none" : ""
+        }`}
+        style={{ cursor: showCursor ? "default" : "none" }}
       >
         <VideoTrack
           trackRef={trackRef}
@@ -1622,156 +1727,190 @@ function ScreenShareStage({
         />
         {!isLocalSharing && <audio ref={audioRef} autoPlay />}
 
-        {/* Modern Glassmorphism Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/60 opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-between p-6 pointer-events-none group-hover:pointer-events-auto">
-          {/* Top Bar */}
-          <div className="flex justify-between items-start animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-3 glass-strong px-4 py-2.5 rounded-2xl border border-white/10 shadow-soft-lg">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 rounded-lg blur-sm opacity-75"></div>
-                <div className="relative bg-gradient-to-r from-red-500 to-red-600 px-3 py-1 rounded-lg text-xs font-extrabold text-white shadow-glow uppercase tracking-wider">
-                  Canlı
-                </div>
+        {/* Modern Glassmorphism Overlay - Mouse movement ile kontrol ediliyor */}
+        {/* Overlay arka planı - görünür değilken pointer-events-none */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/60 transition-all duration-500 ${
+            showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        ></div>
+
+        {/* Top Bar - Her zaman görünür ve tıklanabilir */}
+        <div className="absolute top-0 left-0 right-0 flex justify-between items-start p-6 z-50 pointer-events-none">
+          <div
+            className={`flex items-center gap-3 glass-strong px-4 py-2.5 rounded-2xl border border-white/10 shadow-soft-lg transition-all duration-500 pointer-events-auto ${
+              showOverlay ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 rounded-lg blur-sm opacity-75"></div>
+              <div className="relative bg-gradient-to-r from-red-500 to-red-600 px-3 py-1 rounded-lg text-xs font-extrabold text-white shadow-glow uppercase tracking-wider">
+                Canlı
               </div>
-              <span className="text-white font-bold drop-shadow-lg text-base tracking-tight">
-                {isLocalSharing
-                  ? "Senin Yayının"
-                  : `${participant?.identity} yayını`}
-              </span>
             </div>
-            <div className="flex gap-2">
-              {isLocalSharing && (
-                <button
-                  onClick={onHideLocal}
-                  className="glass-strong hover:glass border border-white/10 hover:border-white/20 text-gray-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow group/btn"
-                  title="Önizlemeyi Gizle"
-                >
-                  <EyeOff
-                    size={20}
-                    className="group-hover/btn:scale-110 transition-transform"
-                  />
-                </button>
-              )}
+            <span className="text-white font-bold drop-shadow-lg text-base tracking-tight">
+              {isLocalSharing
+                ? "Senin Yayının"
+                : `${participant?.identity} yayını`}
+            </span>
+          </div>
+          <div className="flex gap-2 pointer-events-auto">
+            {isLocalSharing && (
               <button
-                onClick={onStopWatching}
-                className="glass-strong hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-gray-300 hover:text-red-400 p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow-red group/btn"
-                title="İzlemeyi Durdur"
+                onClick={onHideLocal}
+                className={`glass-strong hover:glass border border-white/10 hover:border-white/20 text-gray-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow group/btn ${
+                  showOverlay ? "opacity-100" : "opacity-0"
+                }`}
+                title="Önizlemeyi Gizle"
               >
-                <Minimize
+                <EyeOff
                   size={20}
                   className="group-hover/btn:scale-110 transition-transform"
                 />
               </button>
-            </div>
+            )}
+            {/* İzlemeyi Durdur butonu - Her zaman görünür ve tıklanabilir */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                console.log("🛑 İzlemeyi Durdur butonuna tıklandı");
+                if (onStopWatching) {
+                  console.log("✅ onStopWatching fonksiyonu çağrılıyor");
+                  onStopWatching();
+                } else {
+                  console.error("❌ onStopWatching fonksiyonu tanımlı değil!");
+                }
+              }}
+              className="glass-strong hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-gray-300 hover:text-red-400 p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow-red group/btn z-[100]"
+              title="İzlemeyi Durdur"
+            >
+              <Minimize
+                size={20}
+                className="group-hover/btn:scale-110 transition-transform"
+              />
+            </button>
           </div>
+        </div>
 
-          {/* Bottom Controls - Profesyonel Tasarım */}
-          <div className="flex justify-between items-end animate-in fade-in slide-in-from-bottom-2 duration-300 gap-4">
-            {/* İzleyici Sayısı - Modern Badge */}
-            <div className="flex items-center gap-2.5 glass-strong px-5 py-3 rounded-2xl border border-white/10 shadow-soft-lg backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/90 to-[#1e1f22]/90 hover:border-indigo-500/30 transition-all duration-300 group/viewers">
-              <div className="relative">
-                <Users
-                  size={20}
-                  className="text-indigo-400 group-hover/viewers:text-indigo-300 transition-colors"
-                />
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#1e1f22] animate-pulse"></div>
+        {/* Overlay içeriği - Bottom controls */}
+        <div
+          className={`absolute inset-0 flex flex-col justify-end p-6 transition-all duration-500 pointer-events-none ${
+            showOverlay ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <div className="pointer-events-auto">
+            {/* Bottom Controls - Profesyonel Tasarım */}
+            <div className="flex justify-between items-end animate-in fade-in slide-in-from-bottom-2 duration-300 gap-4">
+              {/* İzleyici Sayısı - Modern Badge */}
+              <div className="flex items-center gap-2.5 glass-strong px-5 py-3 rounded-2xl border border-white/10 shadow-soft-lg backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/90 to-[#1e1f22]/90 hover:border-indigo-500/30 transition-all duration-300 group/viewers">
+                <div className="relative">
+                  <Users
+                    size={20}
+                    className="text-indigo-400 group-hover/viewers:text-indigo-300 transition-colors"
+                  />
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#1e1f22] animate-pulse"></div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-[#949ba4] font-medium leading-tight">
+                    Canlı İzleyici
+                  </span>
+                  <span className="text-base font-bold text-white leading-tight">
+                    {viewerCount}
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-[#949ba4] font-medium leading-tight">
-                  Canlı İzleyici
-                </span>
-                <span className="text-base font-bold text-white leading-tight">
-                  {viewerCount}
-                </span>
-              </div>
-            </div>
 
-            {/* Kontrol Butonları - Premium Tasarım */}
-            <div className="">
-              {!isLocalSharing && (
-                <div className="flex items-center gap-3 group/vol">
-                  {isAudioDisabled ? (
-                    <div
-                      className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20"
-                      title="Ses döngüsünü önlemek için ses kapatıldı."
-                    >
-                      <AlertTriangle size={18} />
-                      <span className="hidden group-hover/vol:inline whitespace-nowrap">
-                        Ses Kapalı
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={toggleMuteStream}
-                        className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 group/btn ${
-                          volume === 0
-                            ? "text-red-400 hover:text-red-300 hover:bg-red-500/20 hover:border-red-500/30"
-                            : "text-white hover:text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30"
-                        } border border-white/10 hover:border-current hover:shadow-glow backdrop-blur-sm`}
-                        title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
+              {/* Kontrol Butonları - Premium Tasarım */}
+              <div className="flex items-center gap-3">
+                {/* Ses Kısma Butonu - Yayın yapıldığında da görünür, tam ekran butonunun solunda */}
+                {!isLocalSharing && (
+                  <div className="flex items-center gap-3 group/vol">
+                    {isAudioDisabled ? (
+                      <div
+                        className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20"
+                        title="Ses döngüsünü önlemek için ses kapatıldı."
                       >
-                        {volume === 0 ? (
-                          <VolumeX
-                            size={20}
-                            className="group-hover/btn:scale-110 transition-transform"
-                          />
-                        ) : volume < 50 ? (
-                          <Volume1
-                            size={20}
-                            className="group-hover/btn:scale-110 transition-transform"
-                          />
-                        ) : (
-                          <Volume2
-                            size={20}
-                            className="group-hover/btn:scale-110 transition-transform"
-                          />
-                        )}
-                      </button>
-                      <div className="w-0 group-hover/vol:w-36 overflow-hidden transition-all duration-300 flex items-center">
-                        <div className="relative w-32 h-7 flex items-center">
-                          {/* Progress Bar Background */}
-                          <div className="absolute w-full h-2 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm">
-                            {/* Progress Fill */}
+                        <AlertTriangle size={18} />
+                        <span className="hidden group-hover/vol:inline whitespace-nowrap">
+                          Ses Kapalı
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={toggleMuteStream}
+                          className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 group/btn ${
+                            volume === 0
+                              ? "text-red-400 hover:text-red-300 hover:bg-red-500/20 hover:border-red-500/30"
+                              : "text-white hover:text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30"
+                          } border border-white/10 hover:border-current hover:shadow-glow backdrop-blur-sm`}
+                          title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
+                        >
+                          {volume === 0 ? (
+                            <VolumeX
+                              size={20}
+                              className="group-hover/btn:scale-110 transition-transform"
+                            />
+                          ) : volume < 50 ? (
+                            <Volume1
+                              size={20}
+                              className="group-hover/btn:scale-110 transition-transform"
+                            />
+                          ) : (
+                            <Volume2
+                              size={20}
+                              className="group-hover/btn:scale-110 transition-transform"
+                            />
+                          )}
+                        </button>
+                        <div className="w-0 group-hover/vol:w-36 overflow-hidden transition-all duration-300 flex items-center">
+                          <div className="relative w-32 h-7 flex items-center">
+                            {/* Progress Bar Background */}
+                            <div className="absolute w-full h-2 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm">
+                              {/* Progress Fill */}
+                              <div
+                                className="h-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-indigo-500 rounded-full transition-all duration-150 shadow-glow"
+                                style={{ width: `${volume}%` }}
+                              ></div>
+                            </div>
+
+                            {/* Slider Input */}
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={volume}
+                              onChange={(e) =>
+                                setVolume(Number(e.target.value))
+                              }
+                              className="absolute w-full h-full opacity-0 cursor-pointer z-10 m-0 p-0"
+                              style={{
+                                WebkitAppearance: "none",
+                                appearance: "none",
+                              }}
+                            />
+
+                            {/* Visual Thumb */}
                             <div
-                              className="h-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-indigo-500 rounded-full transition-all duration-150 shadow-glow"
-                              style={{ width: `${volume}%` }}
+                              className="absolute h-5 w-5 bg-white rounded-full shadow-lg border-2 border-indigo-400 pointer-events-none z-20 transition-all duration-150 hover:scale-125"
+                              style={{
+                                left: `${volume}%`,
+                                transform: "translateX(-50%)",
+                                boxShadow: "0 2px 12px rgba(99, 102, 241, 0.6)",
+                              }}
                             ></div>
                           </div>
-
-                          {/* Slider Input */}
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={volume}
-                            onChange={(e) => setVolume(Number(e.target.value))}
-                            className="absolute w-full h-full opacity-0 cursor-pointer z-10 m-0 p-0"
-                            style={{
-                              WebkitAppearance: "none",
-                              appearance: "none",
-                            }}
-                          />
-
-                          {/* Visual Thumb */}
-                          <div
-                            className="absolute h-5 w-5 bg-white rounded-full shadow-lg border-2 border-indigo-400 pointer-events-none z-20 transition-all duration-150 hover:scale-125"
-                            style={{
-                              left: `${volume}%`,
-                              transform: "translateX(-50%)",
-                              boxShadow: "0 2px 12px rgba(99, 102, 241, 0.6)",
-                            }}
-                          ></div>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              {!isLocalSharing && !isAudioDisabled && (
-                <div className="w-[1px] h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
-              )}
-              {!isLocalSharing ? (
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Ayırıcı - Sadece ses kısma butonu görünürken */}
+                {!isLocalSharing && !isAudioDisabled && (
+                  <div className="w-[1px] h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+                )}
+                {/* Tam Ekran Butonu - Her zaman görünür (yayın yapıldığında da) */}
                 <button
                   onClick={toggleFullscreen}
                   className="p-2.5 rounded-xl border border-white/10 text-white hover:text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30 transition-all duration-200 hover:scale-110 hover:shadow-glow backdrop-blur-sm group/fs"
@@ -1789,7 +1928,7 @@ function ScreenShareStage({
                     />
                   )}
                 </button>
-              ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -1799,6 +1938,8 @@ function ScreenShareStage({
           <ParticipantList
             onUserContextMenu={onUserContextMenu}
             compact={true}
+            setActiveStreamId={setActiveStreamId}
+            activeStreamId={activeStreamId}
           />
         </div>
       )}
@@ -1807,7 +1948,13 @@ function ScreenShareStage({
 }
 
 // --- KATILIMCI LİSTESİ ---
-function ParticipantList({ onUserContextMenu, compact, hideIncomingVideo }) {
+function ParticipantList({
+  onUserContextMenu,
+  compact,
+  hideIncomingVideo,
+  setActiveStreamId,
+  activeStreamId,
+}) {
   const participants = useParticipants();
   const count = participants.length;
   if (count === 0) return null;
@@ -1822,6 +1969,8 @@ function ParticipantList({ onUserContextMenu, compact, hideIncomingVideo }) {
               onContextMenu={(e) => onUserContextMenu(e, p)}
               compact={true}
               hideIncomingVideo={hideIncomingVideo}
+              setActiveStreamId={setActiveStreamId}
+              activeStreamId={activeStreamId}
             />
           </div>
         ))}
@@ -1848,6 +1997,8 @@ function ParticipantList({ onUserContextMenu, compact, hideIncomingVideo }) {
             totalCount={count}
             onContextMenu={(e) => onUserContextMenu(e, p)}
             hideIncomingVideo={hideIncomingVideo}
+            setActiveStreamId={setActiveStreamId}
+            activeStreamId={activeStreamId}
           />
         </div>
       ))}
@@ -1861,9 +2012,19 @@ function UserCard({
   onContextMenu,
   compact,
   hideIncomingVideo,
+  setActiveStreamId,
+  activeStreamId,
 }) {
   const { identity, metadata } = useParticipantInfo({ participant });
   const audioActive = useAudioActivity(participant);
+
+  // Screen share track kontrolü
+  const screenShareTracks = useTracks([Track.Source.ScreenShare]);
+  const screenShareTrack = screenShareTracks.find(
+    (t) => t.participant.sid === participant.sid
+  );
+  const hasScreenShare = !!screenShareTrack;
+  const isCurrentlyWatching = activeStreamId === participant.identity;
   const { profileColor: localProfileColor, cameraMirrorEffect } =
     useSettingsStore(); // Local kullanıcı için ayarlardan renk al
   const remoteState = useMemo(() => {
@@ -1917,15 +2078,48 @@ function UserCard({
     ? "border-[3px]"
     : "border-[2px]";
 
+  // useTracks hook'u sadece subscribe edilmiş track'leri döndürür
+  // Remote participant tarafında track henüz subscribe edilmemişse bulunamaz
+  // Bu yüzden direkt olarak participant'ın publication'ını kontrol ediyoruz
   const videoTrack = useTracks([Track.Source.Camera]).find(
     (t) => t.participant.sid === participant.sid
   );
-  // DÜZELTME: videoTrack var mı? Muted değil mi? Gelen videoyu gizle ayarı kapalı mı?
+
+  // Participant'ın publication'ını direkt kontrol et (useTracks'ten bağımsız)
+  const cameraPublication = participant.getTrackPublication(
+    Track.Source.Camera
+  );
+
+  // Debug: Track durumunu kontrol et
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development" && cameraPublication) {
+      console.log(
+        `📹 ${
+          participant.isLocal ? "Local" : "Remote"
+        } participant camera track durumu:`,
+        {
+          participant: participant.identity,
+          trackSid: cameraPublication.trackSid,
+          isMuted: cameraPublication.isMuted,
+          hasTrack: !!cameraPublication.track,
+          useTracksFound: !!videoTrack,
+          isSubscribed: videoTrack?.isSubscribed,
+        }
+      );
+    }
+  }, [cameraPublication, participant, videoTrack]);
+
+  // Track görünürlük kontrolü
+  // Local participant için: publication varsa ve muted değilse göster
+  // Remote participant için: publication varsa, muted değilse ve (useTracks track'i buldu VEYA publication'da track var) göster
   const shouldShowVideo =
-    videoTrack &&
-    !videoTrack.publication.isMuted &&
+    cameraPublication &&
+    !cameraPublication.isMuted &&
     !hideIncomingVideo &&
-    (participant.isLocal || videoTrack.isSubscribed);
+    cameraPublication.trackSid && // Track publish edilmiş olmalı
+    (participant.isLocal
+      ? true // Local participant için trackSid varsa göster
+      : videoTrack?.isSubscribed || !!cameraPublication.track); // Remote için subscribed VEYA publication'da track mevcut olmalı
 
   return (
     <div
@@ -1946,8 +2140,11 @@ function UserCard({
           : undefined,
       }}
     >
-      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center">
-        {shouldShowVideo ? (
+      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
+        {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
+        {shouldShowVideo &&
+        videoTrack &&
+        (!hasScreenShare || isCurrentlyWatching) ? (
           <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg">
             <VideoTrack
               trackRef={videoTrack}
@@ -1977,7 +2174,7 @@ function UserCard({
             {/* Alt kısımda hafif gradient overlay (isim için kontrast) */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent pointer-events-none" />
           </div>
-        ) : (
+        ) : !hasScreenShare || isCurrentlyWatching ? (
           <div
             className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold shadow-soft-lg z-10 relative transition-all duration-300 group-hover:scale-110 ${
               isSpeaking
@@ -2007,13 +2204,13 @@ function UserCard({
           >
             {identity?.charAt(0).toUpperCase()}
           </div>
-        )}
+        ) : null}
 
         {/* Mikrofon durumu badge'i - Sağ alt köşede */}
         {(isDeafened || isMuted || (isSpeaking && !shouldShowVideo)) && (
           <div
             className={`absolute ${
-              shouldShowVideo ? "bottom-3 right-3" : "bottom-2 right-2"
+              shouldShowVideo ? "bottom-0 right-2" : "bottom-0 right-2"
             } z-20 ${
               compact ? "w-5 h-5" : totalCount <= 2 ? "w-7 h-7" : "w-6 h-6"
             }`}
@@ -2052,20 +2249,85 @@ function UserCard({
 
         {/* İsim - Alt kısımda */}
         <div
-          className={`absolute bottom-3 left-3 z-10 max-w-[80%] ${
+          className={`absolute bottom-0 left-2 z-10 max-w-[80%] ${
             shouldShowVideo
               ? "glass-light px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/10 shadow-soft"
               : "glass-light px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/10 shadow-soft"
           }`}
         >
           <span
-            className={`font-bold text-white tracking-wide truncate block drop-shadow-lg ${
-              compact ? "text-xs" : "text-sm"
+            className={`font-medium text-white tracking-normal truncate block drop-shadow-lg ${
+              compact ? "text-[10px] leading-tight" : "text-sm"
             }`}
           >
             {identity}
           </span>
         </div>
+
+        {/* Screen Share Önizleme - Az blur'lu arka plan (sadece izlenmiyorsa) */}
+        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+          <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl">
+            <VideoTrack
+              trackRef={screenShareTrack}
+              className="w-full h-full object-cover"
+              style={{
+                filter: "blur(2px) brightness(0.7)",
+              }}
+            />
+            <div className="absolute inset-0 bg-black/30"></div>
+          </div>
+        )}
+
+        {/* Üstte çok küçük "yayın yapıyor" badge'i - Screen share varsa ve izleniyorsa */}
+        {hasScreenShare && screenShareTrack && isCurrentlyWatching && (
+          <div className="absolute top-2 left-2 z-30 glass-strong px-2 py-0.5 rounded-md backdrop-blur-md border border-white/20 shadow-soft">
+            <span className="font-medium text-white text-[10px] drop-shadow-lg flex items-center gap-1">
+              <div className="relative">
+                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
+                <div className="relative w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+              </div>
+              Yayında
+            </span>
+          </div>
+        )}
+
+        {/* Üstte "yayın yapıyor" badge'i - Screen share varsa ama izlenmiyorsa */}
+        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+          <div className="absolute top-3 left-3 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
+            <span className="font-medium text-white text-xs drop-shadow-lg flex items-center gap-1.5">
+              <div className="relative">
+                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
+                <div className="relative w-2 h-2 bg-red-500 rounded-full"></div>
+              </div>
+              Yayında
+            </span>
+          </div>
+        )}
+
+        {/* Ortada "Yayına Katıl" Butonu - Screen share varsa ama izlenmiyorsa göster */}
+        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (setActiveStreamId && participant.identity) {
+                setActiveStreamId(participant.identity);
+              }
+            }}
+            className="absolute inset-0 z-20 flex items-center justify-center group/join"
+          >
+            <div className="glass-strong hover:glass border-2 border-white/30 hover:border-white/50 bg-gradient-to-r from-indigo-500/90 to-purple-500/90 hover:from-indigo-500 hover:to-purple-500 px-8 py-4 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-105 hover:shadow-glow flex items-center gap-3 font-bold text-white text-base shadow-soft-lg">
+              <div className="relative">
+                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
+                <div className="relative w-3 h-3 bg-red-500 rounded-full"></div>
+              </div>
+              <span className="drop-shadow-lg">Yayına Katıl</span>
+              <Tv
+                size={20}
+                className="group-hover/join:scale-110 transition-transform"
+              />
+            </div>
+          </button>
+        )}
       </div>
       {!shouldShowVideo && isSpeaking && (
         <div
@@ -2123,6 +2385,48 @@ function BottomControls({
   const metadataUpdateRef = useRef(null);
   const lastMetadataRef = useRef("");
   const isUpdatingMetadataRef = useRef(false);
+  const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
+
+  // İlk metadata'yı gönder (localParticipant hazır olduğunda)
+  useEffect(() => {
+    if (!localParticipant || hasSentInitialMetadataRef.current) return;
+
+    // Room bağlantısını bekle (kısa bir gecikme)
+    const sendInitialMetadata = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500)); // Room bağlantısı için bekle
+
+      if (!localParticipant || hasSentInitialMetadataRef.current) return;
+
+      const initialMetadata = JSON.stringify({
+        isDeafened,
+        isMuted,
+        profileColor,
+        isCameraOn,
+      });
+
+      try {
+        await localParticipant.setMetadata(initialMetadata);
+        lastMetadataRef.current = initialMetadata;
+        hasSentInitialMetadataRef.current = true;
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "✅ İlk metadata gönderildi:",
+            JSON.parse(initialMetadata)
+          );
+        }
+      } catch (error) {
+        // İlk gönderimde hata olursa, normal update mekanizması devreye girecek
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "⏳ İlk metadata gönderilemedi, normal update mekanizması devreye girecek:",
+            error.message
+          );
+        }
+      }
+    };
+
+    sendInitialMetadata();
+  }, [localParticipant, isDeafened, isMuted, profileColor, isCameraOn]);
 
   useEffect(() => {
     if (!localParticipant) {
@@ -2194,7 +2498,10 @@ function BottomControls({
         } else {
           // Bağlantı hatası varsa, metadata'yı güncelleme (retry için)
           // lastMetadataRef.current'i güncelleme, böylece tekrar denenecek
-          console.log("⏳ Bağlantı hatası, metadata güncellemesi ertelendi:", errorMessage);
+          console.log(
+            "⏳ Bağlantı hatası, metadata güncellemesi ertelendi:",
+            errorMessage
+          );
         }
       } finally {
         isUpdatingMetadataRef.current = false;
@@ -2285,6 +2592,13 @@ function BottomControls({
       return;
     }
 
+    // Local participant'ı direkt hook'tan al (daha güvenli)
+    if (!localParticipant) {
+      console.error("❌ Local participant bulunamadı - kamera açılamadı");
+      toastOnce("Kamera açılamadı: Bağlantı hatası", "error");
+      return;
+    }
+
     // Toggle başladığını işaretle (event listener'ları devre dışı bırak)
     isTogglingCameraRef.current = true;
 
@@ -2292,15 +2606,6 @@ function BottomControls({
     const currentState = isCameraOn;
     const newState = !currentState;
     setIsCameraOn(newState);
-
-    // Local participant'ı ref'ten al (state güncellemesi asenkron olabilir)
-    const { localParticipant } = stateRef.current;
-    if (!localParticipant) {
-      console.error("Local participant bulunamadı");
-      setIsCameraOn(currentState); // Geri al
-      isTogglingCameraRef.current = false; // Toggle bitir
-      return;
-    }
 
     try {
       if (newState) {
@@ -2379,39 +2684,135 @@ function BottomControls({
         }
 
         // Video track'i LiveKit'e publish et - ÜCRETSİZ PLAN DENGELİ BANDWIDTH
-        const publication = await localParticipant.publishTrack(videoTrack, {
-          source: Track.Source.Camera,
-          videoEncoding: {
-            maxBitrate: 120000, // 120kbps max (daha net görüntü)
-            maxFramerate: 18, // Biraz daha akıcı
-            // Adaptive bitrate kapalı (sabit bitrate daha tasarruflu)
-          },
-          videoCodec: "vp8", // VP8 daha az bandwidth kullanır
-          simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
-          // Adaptive stream kapalı (sabit kalite)
-        });
+        let publication;
+        try {
+          publication = await localParticipant.publishTrack(videoTrack, {
+            source: Track.Source.Camera,
+            videoEncoding: {
+              maxBitrate: 120000, // 120kbps max (daha net görüntü)
+              maxFramerate: 18, // Biraz daha akıcı
+              // Adaptive bitrate kapalı (sabit bitrate daha tasarruflu)
+            },
+            videoCodec: "vp8", // VP8 daha az bandwidth kullanır
+            simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
+            // Adaptive stream kapalı (sabit kalite)
+          });
+        } catch (publishError) {
+          console.error("❌ Track publish hatası:", publishError);
+          videoTrack.stop();
+          throw new Error(
+            `Kamera yayınlanamadı: ${publishError.message || "Bilinmeyen hata"}`
+          );
+        }
 
         // KRİTİK KONTROLLER: Track'in doğru publish edildiğinden emin ol
         if (!publication) {
+          videoTrack.stop();
           throw new Error("Publication oluşturulamadı!");
         }
 
         // Track'in enabled olduğundan ve muted olmadığından emin ol
-        if (publication.track) {
-          publication.track.enabled = true;
-        } else if (process.env.NODE_ENV === "development") {
-          console.warn("⚠️ Publication'da track yok!");
+        if (!publication.track) {
+          console.error("❌ Publication'da track yok!");
+          videoTrack.stop();
+          throw new Error("Publication'da track bulunamadı!");
+        }
+
+        // Track'i enabled yap (hem LiveKit track hem de mediaStreamTrack)
+        publication.track.enabled = true;
+        if (publication.track.mediaStreamTrack) {
+          publication.track.mediaStreamTrack.enabled = true;
         }
 
         // Publication'ın muted olmadığından emin ol
         if (publication.isMuted) {
-          await publication.setMuted(false);
+          try {
+            await publication.setMuted(false);
+          } catch (muteError) {
+            console.warn("⚠️ setMuted(false) hatası:", muteError);
+          }
         }
 
-        // Publication durumunu kontrol et
+        // Publication durumunu kontrol et ve retry mekanizması
         const isPublished = publication.trackSid && !publication.isMuted;
-        if (!isPublished && process.env.NODE_ENV === "development") {
-          console.error("❌ Video track düzgün publish edilmedi!");
+        if (!isPublished) {
+          console.warn(
+            "⚠️ Video track düzgün publish edilmedi, tekrar deneniyor...",
+            {
+              trackSid: publication.trackSid,
+              isMuted: publication.isMuted,
+              enabled: publication.track?.enabled,
+            }
+          );
+
+          // Track'i durdur ve tekrar dene (max 2 retry)
+          videoTrack.stop();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Tekrar dene
+          try {
+            const retryStream = await navigator.mediaDevices.getUserMedia(
+              constraints
+            );
+            const retryVideoTrack = retryStream.getVideoTracks()[0];
+            if (retryVideoTrack) {
+              const retryPublication = await localParticipant.publishTrack(
+                retryVideoTrack,
+                {
+                  source: Track.Source.Camera,
+                  videoEncoding: {
+                    maxBitrate: 120000,
+                    maxFramerate: 18,
+                  },
+                  videoCodec: "vp8",
+                  simulcast: false,
+                }
+              );
+
+              if (
+                retryPublication &&
+                retryPublication.trackSid &&
+                !retryPublication.isMuted
+              ) {
+                retryPublication.track.enabled = true;
+                if (retryPublication.track.mediaStreamTrack) {
+                  retryPublication.track.mediaStreamTrack.enabled = true;
+                }
+                if (retryPublication.isMuted) {
+                  await retryPublication.setMuted(false);
+                }
+                publication = retryPublication;
+                retryStream.getAudioTracks().forEach((track) => track.stop());
+              } else {
+                throw new Error("Retry başarısız");
+              }
+            }
+          } catch (retryError) {
+            console.error("❌ Retry başarısız:", retryError);
+            throw new Error("Kamera yayınlanamadı: Tekrar deneme başarısız");
+          }
+        }
+
+        // Remote participant'ların track'i görebilmesi için bir kısa gecikme ekle
+        // (LiveKit'in track'i diğer participant'lara iletmesi için)
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        // Track kontrolü: LiveKit track'i internal olarak yönetir,
+        // track geçici olarak undefined olabilir ama trackSid varsa publish başarılıdır
+        if (publication.trackSid) {
+          // Track başarıyla publish edildi
+          if (publication.track) {
+            // Track mevcut, durumunu kontrol et
+            if (publication.track.mediaStreamTrack?.readyState === "ended") {
+              console.warn(
+                "⚠️ Track ended durumuna geçti, yeniden publish gerekebilir"
+              );
+            }
+          }
+          // Track undefined olsa bile trackSid varsa publish başarılıdır
+          // LiveKit track'i gerektiğinde yeniden oluşturabilir
+        } else {
+          console.error("❌ Track publish başarısız - trackSid yok!");
         }
 
         // State'i güncelle (track publish edildi) - ref'i de güncelle
@@ -2424,7 +2825,82 @@ function BottomControls({
             trackSid: publication.trackSid,
             isMuted: publication.isMuted,
             enabled: publication.track?.enabled,
+            hasTrack: !!publication.track,
+            hasMediaStreamTrack: !!publication.track?.mediaStreamTrack,
           });
+
+          // Local participant'ın publication durumunu kontrol et
+          setTimeout(() => {
+            try {
+              const localPub = localParticipant.getTrackPublication(
+                Track.Source.Camera
+              );
+              if (localPub) {
+                console.log("📹 Local camera track durumu (1 saniye sonra):", {
+                  trackSid: localPub.trackSid,
+                  isMuted: localPub.isMuted,
+                  hasTrack: !!localPub.track,
+                  enabled: localPub.track?.enabled,
+                });
+
+                // Remote participant'ları kontrol et (room varsa)
+                // Not: localParticipant.room bazen undefined olabilir, bu normal
+                const room = localParticipant.room;
+                if (room && room.remoteParticipants) {
+                  const remoteParticipants = Array.from(
+                    room.remoteParticipants.values()
+                  );
+                  console.log(
+                    "📊 Remote participant sayısı:",
+                    remoteParticipants.length
+                  );
+
+                  if (remoteParticipants.length === 0) {
+                    console.log(
+                      "ℹ️ Remote participant yok. Başka bir cihazdan odaya girdiğinizde track görünecektir."
+                    );
+                  } else {
+                    remoteParticipants.forEach((remoteParticipant) => {
+                      // Remote participant'ın local participant'ın track'ini görebilmesi için
+                      // local participant'ın publication'ını kontrol et
+                      const localPubForRemote =
+                        localParticipant.getTrackPublication(
+                          Track.Source.Camera
+                        );
+                      console.log(
+                        `📹 Remote participant "${remoteParticipant.identity}" için local track durumu:`,
+                        {
+                          localTrackSid: localPubForRemote?.trackSid,
+                          localTrackMuted: localPubForRemote?.isMuted,
+                          localHasTrack: !!localPubForRemote?.track,
+                        }
+                      );
+
+                      // Remote participant'ın kendi track'ini kontrol et (eğer varsa)
+                      const remotePub = remoteParticipant.getTrackPublication(
+                        Track.Source.Camera
+                      );
+                      if (remotePub) {
+                        console.log(
+                          `📹 Remote participant "${remoteParticipant.identity}" kendi camera track durumu:`,
+                          {
+                            trackSid: remotePub.trackSid,
+                            isMuted: remotePub.isMuted,
+                            hasTrack: !!remotePub.track,
+                          }
+                        );
+                      }
+                    });
+                  }
+                }
+                // Room undefined ise bu normal, çünkü room bağlantısı henüz tam kurulmamış olabilir
+              } else {
+                console.warn("⚠️ Local camera publication bulunamadı!");
+              }
+            } catch (error) {
+              console.error("❌ Track durumu kontrolü hatası:", error);
+            }
+          }, 1000);
         }
 
         // Stream'deki diğer track'leri durdur (sadece video kullanıyoruz)
@@ -2459,9 +2935,12 @@ function BottomControls({
         lastCameraStateRef.current = false;
       }
     } catch (error) {
-      console.error("Kamera hatası:", error);
-      setIsCameraOn(!newState); // Hata durumunda state'i geri al
-      toastOnce("Kamera açılamadı: " + error.message, "error");
+      console.error("❌ Kamera hatası:", error);
+      setIsCameraOn(currentState); // Hata durumunda state'i geri al
+      lastCameraStateRef.current = currentState;
+      const errorMessage =
+        error?.message || error?.toString() || "Bilinmeyen hata";
+      toastOnce(`Kamera açılamadı: ${errorMessage}`, "error");
     } finally {
       // Toggle bittiğini işaretle (event listener'ları tekrar aktif et)
       isTogglingCameraRef.current = false;

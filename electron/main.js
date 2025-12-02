@@ -423,13 +423,13 @@ ipcMain.handle("update-hotkey", (e, a, k) => {
       }
     }
     
-    setKeybinding(a, k);
+  setKeybinding(a, k);
     // Keybinding'in doğru kaydedildiğini kontrol et
     const saved = getKeybinding(a);
     if (!saved || JSON.stringify(saved) !== JSON.stringify(k)) {
       return { success: false, error: "Keybinding kaydedilemedi" };
     }
-    return { success: true };
+  return { success: true };
   } catch (error) {
     console.error("Keybinding kaydetme hatası:", error);
     return { success: false, error: error.message };

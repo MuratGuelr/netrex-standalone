@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld("netrex", {
 
   // Screen Share
   getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
-  
+
   // Screen Share with audio exclusion
   getDisplayMedia: async (options) => {
     // Electron'da getDisplayMedia'yı override et

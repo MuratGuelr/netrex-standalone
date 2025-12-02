@@ -2,7 +2,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata = {
-  title: "Netrex",
+  title: "Netrex Client",
   description: " Sınırsız sesli sohbet ve metin iletişimi için tasarlanmıştır.",
 };
 
