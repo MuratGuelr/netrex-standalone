@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -33,7 +34,7 @@ export const useAuthStore = create((set) => ({
       await signInWithCredential(auth, credential);
     } catch (error) {
       console.error("Google Token Login Error:", error);
-      alert("Giriş yapılamadı: " + error.message);
+      toast.error("Giriş yapılamadı: " + error.message);
     }
   },
 

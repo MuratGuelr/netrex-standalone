@@ -215,12 +215,19 @@ function handleInputEvent(event, type) {
     );
     return;
   }
+  
+  // Keybinding'leri her seferinde yeniden yükle (güncel olması için)
   const muteKey = getKeybinding("mute");
   const deafenKey = getKeybinding("deafen");
-  if (muteKey && matchesKeybinding(event, muteKey))
+  const cameraKey = getKeybinding("camera");
+  
+  if (muteKey && matchesKeybinding(event, muteKey)) {
     mainWindow?.webContents.send("hotkey-triggered", "toggle-mute");
-  else if (deafenKey && matchesKeybinding(event, deafenKey))
+  } else if (deafenKey && matchesKeybinding(event, deafenKey)) {
     mainWindow?.webContents.send("hotkey-triggered", "toggle-deafen");
+  } else if (cameraKey && matchesKeybinding(event, cameraKey)) {
+    mainWindow?.webContents.send("hotkey-triggered", "toggle-camera");
+  }
 }
 
 function setupUiohookListeners() {
@@ -274,16 +281,48 @@ function createWindow() {
 
   createTray();
 
-  if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
+  // Güncelleme kontrolü (periyodik)
+  checkForUpdatesPeriodically();
+}
+
+// --- AÇILIŞTA GÜNCELLEME KONTROLÜ ---
+function checkForUpdatesPeriodically() {
+  if (!app.isPackaged) return; // Sadece paketlenmiş uygulamada çalışır
+
+  const checkUpdatesOnStartup = store.get("settings.checkUpdatesOnStartup", true);
+  if (!checkUpdatesOnStartup) return; // Kullanıcı kapattıysa kontrol etme
+
+  // Her açılışta kontrol et
+  autoUpdater.checkForUpdates().catch((err) => {
+    log.error("Güncelleme kontrolü hatası:", err);
+  });
 }
 
 // --- UPDATE EVENTS ---
 autoUpdater.on("checking-for-update", () =>
   mainWindow?.webContents.send("update-status", "checking")
 );
-autoUpdater.on("update-available", () =>
-  mainWindow?.webContents.send("update-status", "available")
-);
+autoUpdater.on("update-available", (info) => {
+  log.info("Güncelleme mevcut:", info.version);
+  mainWindow?.webContents.send("update-status", "available", info);
+  
+  // Desktop bildirimi gönder
+  if (mainWindow) {
+    const { Notification } = require("electron");
+    if (Notification.isSupported()) {
+      new Notification({
+        title: "Netrex Güncellemesi Mevcut",
+        body: `Yeni sürüm ${info.version} indirilebilir.`,
+        icon: app.isPackaged
+          ? path.join(process.resourcesPath, "logo.ico")
+          : path.join(__dirname, "../public/logo.ico"),
+      }).show();
+    }
+  }
+  
+  // Güncellemeyi otomatik indirmeye başla
+  autoUpdater.downloadUpdate();
+});
 autoUpdater.on("update-not-available", () =>
   mainWindow?.webContents.send("update-status", "not-available")
 );
@@ -293,9 +332,33 @@ autoUpdater.on("error", (err) =>
 autoUpdater.on("download-progress", (p) =>
   mainWindow?.webContents.send("update-progress", p.percent)
 );
-autoUpdater.on("update-downloaded", () =>
-  mainWindow?.webContents.send("update-status", "downloaded")
-);
+autoUpdater.on("update-downloaded", (info) => {
+  log.info("Güncelleme indirildi:", info.version);
+  mainWindow?.webContents.send("update-status", "downloaded", info);
+  
+  // Desktop bildirimi gönder
+  if (mainWindow) {
+    const { Notification } = require("electron");
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: "Netrex Güncellemesi Hazır",
+        body: "Güncelleme indirildi. Uygulamayı yeniden başlatmak için bildirime tıklayın.",
+        icon: app.isPackaged
+          ? path.join(process.resourcesPath, "logo.ico")
+          : path.join(__dirname, "../public/logo.ico"),
+      });
+      
+      notification.on("click", () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+      
+      notification.show();
+    }
+  }
+});
 
 app.on("ready", async () => {
   if (process.platform === "darwin") {
@@ -342,9 +405,35 @@ ipcMain.handle("get-livekit-token", async (e, r, u) => {
   return await at.toJwt();
 });
 ipcMain.handle("update-hotkey", (e, a, k) => {
-  if (!k) return { success: false };
-  setKeybinding(a, k);
-  return { success: true };
+  try {
+    // null gönderilirse keybinding'i kaldır
+    if (k === null || k === undefined) {
+      const keyPath = `hotkeys.${a}`;
+      try {
+        // Keybinding'i sil
+        store.delete(keyPath);
+        // Silme işleminin başarılı olduğunu kontrol et (silinen key undefined döner)
+        const afterDelete = store.get(keyPath);
+        // Eğer hala bir değer varsa silme başarısız olmuş demektir
+        // Ama undefined dönerse başarılı demektir
+        return { success: true };
+      } catch (deleteError) {
+        console.error("Keybinding silme hatası:", deleteError);
+        return { success: false, error: "Keybinding silinemedi: " + deleteError.message };
+      }
+    }
+    
+    setKeybinding(a, k);
+    // Keybinding'in doğru kaydedildiğini kontrol et
+    const saved = getKeybinding(a);
+    if (!saved || JSON.stringify(saved) !== JSON.stringify(k)) {
+      return { success: false, error: "Keybinding kaydedilemedi" };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error("Keybinding kaydetme hatası:", error);
+    return { success: false, error: error.message };
+  }
 });
 ipcMain.handle("get-hotkey", (e, a) => getKeybinding(a));
 ipcMain.handle("set-recording-mode", (e, en) => {

@@ -5,6 +5,7 @@ import RoomList from "@/src/components/RoomList";
 import ActiveRoom from "@/src/components/ActiveRoom";
 import SettingsModal from "@/src/components/SettingsModal";
 import UpdateNotification from "@/src/components/UpdateNotification"; // EKLENDİ
+import InfoModal from "@/src/components/InfoModal";
 import { Radio, Mic, Headphones } from "lucide-react";
 
 export default function Home() {
@@ -21,6 +22,11 @@ export default function Home() {
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [viewMode, setViewMode] = useState("voice");
+  const [infoModal, setInfoModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+  });
 
   // 1. Auth Dinleyicisi
   useEffect(() => {
@@ -42,7 +48,7 @@ export default function Home() {
     if (window.netrex) {
       window.netrex.startOAuth();
     } else {
-      alert("Bu özellik sadece masaüstü uygulamasında çalışır.");
+      toast.error("Bu özellik sadece masaüstü uygulamasında çalışır.");
     }
   };
 
@@ -61,18 +67,30 @@ export default function Home() {
   // --- LOGIN EKRANI ---
   if (!isAuth) {
     return (
-      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center text-white select-none relative">
+      <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f11] via-[#1a1b1e] to-[#1e1f22] flex items-center justify-center text-white select-none relative overflow-hidden">
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse-slow"></div>
+          <div
+            className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow"
+            style={{ animationDelay: "1s" }}
+          ></div>
+        </div>
+
         {/* Bildirimi buraya da ekleyelim ki login ekranında güncelleme olursa görünsün */}
         <UpdateNotification />
 
-        <div className="w-96 p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
-          <h1 className="text-3xl font-bold text-center mb-6 text-indigo-400">
-            Netrex
-          </h1>
+        <div className="w-96 p-10 glass-strong rounded-2xl shadow-soft-lg border border-white/10 animate-scaleIn relative z-10">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Netrex
+            </h1>
+            <p className="text-[#949ba4] text-sm">Güvenli Sesli Sohbet</p>
+          </div>
 
           <button
             onClick={handleGoogleLogin}
-            className="w-full bg-white text-gray-900 font-bold py-3 rounded hover:bg-gray-200 transition mb-6 flex items-center justify-center gap-2"
+            className="w-full bg-white text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-100 transition-all duration-200 mb-6 flex items-center justify-center gap-2 hover-lift shadow-soft btn-modern"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -97,10 +115,12 @@ export default function Home() {
 
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600"></div>
+              <div className="w-full border-t border-white/10"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-800 text-gray-400">veya</span>
+              <span className="px-3 glass-light text-[#949ba4] rounded-full text-xs">
+                veya
+              </span>
             </div>
           </div>
 
@@ -110,11 +130,11 @@ export default function Home() {
               placeholder="Kullanıcı Adı"
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 rounded p-3 mb-4 text-white outline-none focus:border-indigo-500"
+              className="w-full glass border border-white/10 rounded-xl p-3.5 mb-4 text-white placeholder-[#6b7280] outline-none focus:border-indigo-500/50 focus:shadow-glow transition-all duration-200"
             />
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded transition"
+              className="w-full gradient-primary hover:shadow-glow text-white font-bold py-3.5 rounded-xl transition-all duration-200 hover-lift btn-modern"
             >
               Anonim Giriş
             </button>
@@ -135,6 +155,13 @@ export default function Home() {
         onClose={() => setShowSettings(false)}
       />
 
+      <InfoModal
+        isOpen={infoModal.isOpen}
+        title={infoModal.title}
+        message={infoModal.message}
+        onClose={() => setInfoModal({ isOpen: false, title: "", message: "" })}
+      />
+
       <RoomList
         onJoin={(roomName) => {
           setCurrentRoom(roomName);
@@ -143,9 +170,12 @@ export default function Home() {
         }}
         onJoinTextChannel={(channelId) => {
           if (!currentRoom) {
-            alert(
-              "Metin kanallarını kullanmak için önce bir ses kanalına katılmanız gerekir."
-            );
+            setInfoModal({
+              isOpen: true,
+              title: "Ses Kanalı Gerekli",
+              message:
+                "Metin kanallarını kullanmak için önce bir ses kanalına katılmanız gerekir.",
+            });
             return;
           }
           setCurrentTextChannel(channelId);
@@ -171,48 +201,59 @@ export default function Home() {
             userId={user.uid}
           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center bg-[#313338] select-none p-4">
-            <div className="w-24 h-24 bg-[#2b2d31] rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-[#1f2023]">
-              <Radio size={40} className="text-indigo-500" />
+          <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a1b1e] via-[#1e1f22] to-[#25272a] select-none p-4 relative overflow-hidden">
+            {/* Background decoration */}
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl"></div>
+              <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"></div>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              Hoş Geldin, {user?.displayName || "Misafir"}!
-            </h2>
-            <p className="text-[#949ba4] text-sm text-center max-w-md mb-10 leading-relaxed">
-              Arkadaşlarınla konuşmaya başlamak için sol taraftaki ses
-              kanallarından birine tıklayabilirsin.
-            </p>
-            <div className="flex items-center gap-6 bg-[#2b2d31] px-8 py-3 rounded-full border border-[#1f2023] shadow-sm">
-              <div className="flex items-center gap-3 group">
-                <div className="p-1.5 bg-[#313338] rounded-md text-[#949ba4] group-hover:text-white transition-colors">
-                  <Mic size={14} />
+
+            <div className="relative z-10 animate-fadeIn flex flex-col items-center justify-center text-center">
+              <div className="w-28 h-28 glass-strong rounded-3xl flex items-center justify-center mb-8 shadow-soft-lg border border-white/10 hover-lift mx-auto">
+                <Radio
+                  size={48}
+                  className="text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+                />
+              </div>
+              <h2 className="text-3xl font-bold text-white mb-3 tracking-tight text-center">
+                Hoş Geldin, {user?.displayName || "Misafir"}!
+              </h2>
+              <p className="text-[#949ba4] text-sm text-center max-w-md mb-12 leading-relaxed mx-auto">
+                Arkadaşlarınla konuşmaya başlamak için sol taraftaki ses
+                kanallarından birine tıklayabilirsin.
+              </p>
+              <div className="flex items-center gap-8 glass px-10 py-4 rounded-2xl border border-white/10 shadow-soft hover-lift mx-auto">
+                <div className="flex items-center gap-3 group">
+                  <div className="p-2 glass-light rounded-lg text-[#949ba4] group-hover:text-white group-hover:bg-indigo-500/20 transition-all duration-200">
+                    <Mic size={16} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wider">
+                      Sustur
+                    </span>
+                    <span className="text-[10px] text-[#949ba4]">
+                      Kısayol Tuşu
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wide">
-                    Sustur
-                  </span>
-                  <span className="text-[10px] text-[#949ba4]">
-                    Kısayol Tuşu
-                  </span>
+                <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+                <div className="flex items-center gap-3 group">
+                  <div className="p-2 glass-light rounded-lg text-[#949ba4] group-hover:text-white group-hover:bg-indigo-500/20 transition-all duration-200">
+                    <Headphones size={16} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wider">
+                      Sağırlaştır
+                    </span>
+                    <span className="text-[10px] text-[#949ba4]">
+                      Kısayol Tuşu
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="w-px h-6 bg-[#3f4147]"></div>
-              <div className="flex items-center gap-3 group">
-                <div className="p-1.5 bg-[#313338] rounded-md text-[#949ba4] group-hover:text-white transition-colors">
-                  <Headphones size={14} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wide">
-                    Sağırlaştır
-                  </span>
-                  <span className="text-[10px] text-[#949ba4]">
-                    Kısayol Tuşu
-                  </span>
-                </div>
-              </div>
             </div>
-            <div className="absolute bottom-4 text-[10px] text-[#5e626a] font-mono">
-              Netrex Client v1.0.0
+            <div className="absolute bottom-6 text-[10px] text-[#5e626a] font-mono z-10">
+              Netrex Client v{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}
             </div>
           </div>
         )}

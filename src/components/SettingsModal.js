@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRoomContext } from "@livekit/components-react";
 import {
   Mic,
@@ -18,12 +18,18 @@ import {
   Video,
   VideoOff,
   Camera,
-  ShieldAlert, // Yeni ikon
+  ShieldAlert,
+  Bell,
+  Monitor,
+  Type,
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
+import { toastOnce } from "@/src/utils/toast";
+import { getCommonFonts } from "@/src/utils/fontDetector";
+import { toast } from "sonner";
 
 // ... (PRESET_GRADIENTS, SOLID_COLORS, formatKeybinding AYNI KALSIN) ...
 const PRESET_GRADIENTS = [
@@ -83,9 +89,9 @@ export default function SettingsModal({ isOpen, onClose }) {
   if (!mounted || !isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#313338] w-[850px] h-[650px] rounded-lg shadow-2xl flex overflow-hidden border border-[#1e1f22]">
-        <div className="w-60 bg-[#2b2d31] p-3 flex flex-col gap-1 border-r border-[#1f2023]">
+    <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm animate-fadeIn">
+      <div className="glass-strong w-[850px] h-[650px] rounded-2xl shadow-soft-lg flex overflow-hidden border border-white/10 animate-scaleIn">
+        <div className="w-60 bg-gradient-to-b from-[#25272a] to-[#2b2d31] p-3 flex flex-col gap-1 border-r border-white/10">
           <div className="px-3 pt-4 pb-2">
             <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
               Kullanıcı Ayarları
@@ -97,7 +103,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "account"}
             onClick={() => setActiveTab("account")}
           />
-          <div className="h-[1px] bg-[#1f2023] mx-2 my-2"></div>
+          <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3"></div>
           <div className="px-3 pt-2 pb-2">
             <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
               Uygulama Ayarları
@@ -121,32 +127,65 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "keybinds"}
             onClick={() => setActiveTab("keybinds")}
           />
+          <SidebarItem
+            label="Bildirimler"
+            icon={<Bell size={18} />}
+            active={activeTab === "notifications"}
+            onClick={() => setActiveTab("notifications")}
+          />
+          <SidebarItem
+            label="Görünüm"
+            icon={<Palette size={18} />}
+            active={activeTab === "appearance"}
+            onClick={() => setActiveTab("appearance")}
+          />
           <div className="mt-auto px-2 pb-2">
             <div className="text-[10px] text-[#5e626a] text-center">
-              Netrex v1.0.0
+              Netrex v{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}
             </div>
           </div>
         </div>
-        <div className="flex-1 bg-[#313338] relative flex flex-col min-w-0">
+        <div className="flex-1 bg-gradient-to-br from-[#2b2d31] to-[#313338] relative flex flex-col min-w-0">
           <div
-            className="absolute top-4 right-4 z-10 flex flex-col items-center group cursor-pointer"
+            className="absolute top-5 right-5 z-10 flex flex-col items-center group cursor-pointer"
             onClick={onClose}
           >
-            <div className="w-9 h-9 rounded-full border-2 border-[#949ba4] flex items-center justify-center text-[#949ba4] group-hover:bg-[#dadce0] group-hover:text-[#313338] transition-colors">
+            <div className="w-10 h-10 rounded-xl glass border border-white/10 flex items-center justify-center text-[#949ba4] group-hover:bg-red-500/20 group-hover:text-red-400 group-hover:border-red-500/30 transition-all duration-200 hover:scale-110 hover:shadow-soft">
               <X size={20} strokeWidth={2.5} />
             </div>
-            <span className="text-[10px] font-bold text-[#949ba4] mt-1 group-hover:text-[#dbdee1]">
+            <span className="text-[10px] font-bold text-[#949ba4] mt-1.5 group-hover:text-[#dbdee1] transition-colors">
               ESC
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-10 pr-16">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-10 pr-16 pb-20">
             {activeTab === "account" && <AccountSettings onClose={onClose} />}
             {activeTab === "application" && <ApplicationSettings />}
             {activeTab === "voice" && <VoiceSettings />}
             {activeTab === "keybinds" && <KeybindSettings />}
+            {activeTab === "notifications" && <NotificationSettings />}
+            {activeTab === "appearance" && (
+              <AppearanceSettings onSave={onClose} />
+            )}
+          </div>
+          {/* Ayarları Kaydet Butonu */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#2b2d31] to-transparent border-t border-white/5 p-5 flex justify-end backdrop-blur-sm">
+            <button
+              onClick={() => {
+                toast.success("Ayarlar kaydedildi!");
+                // Ayarlar zaten otomatik kaydediliyor (zustand persist), sadece feedback veriyoruz
+                setTimeout(() => {
+                  onClose();
+                }, 500);
+              }}
+              className="px-8 py-3 gradient-primary hover:shadow-glow text-white rounded-xl font-semibold transition-all duration-200 hover-lift btn-modern"
+            >
+              Ayarları Kaydet
+            </button>
           </div>
         </div>
       </div>
+      {/* Alt padding - blur altında kalmaması için */}
+      <div className="h-20"></div>
     </div>
   );
 }
@@ -155,13 +194,14 @@ function SidebarItem({ label, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-1.5 rounded-[4px] text-[15px] font-medium transition-all w-full text-left mb-0.5 ${
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-all duration-200 w-full text-left mb-1 hover-lift ${
         active
-          ? "bg-[#404249] text-white"
-          : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#dbdee1]"
+          ? "glass-strong text-white shadow-soft border border-white/10"
+          : "text-[#b5bac1] hover:bg-[#35373c]/60 hover:text-[#dbdee1]"
       }`}
     >
-      {icon} {label}
+      <div className={active ? "text-white" : "text-[#b5bac1]"}>{icon}</div>
+      <span>{label}</span>
     </button>
   );
 }
@@ -197,11 +237,16 @@ function ToggleSwitch({ label, description, checked, onChange }) {
 }
 
 function ApplicationSettings() {
-  const { closeToTray, setCloseToTray } = useSettingsStore();
+  const {
+    closeToTray,
+    setCloseToTray,
+    checkUpdatesOnStartup,
+    setCheckUpdatesOnStartup,
+  } = useSettingsStore();
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
       <h3 className="text-xl font-bold text-white mb-6">Uygulama Ayarları</h3>
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
           Pencere Davranışı
         </h4>
@@ -212,6 +257,17 @@ function ApplicationSettings() {
           onChange={() => setCloseToTray(!closeToTray)}
         />
       </div>
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Güncellemeler
+        </h4>
+        <ToggleSwitch
+          label="Açılışta Güncelleme Kontrolü"
+          description="Uygulama açıldığında otomatik olarak güncellemeleri kontrol eder."
+          checked={checkUpdatesOnStartup}
+          onChange={() => setCheckUpdatesOnStartup(!checkUpdatesOnStartup)}
+        />
+      </div>
     </div>
   );
 }
@@ -219,18 +275,77 @@ function ApplicationSettings() {
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
-  const [colorMode, setColorMode] = useState(
-    profileColor.includes("gradient") ? "gradient" : "solid"
+
+  // profileColor'dan mevcut değerleri parse et
+  const parseProfileColor = useCallback((color) => {
+    if (!color)
+      return {
+        mode: "solid",
+        solidColor: "#6366f1",
+        start: "#6366f1",
+        end: "#a855f7",
+        angle: 135,
+      };
+
+    if (color.includes("gradient")) {
+      // linear-gradient(135deg, #6366f1 0%, #a855f7 100%) formatını parse et
+      const angleMatch = color.match(/(\d+)deg/);
+      const colorMatches = color.match(/#[0-9a-fA-F]{6}/g);
+      const angle = angleMatch ? parseInt(angleMatch[1]) : 135;
+      const start =
+        colorMatches && colorMatches[0] ? colorMatches[0] : "#6366f1";
+      const end = colorMatches && colorMatches[1] ? colorMatches[1] : "#a855f7";
+      return { mode: "gradient", solidColor: start, start, end, angle };
+    } else {
+      return {
+        mode: "solid",
+        solidColor: color,
+        start: "#6366f1",
+        end: "#a855f7",
+        angle: 135,
+      };
+    }
+  }, []);
+
+  const parsed = useMemo(
+    () => parseProfileColor(profileColor),
+    [profileColor, parseProfileColor]
   );
-  const [gradStart, setGradStart] = useState("#6366f1");
-  const [gradEnd, setGradEnd] = useState("#a855f7");
-  const [gradAngle, setGradAngle] = useState(135);
+  const [colorMode, setColorMode] = useState(parsed.mode);
+  const [gradStart, setGradStart] = useState(parsed.start);
+  const [gradEnd, setGradEnd] = useState(parsed.end);
+  const [gradAngle, setGradAngle] = useState(parsed.angle);
+  const isUpdatingFromStore = useRef(false);
+
+  // profileColor değiştiğinde state'leri güncelle (dışarıdan değişiklik olursa)
   useEffect(() => {
-    if (colorMode === "gradient")
+    if (isUpdatingFromStore.current) {
+      isUpdatingFromStore.current = false;
+      return;
+    }
+    const newParsed = parseProfileColor(profileColor);
+    if (newParsed.mode !== colorMode) {
+      setColorMode(newParsed.mode);
+    }
+    if (newParsed.start !== gradStart) {
+      setGradStart(newParsed.start);
+    }
+    if (newParsed.end !== gradEnd) {
+      setGradEnd(newParsed.end);
+    }
+    if (newParsed.angle !== gradAngle) {
+      setGradAngle(newParsed.angle);
+    }
+  }, [profileColor, parseProfileColor]);
+
+  useEffect(() => {
+    if (colorMode === "gradient") {
+      isUpdatingFromStore.current = true;
       setProfileColor(
         `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`
       );
-  }, [gradStart, gradEnd, gradAngle, colorMode]);
+    }
+  }, [gradStart, gradEnd, gradAngle, colorMode, setProfileColor]);
   const handleLogout = async () => {
     if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
       await logout();
@@ -307,7 +422,14 @@ function AccountSettings({ onClose }) {
         </h4>
         <div className="flex gap-2 mb-4 bg-[#1e1f22] p-1 rounded-lg w-fit">
           <button
-            onClick={() => setColorMode("solid")}
+            onClick={() => {
+              setColorMode("solid");
+              // Solid mode'a geçerken mevcut rengi kullan (gradient ise ilk rengi)
+              if (profileColor.includes("gradient")) {
+                const parsed = parseProfileColor(profileColor);
+                setProfileColor(parsed.solidColor);
+              }
+            }}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 ${
               colorMode === "solid"
                 ? "bg-[#404249] text-white shadow"
@@ -317,7 +439,17 @@ function AccountSettings({ onClose }) {
             <Pipette size={14} /> Düz Renk
           </button>
           <button
-            onClick={() => setColorMode("gradient")}
+            onClick={() => {
+              setColorMode("gradient");
+              // Gradient mode'a geçerken mevcut rengi başlangıç rengi olarak kullan
+              if (!profileColor.includes("gradient")) {
+                const parsed = parseProfileColor(profileColor);
+                setGradStart(parsed.solidColor);
+                setProfileColor(
+                  `linear-gradient(${gradAngle}deg, ${parsed.solidColor} 0%, ${gradEnd} 100%)`
+                );
+              }
+            }}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 ${
               colorMode === "gradient"
                 ? "bg-[#404249] text-white shadow"
@@ -475,6 +607,7 @@ function KeybindSettings() {
   const [recording, setRecording] = useState(null);
   const [muteKeybinding, setMuteKeybinding] = useState(null);
   const [deafenKeybinding, setDeafenKeybinding] = useState(null);
+  const [cameraKeybinding, setCameraKeybinding] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => {
     if (window.netrex) {
@@ -482,6 +615,9 @@ function KeybindSettings() {
       window.netrex
         .getHotkey("deafen")
         .then((k) => setDeafenKeybinding(k || null));
+      window.netrex
+        .getHotkey("camera")
+        .then((k) => setCameraKeybinding(k || null));
     }
   }, []);
   useEffect(() => {
@@ -508,6 +644,7 @@ function KeybindSettings() {
         if (result.success) {
           if (recording === "mute") setMuteKeybinding(keybinding);
           if (recording === "deafen") setDeafenKeybinding(keybinding);
+          if (recording === "camera") setCameraKeybinding(keybinding);
           setRecording(null);
         } else {
           setError(result.error || "Bu tuş atanamadı.");
@@ -546,6 +683,20 @@ function KeybindSettings() {
             setRecording("mute");
             setError(null);
           }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("mute", null);
+              if (result?.success) {
+                setMuteKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(
+                  result?.error || "Tuş ataması kaldırılamadı.",
+                  "error"
+                );
+              }
+            }
+          }}
         />
         <div className="h-[1px] bg-[#1f2023] mx-4"></div>
         <KeybindRow
@@ -556,6 +707,45 @@ function KeybindSettings() {
           onClick={() => {
             setRecording("deafen");
             setError(null);
+          }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("deafen", null);
+              if (result?.success) {
+                setDeafenKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(
+                  result?.error || "Tuş ataması kaldırılamadı.",
+                  "error"
+                );
+              }
+            }
+          }}
+        />
+        <div className="h-[1px] bg-[#1f2023] mx-4"></div>
+        <KeybindRow
+          label="Kamerayı Aç/Kapat"
+          description="Kamerayı açıp kapatır."
+          shortcut={formatKeybinding(cameraKeybinding)}
+          isRecording={recording === "camera"}
+          onClick={() => {
+            setRecording("camera");
+            setError(null);
+          }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("camera", null);
+              if (result?.success) {
+                setCameraKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(
+                  result?.error || "Tuş ataması kaldırılamadı.",
+                  "error"
+                );
+              }
+            }
           }}
         />
       </div>
@@ -570,28 +760,46 @@ function KeybindSettings() {
   );
 }
 
-function KeybindRow({ label, description, shortcut, isRecording, onClick }) {
+function KeybindRow({
+  label,
+  description,
+  shortcut,
+  isRecording,
+  onClick,
+  onRemove,
+}) {
   return (
     <div className="flex items-center justify-between p-4 hover:bg-[#35373c] transition-colors group">
       <div className="pr-4">
         <div className="font-medium text-[#dbdee1] mb-0.5">{label}</div>
         <div className="text-xs text-[#949ba4]">{description}</div>
       </div>
-      <button
-        onClick={onClick}
-        className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
-          isRecording
-            ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
-            : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
-        }`}
-      >
-        <span className="relative z-10">
-          {isRecording ? "Tuşa Basın..." : shortcut}
-        </span>
-        {isRecording && (
-          <div className="absolute inset-0 bg-[#f04747]/5 animate-pulse"></div>
+      <div className="flex items-center gap-2">
+        {shortcut && !isRecording && (
+          <button
+            onClick={onRemove}
+            className="p-1.5 rounded text-[#949ba4] hover:text-[#f04747] hover:bg-[#f04747]/10 transition-colors"
+            title="Tuş atamasını kaldır"
+          >
+            <X size={16} />
+          </button>
         )}
-      </button>
+        <button
+          onClick={onClick}
+          className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
+            isRecording
+              ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
+              : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
+          }`}
+        >
+          <span className="relative z-10">
+            {isRecording ? "Tuşa Basın..." : shortcut || "Atanmadı"}
+          </span>
+          {isRecording && (
+            <div className="absolute inset-0 bg-[#f04747]/5 animate-pulse"></div>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -601,7 +809,10 @@ function VoiceSettings() {
   let room;
   try {
     room = useRoomContext();
-  } catch (e) {}
+  } catch (e) {
+    // Room context yoksa (ayarlar modal açıkken room dışındaysa) sessizce yoksay
+    // Bu normal bir durum olabilir
+  }
 
   const [audioInputs, setAudioInputs] = useState([]);
   const [audioOutputs, setAudioOutputs] = useState([]);
@@ -638,6 +849,21 @@ function VoiceSettings() {
     getDevices();
   }, []);
 
+  // RMS değerini 0-100 arası yüzdeye dönüştür (useVoiceProcessor ile uyumlu)
+  const rmsToPercentage = useCallback((rms) => {
+    // useVoiceProcessor'daki CONFIG değerleri ile aynı
+    const MIN_RMS = 0.002;
+    const MAX_RMS = 0.12;
+
+    // RMS değerini normalize et (0-1 arası)
+    const normalized = Math.max(
+      0,
+      Math.min(1, (rms - MIN_RMS) / (MAX_RMS - MIN_RMS))
+    );
+    // Yüzdeye çevir (0-100)
+    return normalized * 100;
+  }, []);
+
   useEffect(() => {
     let audioContext, analyser, stream;
     const initAudio = async () => {
@@ -653,17 +879,24 @@ function VoiceSettings() {
         });
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
+        analyser.fftSize = 2048; // useVoiceProcessor ile aynı
+        analyser.smoothingTimeConstant = 0.25; // useVoiceProcessor ile aynı
         audioContext.createMediaStreamSource(stream).connect(analyser);
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const updateMeter = () => {
           analyser.getByteTimeDomainData(dataArray);
+          // RMS hesapla (useVoiceProcessor ile aynı yöntem)
           let sum = 0;
           for (let i = 0; i < dataArray.length; i++) {
             const x = (dataArray[i] - 128) / 128.0;
             sum += x * x;
           }
-          setMicVolume(Math.min(100, Math.sqrt(sum / dataArray.length) * 400));
+          const rms = Math.sqrt(sum / dataArray.length);
+
+          // RMS'yi yüzdeye dönüştür (slider ile uyumlu)
+          const percentage = rmsToPercentage(rms);
+          setMicVolume(percentage);
+
           animationRef.current = requestAnimationFrame(updateMeter);
         };
         updateMeter();
@@ -677,7 +910,7 @@ function VoiceSettings() {
       if (stream) stream.getTracks().forEach((t) => t.stop());
       if (audioContext) audioContext.close();
     };
-  }, [settings.audioInputId]);
+  }, [settings.audioInputId, rmsToPercentage]);
 
   // Kamera Önizleme
   useEffect(() => {
@@ -803,6 +1036,18 @@ function VoiceSettings() {
                     ÖNİZLEME
                   </div>
                 )}
+              </div>
+
+              {/* Ayna Efekti */}
+              <div className="mt-4 pt-4 border-t border-[#1f2023]">
+                <ToggleSwitch
+                  label="Ayna Efekti"
+                  description="Kamera görüntüsünü yatay olarak çevir (kendini aynada görür gibi)."
+                  checked={settings.cameraMirrorEffect}
+                  onChange={() =>
+                    settings.setCameraMirrorEffect(!settings.cameraMirrorEffect)
+                  }
+                />
               </div>
             </>
           ) : (
@@ -971,6 +1216,112 @@ function VoiceSettings() {
           </div>
         </div>
       </div>
+
+      {/* GÜRÜLTÜ AZALTMA MODU (Discord benzeri) */}
+      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="space-y-4">
+        <div className="mb-2">
+          <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-1">
+            Gürültü Azaltma
+          </h4>
+          <p className="text-xs text-[#949ba4]">
+            Mikrofonunun algıladığı arka plan seslerini bastır.
+          </p>
+        </div>
+
+        {/* Radio Button Seçimi */}
+        <div className="space-y-3">
+          {/* Yok */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div className="relative">
+              <input
+                type="radio"
+                name="noiseSuppressionMode"
+                value="none"
+                checked={settings.noiseSuppressionMode === "none"}
+                onChange={(e) =>
+                  settings.setNoiseSuppressionMode(e.target.value)
+                }
+                className="sr-only"
+              />
+              <div
+                className={`w-5 h-5 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
+                  settings.noiseSuppressionMode === "none"
+                    ? "border-indigo-500 bg-indigo-500"
+                    : "border-[#80848e] group-hover:border-[#b5bac1]"
+                }`}
+              >
+                {settings.noiseSuppressionMode === "none" && (
+                  <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                )}
+              </div>
+            </div>
+            <span className="text-sm text-[#dbdee1] font-medium">Yok</span>
+          </label>
+
+          {/* Standart */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div className="relative">
+              <input
+                type="radio"
+                name="noiseSuppressionMode"
+                value="standard"
+                checked={settings.noiseSuppressionMode === "standard"}
+                onChange={(e) =>
+                  settings.setNoiseSuppressionMode(e.target.value)
+                }
+                className="sr-only"
+              />
+              <div
+                className={`w-5 h-5 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
+                  settings.noiseSuppressionMode === "standard"
+                    ? "border-indigo-500 bg-indigo-500"
+                    : "border-[#80848e] group-hover:border-[#b5bac1]"
+                }`}
+              >
+                {settings.noiseSuppressionMode === "standard" && (
+                  <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                )}
+              </div>
+            </div>
+            <span className="text-sm text-[#dbdee1] font-medium">Standart</span>
+          </label>
+
+          {/* Krisp (RNNoise) */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div className="relative">
+              <input
+                type="radio"
+                name="noiseSuppressionMode"
+                value="krisp"
+                checked={settings.noiseSuppressionMode === "krisp"}
+                onChange={(e) =>
+                  settings.setNoiseSuppressionMode(e.target.value)
+                }
+                className="sr-only"
+              />
+              <div
+                className={`w-5 h-5 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
+                  settings.noiseSuppressionMode === "krisp"
+                    ? "border-indigo-500 bg-indigo-500"
+                    : "border-[#80848e] group-hover:border-[#b5bac1]"
+                }`}
+              >
+                {settings.noiseSuppressionMode === "krisp" && (
+                  <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-[#dbdee1] font-medium">Krisp</span>
+              <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-500/10 text-indigo-400">
+                AI
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
       <div className="space-y-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
@@ -996,6 +1347,174 @@ function VoiceSettings() {
           checked={settings.autoGainControl}
           onChange={settings.toggleAutoGainControl}
         />
+      </div>
+    </div>
+  );
+}
+
+// --- BİLDİRİM AYARLARI ---
+function NotificationSettings() {
+  const {
+    desktopNotifications,
+    notificationSound,
+    notifyOnMessage,
+    notifyOnJoin,
+    notifyOnLeave,
+    setDesktopNotifications,
+    setNotificationSound,
+    setNotifyOnMessage,
+    setNotifyOnJoin,
+    setNotifyOnLeave,
+  } = useSettingsStore();
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <h3 className="text-xl font-bold text-white mb-6">Bildirim Ayarları</h3>
+
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Genel Bildirimler
+        </h4>
+        <ToggleSwitch
+          label="Masaüstü Bildirimleri"
+          description="Yeni mesajlar ve diğer olaylar için masaüstü bildirimleri göster."
+          checked={desktopNotifications}
+          onChange={() => setDesktopNotifications(!desktopNotifications)}
+        />
+        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+        <ToggleSwitch
+          label="Bildirim Sesi"
+          description="Bildirimler geldiğinde ses çal."
+          checked={notificationSound}
+          onChange={() => setNotificationSound(!notificationSound)}
+        />
+      </div>
+
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Bildirim Olayları
+        </h4>
+        <ToggleSwitch
+          label="Yeni Mesaj Bildirimi"
+          description="Yeni mesaj geldiğinde bildirim göster."
+          checked={notifyOnMessage}
+          onChange={() => setNotifyOnMessage(!notifyOnMessage)}
+        />
+        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+        <ToggleSwitch
+          label="Katılım Bildirimi"
+          description="Birisi odaya katıldığında bildirim göster."
+          checked={notifyOnJoin}
+          onChange={() => setNotifyOnJoin(!notifyOnJoin)}
+        />
+        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+        <ToggleSwitch
+          label="Ayrılış Bildirimi"
+          description="Birisi odadan ayrıldığında bildirim göster."
+          checked={notifyOnLeave}
+          onChange={() => setNotifyOnLeave(!notifyOnLeave)}
+        />
+      </div>
+    </div>
+  );
+}
+
+// --- GÖRÜNÜM AYARLARI ---
+function AppearanceSettings({ onSave }) {
+  const {
+    uiScale,
+    fontSize,
+    fontFamily,
+    setUIScale,
+    setFontSize,
+    setFontFamily,
+  } = useSettingsStore();
+
+  const fontOptions = getCommonFonts();
+
+  const fontSizeOptions = [
+    { value: "small", label: "Küçük", size: "14px" },
+    { value: "medium", label: "Orta", size: "16px" },
+    { value: "large", label: "Büyük", size: "18px" },
+  ];
+
+  const scaleOptions = [
+    { value: 75, label: "Küçük (75%)" },
+    { value: 100, label: "Normal (100%)" },
+    { value: 125, label: "Büyük (125%)" },
+    { value: 150, label: "Çok Büyük (150%)" },
+  ];
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <h3 className="text-xl font-bold text-white mb-6">Görünüm Ayarları</h3>
+
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Ölçeklendirme ve Font
+        </h4>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-[#dbdee1] mb-2">
+            UI Ölçeklendirme
+          </label>
+          <select
+            value={uiScale}
+            onChange={(e) => setUIScale(Number(e.target.value))}
+            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+          >
+            {scaleOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[#949ba4] mt-1">
+            Arayüzün genel boyutunu ayarlar.
+          </p>
+        </div>
+
+        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-[#dbdee1] mb-2">
+            Font Boyutu
+          </label>
+          <select
+            value={fontSize}
+            onChange={(e) => setFontSize(e.target.value)}
+            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+          >
+            {fontSizeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label} ({opt.size})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[#949ba4] mt-1">Metin boyutunu ayarlar.</p>
+        </div>
+
+        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-[#dbdee1] mb-2">
+            Font Ailesi
+          </label>
+          <select
+            value={fontFamily}
+            onChange={(e) => setFontFamily(e.target.value)}
+            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+          >
+            {fontOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[#949ba4] mt-1">
+            Uygulama genelinde kullanılacak font ailesini seçin.
+          </p>
+        </div>
       </div>
     </div>
   );

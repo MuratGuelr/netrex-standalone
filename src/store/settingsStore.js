@@ -18,6 +18,17 @@ export const useSettingsStore = create(
       autoGainControl: true,
       rawAudioMode: false,
 
+      // Gelişmiş Ses İşleme (Krisp/Discord benzeri)
+      // Ses İşleme Modu: "none" | "standard" | "krisp"
+      noiseSuppressionMode: "standard", // Discord benzeri mod seçimi
+      advancedNoiseReduction: true, // Çok katmanlı gürültü azaltma (otomatik ayarlanır)
+      adaptiveThreshold: true, // Otomatik eşik ayarlama (otomatik ayarlanır)
+      noiseProfiling: true, // Arka plan gürültü profili (otomatik ayarlanır)
+      spectralFiltering: true, // Spektral filtreleme (otomatik ayarlanır)
+      windNoiseReduction: true, // Rüzgar gürültüsü azaltma
+      noiseReductionLevel: 70, // 0-100 arası gürültü azaltma seviyesi
+      aiNoiseSuppression: false, // AI tabanlı gürültü bastırma (RNNoise) - Opsiyonel (otomatik ayarlanır)
+
       // Seviyeler
       voiceThreshold: 15,
       sfxVolume: 50,
@@ -28,6 +39,23 @@ export const useSettingsStore = create(
 
       // Tray
       closeToTray: true,
+      checkUpdatesOnStartup: true, // Açılışta güncelleme kontrolü
+
+      // Bildirimler
+      desktopNotifications: true,
+      notificationSound: true,
+      notifyOnMessage: true,
+      notifyOnJoin: false,
+      notifyOnLeave: false,
+      notificationSoundType: "default", // "default" | "custom"
+
+      // Görünüm
+      uiScale: 100, // 75, 100, 125, 150
+      fontSize: "medium", // "small" | "medium" | "large"
+      fontFamily: "system", // Sistem fontları veya web fontları
+
+      // Kamera
+      cameraMirrorEffect: true, // Ayna efekti
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
@@ -47,6 +75,58 @@ export const useSettingsStore = create(
       toggleRawAudioMode: () =>
         set((state) => ({ rawAudioMode: !state.rawAudioMode })),
 
+      // Gelişmiş Ses İşleme Toggle'ları
+      toggleAdvancedNoiseReduction: () =>
+        set((state) => ({
+          advancedNoiseReduction: !state.advancedNoiseReduction,
+        })),
+      toggleAdaptiveThreshold: () =>
+        set((state) => ({ adaptiveThreshold: !state.adaptiveThreshold })),
+      toggleNoiseProfiling: () =>
+        set((state) => ({ noiseProfiling: !state.noiseProfiling })),
+      toggleSpectralFiltering: () =>
+        set((state) => ({ spectralFiltering: !state.spectralFiltering })),
+      toggleWindNoiseReduction: () =>
+        set((state) => ({ windNoiseReduction: !state.windNoiseReduction })),
+      toggleAiNoiseSuppression: () =>
+        set((state) => ({ aiNoiseSuppression: !state.aiNoiseSuppression })),
+      
+      // Ses İşleme Modu Ayarlama (Discord benzeri)
+      setNoiseSuppressionMode: (mode) => {
+        set((state) => {
+          const newState = { noiseSuppressionMode: mode };
+          
+          // Mode'a göre otomatik ayarları yap
+          if (mode === "none") {
+            // Hiçbir işleme yok
+            newState.advancedNoiseReduction = false;
+            newState.adaptiveThreshold = false;
+            newState.noiseProfiling = false;
+            newState.spectralFiltering = false;
+            newState.aiNoiseSuppression = false;
+          } else if (mode === "standard") {
+            // Standart işleme (mevcut sistemimiz)
+            newState.advancedNoiseReduction = true;
+            newState.adaptiveThreshold = true;
+            newState.noiseProfiling = true;
+            newState.spectralFiltering = true;
+            newState.aiNoiseSuppression = false;
+          } else if (mode === "krisp") {
+            // Krisp benzeri AI işleme (RNNoise)
+            newState.advancedNoiseReduction = false; // RNNoise kendi işlemesini yapıyor
+            newState.adaptiveThreshold = false;
+            newState.noiseProfiling = false;
+            newState.spectralFiltering = false;
+            newState.aiNoiseSuppression = true; // RNNoise aktif
+          }
+          
+          return newState;
+        });
+      },
+
+      setNoiseReductionLevel: (level) =>
+        set({ noiseReductionLevel: Math.max(0, Math.min(100, level)) }),
+
       setVoiceThreshold: (threshold) => set({ voiceThreshold: threshold }),
       setSfxVolume: (volume) => set({ sfxVolume: volume }),
       setProfileColor: (color) => set({ profileColor: color }),
@@ -62,12 +142,38 @@ export const useSettingsStore = create(
           await window.netrex.setSetting("closeToTray", enabled);
         }
       },
+      setCheckUpdatesOnStartup: async (enabled) => {
+        set({ checkUpdatesOnStartup: enabled });
+        if (window.netrex) {
+          await window.netrex.setSetting("checkUpdatesOnStartup", enabled);
+        }
+      },
+
+      // Bildirim ayarları
+      setDesktopNotifications: (enabled) => set({ desktopNotifications: enabled }),
+      setNotificationSound: (enabled) => set({ notificationSound: enabled }),
+      setNotifyOnMessage: (enabled) => set({ notifyOnMessage: enabled }),
+      setNotifyOnJoin: (enabled) => set({ notifyOnJoin: enabled }),
+      setNotifyOnLeave: (enabled) => set({ notifyOnLeave: enabled }),
+      setNotificationSoundType: (type) => set({ notificationSoundType: type }),
+
+      // Görünüm ayarları
+      setUIScale: (scale) => set({ uiScale: scale }),
+      setFontSize: (size) => set({ fontSize: size }),
+      setFontFamily: (font) => set({ fontFamily: font }),
+
+      // Kamera ayarları
+      setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),
 
       syncWithElectron: async () => {
         if (window.netrex) {
-          const val = await window.netrex.getSetting("closeToTray");
-          if (val !== undefined) {
-            set({ closeToTray: val });
+          const closeToTrayVal = await window.netrex.getSetting("closeToTray");
+          if (closeToTrayVal !== undefined) {
+            set({ closeToTray: closeToTrayVal });
+          }
+          const checkUpdatesVal = await window.netrex.getSetting("checkUpdatesOnStartup");
+          if (checkUpdatesVal !== undefined) {
+            set({ checkUpdatesOnStartup: checkUpdatesVal });
           }
         }
       },

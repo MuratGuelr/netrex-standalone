@@ -1,45 +1,570 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useLocalParticipant } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
+// RNNoise sadece client-side'da çalışır, SSR'da yüklenmemeli
 
-// --- GELİŞMİŞ AYARLAR ---
+// ============================================
+// GELİŞMİŞ SES İŞLEME SİSTEMİ (KRISP/DISCORD BENZERİ)
+// ============================================
+
 const CONFIG = {
-  // İnsan sesine odaklan (Bandpass Filter)
-  // İnsan sesi genelde 85Hz - 255Hz (temel) ve 4000Hz'e kadar harmoniklerdir.
-  // Alt frekansları (masa titremesi) ve çok üst frekansları (klavye tıkırtısı) filtreliyoruz.
-  FILTER_LOW: 100,
-  FILTER_HIGH: 8000, // Daha doğal ses için aralığı genişlettik
-
   // Analiz Ayarları
-  FFT_SIZE: 512,
-  SMOOTHING: 0.4, // 0.2'den 0.4'e çıkardık (Sesin titremesini engeller)
+  FFT_SIZE: 2048, // Daha yüksek çözünürlük için artırıldı
+  SAMPLE_RATE: 48000,
+  BUFFER_SIZE: 4096,
 
-  // Tepki Süreleri (Discord Tarzı)
-  ATTACK_TIME: 0, // Ses algılandığı AN aç (Gecikme yok)
-  RELEASE_TIME: 800, // Konuşma bittikten sonra 0.8 saniye bekle (Kelime sonlarını yutmaması için artırdık)
+  // KRISP BENZERİ TEPKİ AYARLARI (İlk kelimeyi kaçırmama + gürültü engelleme)
+  RELEASE_TIME: 250, // Konuşma bitince bekleme süresi (Standart mod için)
+  RELEASE_TIME_RNNOISE: 450, // RNNoise modu için daha uzun bekleme (sesleri erken kesmemek için)
+  ATTACK_TIME: 5, // Çok hızlı açılma - ilk kelimeyi kaçırmamak için
+  ATTACK_TIME_RNNOISE: 2, // RNNoise modu için çok daha hızlı açılma (ilk harfi kaçırmamak için)
+  MIN_VOICE_DURATION: 30, // Minimum ses süresi - daha kısa (ilk kelimeyi kaçırmamak için)
+  MIN_VOICE_DURATION_RNNOISE: 15, // RNNoise modu için çok daha kısa minimum süre (ilk harfi kaçırmamak için)
+  MAX_SHORT_NOISE_DURATION: 20, // 20ms'den kısa sesler gürültü olarak reddedilir
+  CHECK_INTERVAL: 5, // Çok hızlı kontrol (5ms = 200Hz) - daha hassas
 
-  // Kontrol Sıklığı
-  CHECK_INTERVAL: 50, // 20ms çok agresifti, 50ms daha stabil
+  // Smoothing (Dengeli)
+  RMS_SMOOTHING: 0.12, // Dengeli yumuşatma
+  SPECTRAL_SMOOTHING: 0.25, // Dengeli yumuşatma
+  THRESHOLD_SMOOTHING: 0.04, // Dengeli yumuşatma
+
+  // KRISP BENZERİ EŞİK DEĞERLERİ (Gürültüyü agresif engelle ama konuşmayı hemen geçir)
+  MIN_RMS: 0.002, // Dengeli minimum (az konuşmaları filtrele ama ilk kelimeyi kaçırmasın)
+  MAX_RMS: 0.12, // Maksimum
+
+  // Gürültü Profili
+  NOISE_PROFILE_SAMPLES: 100, // Daha fazla örnek (daha iyi profil)
+  NOISE_UPDATE_INTERVAL: 3000, // Daha sık güncelleme
+  NOISE_PROFILE_THRESHOLD: 0.003, // Gürültü profili için maksimum RMS
+
+  // Ses Bandı (Dengeli - konuşma frekansları)
+  VOICE_LOW_FREQ: 100, // Konuşma başlangıcı (bass gürültüleri kısmen keser)
+  VOICE_HIGH_FREQ: 7000, // Konuşma üst sınırı (tiz gürültüleri kısmen keser)
+
+  // Rüzgar/Arka plan gürültü frekansları
+  WIND_LOW_FREQ: 20,
+  WIND_HIGH_FREQ: 100, // Voice low freq ile örtüşmesin
+
+  // GELİŞMİŞ Darbe/klavye/mouse click tespiti (Krisp benzeri - Mekanik Klavye için İyileştirilmiş)
+  IMPACT_DETECTION_ENABLED: true,
+  IMPACT_HIGH_FREQ_START: 5000, // Klavye sesleri için yüksek frekans (önceki ayar)
+  IMPACT_HIGH_FREQ_END: 18000, // Daha yüksek frekansları yakala (önceki ayar)
+  IMPACT_TRANSIENT_RATIO: 2.2, // Biraz daha düşük eşik (mekanik klavye için)
+  IMPACT_MIN_RMS_FACTOR: 1.12, // Biraz daha düşük RMS eşiği (mekanik klavye için)
+  IMPACT_ZCR_THRESHOLD: 0.19, // Biraz daha düşük ZCR eşiği (mekanik klavye için)
+  IMPACT_HOLD_MS: 85, // Biraz daha uzun blokaj (mekanik klavye için)
+  IMPACT_WEAK_VOICE_RATIO: 0.45, // Voice bandı zayıf olmalı (mekanik klavye için biraz daha katı)
+  IMPACT_MIN_DURATION: 5, // Minimum süre (ms) - önceki ayar
+
+  // Zero-Crossing Rate (Krisp benzeri - insan sesi aralığı, daha geniş)
+  ZCR_THRESHOLD_MIN: 0.015, // İnsan sesi minimum (daha geniş - ilk kelimeyi kaçırmamak için)
+  ZCR_THRESHOLD_MAX: 0.16, // İnsan sesi maksimum (daha geniş aralık)
+
+  // KRISP BENZERİ SPEKTRAL GATING AYARLARI (Agresif gürültü engelleme)
+  SPECTRAL_GATING_ENABLED: true,
+  SPECTRAL_SUBTRACTION_FACTOR: 2.0, // Arka plan gürültüsünü 2x çıkar (daha agresif)
+  MIN_SPECTRAL_RATIO: 1.3, // Ses/gürültü oranı (daha toleranslı - ilk kelimeyi kaçırmamak için)
+
+  // Voice Quality Scoring (Krisp benzeri - ilk kelimeyi kaçırmamak için)
+  MIN_VOICE_QUALITY: 0.35, // Minimum ses kalitesi skoru (daha düşük = daha toleranslı, ilk kelimeyi kaçırmasın)
+
+  INIT_DELAY: 1500, // Daha uzun başlangıç (gürültü profilini öğrensin)
 };
 
 export function useVoiceProcessor() {
   const { localParticipant } = useLocalParticipant();
-  const { voiceThreshold } = useSettingsStore();
+  const settings = useSettingsStore();
+  const {
+    voiceThreshold,
+    noiseSuppressionMode,
+    advancedNoiseReduction,
+    adaptiveThreshold,
+    noiseProfiling,
+    spectralFiltering,
+    aiNoiseSuppression,
+  } = settings;
 
-  // Referanslar
+  // ========== REF'LER ==========
   const audioContextRef = useRef(null);
   const intervalRef = useRef(null);
+  const rnnoiseModuleRef = useRef(null); // RNNoise modülünü dinamik olarak yüklemek için
   const sourceRef = useRef(null);
   const analyserRef = useRef(null);
   const cloneStreamRef = useRef(null);
+  const workletNodeRef = useRef(null);
 
-  // State Referansları
-  const isSpeakingRef = useRef(false);
+  // Ses işleme ref'leri
+  const highPassFilterRef = useRef(null);
+  const lowPassFilterRef = useRef(null);
+  const notchFilterRef = useRef(null);
+  const compressorRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const rnnoiseNodeRef = useRef(null);
+
+  // Durum ref'leri
   const lastSpeakingTimeRef = useRef(0);
+  const firstVoiceDetectionTimeRef = useRef(0); // İlk ses algılanma zamanı
   const isCleaningUpRef = useRef(false);
+  const noiseProfileRef = useRef(null); // Arka plan gürültü profili
+  const noiseProfileSamplesRef = useRef([]);
+  const adaptiveThresholdRef = useRef(null);
+  const smoothedRmsRef = useRef(0);
+  const spectralDataRef = useRef(new Float32Array(CONFIG.FFT_SIZE / 2));
+  const consecutiveVoiceDetectionsRef = useRef(0); // Ardışık ses algılamaları
+  const consecutiveSilenceDetectionsRef = useRef(0); // Ardışık sessizlik algılamaları
+  const impactBlockTimestampRef = useRef(0); // Son darbe gürültüsü zamanı
 
-  // --- TEMİZLİK ---
+  // ========== YARDIMCI FONKSİYONLAR ==========
+
+  // RMS (Root Mean Square) Hesaplama
+  const calculateRMS = useCallback((timeDomainData) => {
+    let sumSquares = 0;
+    for (let i = 0; i < timeDomainData.length; i++) {
+      const normalized = (timeDomainData[i] - 128) / 128.0;
+      sumSquares += normalized * normalized;
+    }
+    return Math.sqrt(sumSquares / timeDomainData.length);
+  }, []);
+
+  // Zero-Crossing Rate (Ses algılama için kritik)
+  const calculateZCR = useCallback((timeDomainData) => {
+    let crossings = 0;
+    for (let i = 1; i < timeDomainData.length; i++) {
+      const prev = timeDomainData[i - 1] - 128;
+      const curr = timeDomainData[i] - 128;
+      if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0)) {
+        crossings++;
+      }
+    }
+    return crossings / timeDomainData.length;
+  }, []);
+
+  // Spektral Güç Hesaplama (belirli frekans bandında)
+  const calculateSpectralPower = useCallback(
+    (frequencyData, lowFreq, highFreq) => {
+      const nyquist = CONFIG.SAMPLE_RATE / 2;
+      const binSize = nyquist / frequencyData.length;
+      const lowBin = Math.floor(lowFreq / binSize);
+      const highBin = Math.min(
+        Math.ceil(highFreq / binSize),
+        frequencyData.length - 1
+      );
+
+      let power = 0;
+      for (let i = lowBin; i <= highBin; i++) {
+        power += frequencyData[i];
+      }
+      return power / (highBin - lowBin + 1);
+    },
+    []
+  );
+
+  // DENGELİ Eşik Hesaplama (Slider değerinden)
+  const calculateThreshold = useCallback((sliderValue) => {
+    const normalized = sliderValue / 100;
+    // Normal eşik hesaplama (dengeli)
+    return CONFIG.MIN_RMS + normalized * (CONFIG.MAX_RMS - CONFIG.MIN_RMS);
+  }, []);
+
+  // Adaptif Eşik Hesaplama (Arka plan gürültüsüne göre)
+  const calculateAdaptiveThreshold = useCallback(
+    (baseThreshold, noiseLevel) => {
+      if (noiseSuppressionMode !== "standard" || !adaptiveThreshold || !noiseProfiling || !noiseProfileRef.current) {
+        return baseThreshold;
+      }
+
+      // Arka plan gürültüsü yüksekse eşiği artır
+      const noiseMultiplier = 1 + noiseLevel * 2; // Gürültüye göre 1x-3x arası
+      return baseThreshold * noiseMultiplier;
+    },
+    [adaptiveThreshold, noiseProfiling]
+  );
+
+  // Gürültü Profili Güncelleme (Sadece sessizlik anlarında)
+  const updateNoiseProfile = useCallback(
+    (rms, zcr, spectralData, threshold) => {
+      if (!noiseProfiling) return;
+
+      // 🔥 SADECE ÇOK DÜŞÜK SES SEVİYELERİNDE GÜRÜLTÜ PROFİLİ OLUŞTUR
+      if (rms > CONFIG.NOISE_PROFILE_THRESHOLD) return;
+
+      const sample = {
+        rms,
+        zcr,
+        spectralData: Array.from(spectralData),
+        timestamp: Date.now(),
+      };
+
+      noiseProfileSamplesRef.current.push(sample);
+
+      // Son N örneği sakla
+      if (
+        noiseProfileSamplesRef.current.length > CONFIG.NOISE_PROFILE_SAMPLES
+      ) {
+        noiseProfileSamplesRef.current.shift();
+      }
+
+      // Eski örnekleri temizle (10 saniyeden eski)
+      const tenSecondsAgo = Date.now() - 10000;
+      noiseProfileSamplesRef.current = noiseProfileSamplesRef.current.filter(
+        (s) => s.timestamp > tenSecondsAgo
+      );
+
+      // Ortalama gürültü profili hesapla (en az 20 örnek gerekli)
+      if (noiseProfileSamplesRef.current.length >= 20) {
+        const avgRms =
+          noiseProfileSamplesRef.current.reduce((sum, s) => sum + s.rms, 0) /
+          noiseProfileSamplesRef.current.length;
+        const avgZcr =
+          noiseProfileSamplesRef.current.reduce((sum, s) => sum + s.zcr, 0) /
+          noiseProfileSamplesRef.current.length;
+
+        noiseProfileRef.current = {
+          rms: avgRms,
+          zcr: avgZcr,
+          spectralData: calculateAverageSpectrum(
+            noiseProfileSamplesRef.current.map((s) => s.spectralData)
+          ),
+        };
+      }
+    },
+    [noiseProfiling]
+  );
+
+  // 🔥 SPEKTRAL GATING - Her frekans bandını ayrı kontrol et
+  const spectralGating = useCallback(
+    (currentSpectrum, noiseSpectrum, threshold) => {
+      if (!CONFIG.SPECTRAL_GATING_ENABLED || !noiseSpectrum) return true;
+
+      let passedBands = 0;
+      let totalBands = 0;
+
+      // Ses bandındaki frekansları kontrol et
+      const nyquist = CONFIG.SAMPLE_RATE / 2;
+      const binSize = nyquist / currentSpectrum.length;
+      const lowBin = Math.floor(CONFIG.VOICE_LOW_FREQ / binSize);
+      const highBin = Math.min(
+        Math.ceil(CONFIG.VOICE_HIGH_FREQ / binSize),
+        currentSpectrum.length - 1
+      );
+
+      for (let i = lowBin; i <= highBin; i++) {
+        const signalPower = Math.pow(10, currentSpectrum[i] / 10);
+        const noisePower = Math.pow(10, noiseSpectrum[i] / 10);
+
+        // Spektral çıkarma: Sinyal - (Gürültü * Faktör)
+        const cleanedPower =
+          signalPower - noisePower * CONFIG.SPECTRAL_SUBTRACTION_FACTOR;
+
+        // Eğer temizlenmiş sinyal, gürültünün en az MIN_SPECTRAL_RATIO katıysa geçerli
+        if (cleanedPower > noisePower * CONFIG.MIN_SPECTRAL_RATIO) {
+          passedBands++;
+        }
+        totalBands++;
+      }
+
+      // En az %60 frekans bandının geçmesi gerekiyor
+      return passedBands / totalBands > 0.6;
+    },
+    []
+  );
+
+  // 🔥 SES KALİTESİ SKORU (0-1 arası)
+  const calculateVoiceQuality = useCallback(
+    (rms, zcr, voicePower, windPower, threshold) => {
+      let quality = 0;
+
+      // 1. RMS Skoru (0-0.3)
+      const rmsScore = Math.min(rms / threshold, 1) * 0.3;
+      quality += rmsScore;
+
+      // 2. ZCR Skoru (0-0.2) - İnsan sesi aralığında mı?
+      const zcrScore =
+        zcr > CONFIG.ZCR_THRESHOLD_MIN && zcr < CONFIG.ZCR_THRESHOLD_MAX
+          ? 0.2
+          : 0;
+      quality += zcrScore;
+
+      // 3. Spektral Güç Skoru (0-0.3)
+      const spectralRatio = voicePower / (windPower + 0.001);
+      const spectralScore = Math.min(spectralRatio / 5, 1) * 0.3;
+      quality += spectralScore;
+
+      // 4. Threshold üstü skoru (0-0.2) - Daha toleranslı
+      const thresholdScore =
+        rms > threshold * 1.3
+          ? 0.2
+          : rms > threshold * 1.1
+          ? 0.15
+          : rms > threshold
+          ? 0.1
+          : 0;
+      quality += thresholdScore;
+
+      return Math.min(quality, 1);
+    },
+    []
+  );
+
+  // 🔥 ARKA PLAN GÜRÜLTÜ ÇIKARMA
+  const subtractBackgroundNoise = useCallback(
+    (currentRMS, currentZCR, threshold) => {
+      if (!noiseProfileRef.current) return { rms: currentRMS, zcr: currentZCR };
+
+      const noiseRMS = noiseProfileRef.current.rms;
+      const noiseZCR = noiseProfileRef.current.zcr;
+
+      // Gürültüyü çıkar
+      const cleanedRMS = Math.max(
+        0,
+        currentRMS - noiseRMS * CONFIG.SPECTRAL_SUBTRACTION_FACTOR
+      );
+      const cleanedZCR = Math.max(0, currentZCR - noiseZCR * 0.5);
+
+      return { rms: cleanedRMS, zcr: cleanedZCR };
+    },
+    []
+  );
+
+  // Darbe/klik sesi tespiti (klavye, mouse, vurma) - Çok Agresif (Mekanik Klavye için)
+  const detectImpactNoise = useCallback(
+    ({ rms, zcr, voicePower, highFreqPower, threshold }) => {
+      if (!CONFIG.IMPACT_DETECTION_ENABLED) return false;
+
+      // 1. Yüksek frekans oranı kontrolü (daha düşük eşik - daha fazla klavye sesini yakala)
+      const transientRatio = highFreqPower / (voicePower + 0.001);
+      const strongHighFreq = transientRatio > CONFIG.IMPACT_TRANSIENT_RATIO;
+
+      // 2. RMS kontrolü (daha düşük eşik - daha fazla klavye sesini yakala)
+      const loudEnough = rms > threshold * CONFIG.IMPACT_MIN_RMS_FACTOR;
+
+      // 3. ZCR kontrolü (daha düşük eşik - mekanik klavye seslerini yakala)
+      const zcrSpike = zcr > CONFIG.IMPACT_ZCR_THRESHOLD;
+
+      // 4. Voice band kontrolü (çok katı - voice bandı çok zayıf olmalı)
+      const weakVoiceBand =
+        voicePower === 0
+          ? true
+          : voicePower < highFreqPower * CONFIG.IMPACT_WEAK_VOICE_RATIO;
+
+      // 5. Yüksek frekans gücü kontrolü (mekanik klavye sesleri yüksek frekanslarda güçlü)
+      // Yüksek frekans gücü threshold'un üstünde olmalı
+      const hasStrongHighFreq = highFreqPower > threshold * 0.7; // Dengeli eşik
+
+      // 6. Yüksek sesli basışları filtrele - eğer RMS çok yüksekse ama voice power da varsa, bu muhtemelen konuşma
+      const veryLoud = rms > threshold * 1.8; // Çok yüksek ses
+      const hasSignificantVoice = voicePower > highFreqPower * 0.3; // Voice bandı önemli seviyede
+      
+      // Eğer çok yüksek sesli ama voice power da varsa, bu muhtemelen konuşma (klavye değil)
+      if (veryLoud && hasSignificantVoice) {
+        return false; // Bu muhtemelen konuşma, klavye değil
+      }
+
+      // 7. Ekstra kontrol: Eğer RMS çok yüksekse ama voice power yoksa ve ZCR çok yüksekse, bu klavye olabilir
+      // Ama eğer voice power biraz bile varsa, bu muhtemelen konuşma
+      const hasAnyVoice = voicePower > highFreqPower * 0.15; // Çok az bile voice power varsa
+      if (veryLoud && hasAnyVoice) {
+        return false; // Voice power varsa, bu klavye değil
+      }
+
+      // 8. Mekanik klavye için özel kontrol: Yüksek frekans güçlü VE voice band çok zayıf
+      const veryWeakVoice = voicePower < highFreqPower * CONFIG.IMPACT_WEAK_VOICE_RATIO;
+      
+      // Mekanik klavye tespiti: Yüksek frekans güçlü + voice band çok zayıf + ZCR yüksek
+      // Bu kombinasyon mekanik klavye için çok karakteristik
+      if (hasStrongHighFreq && veryWeakVoice && zcrSpike && loudEnough) {
+        return true; // Kesinlikle mekanik klavye
+      }
+      
+      // Alternatif kontrol 1: Yüksek frekans oranı çok yüksek + voice band zayıf
+      if (strongHighFreq && veryWeakVoice && loudEnough) {
+        return true; // Muhtemelen mekanik klavye
+      }
+      
+      // Alternatif kontrol 2: ZCR çok yüksek + voice band çok zayıf (mekanik klavye karakteristiği)
+      if (zcrSpike && veryWeakVoice && hasStrongHighFreq && loudEnough) {
+        return true; // Muhtemelen mekanik klavye
+      }
+
+      // Tüm kontroller geçmeli (dengeli kontrol - önceki ayara yakın)
+      return strongHighFreq && loudEnough && zcrSpike && weakVoiceBand;
+    },
+    []
+  );
+
+  // Ortalama spektrum hesaplama
+  const calculateAverageSpectrum = useCallback((spectrumArray) => {
+    if (spectrumArray.length === 0) return null;
+
+    const length = spectrumArray[0].length;
+    const average = new Float32Array(length);
+
+    for (let i = 0; i < length; i++) {
+      let sum = 0;
+      for (let j = 0; j < spectrumArray.length; j++) {
+        sum += spectrumArray[j][i];
+      }
+      average[i] = sum / spectrumArray.length;
+    }
+
+    return average;
+  }, []);
+
+  // Gürültü Seviyesi Hesaplama
+  const calculateNoiseLevel = useCallback(() => {
+    if (!noiseProfileRef.current) return 0;
+
+    // Profil ile mevcut sesi karşılaştır
+    // Bu basitleştirilmiş bir yaklaşım - gerçekte daha karmaşık olabilir
+    const profileRms = noiseProfileRef.current.rms;
+
+    // Gürültü seviyesi 0-1 arası (0 = temiz, 1 = çok gürültülü)
+    return Math.min(profileRms / CONFIG.MAX_RMS, 1);
+  }, []);
+
+  // DENGELİ Voice Activity Detection (Gürültüyü engelle ama konuşmayı geçir)
+  const detectVoiceActivity = useCallback(
+    (
+      rms,
+      zcr,
+      voiceSpectralPower,
+      windSpectralPower,
+      threshold,
+      frequencyData
+    ) => {
+      // === 1. ARKA PLAN GÜRÜLTÜ ÇIKARMA (Sadece aktifse) ===
+      let cleanedRMS = rms;
+      let cleanedZCR = zcr;
+
+      if (noiseSuppressionMode === "standard" && noiseProfiling && noiseProfileRef.current) {
+        const cleaned = subtractBackgroundNoise(rms, zcr, threshold);
+        cleanedRMS = cleaned.rms;
+        cleanedZCR = cleaned.zcr;
+      }
+
+      // === 2. KRISP BENZERİ EŞİK KONTROLÜ ===
+      // RNNoise modunda daha toleranslı eşik (sesleri erken kesmemek için)
+      const thresholdMultiplier = noiseSuppressionMode === "krisp" ? 1.0 : 1.1;
+      const balancedThreshold = threshold * thresholdMultiplier;
+      const rmsCheck = cleanedRMS > balancedThreshold;
+
+      // === 3. ZCR KONTROLÜ (Dengeli - insan sesi aralığı) ===
+      const zcrCheck =
+        cleanedZCR > CONFIG.ZCR_THRESHOLD_MIN &&
+        cleanedZCR < CONFIG.ZCR_THRESHOLD_MAX;
+
+      // === 4. SPEKTRAL GÜÇ KONTROLÜ (Krisp benzeri) ===
+      // Ses gücü, rüzgar gücünün üstünde olmalı (daha toleranslı - ilk kelimeyi kaçırmamak için)
+      const spectralRatio = voiceSpectralPower / (windSpectralPower + 0.001);
+      const spectralCheck = spectralRatio > CONFIG.MIN_SPECTRAL_RATIO;
+
+      // === 5. SPEKTRAL GATING (Sadece aktifse - Standart modda) ===
+      let spectralGatingCheck = true;
+      if (
+        noiseSuppressionMode === "standard" &&
+        CONFIG.SPECTRAL_GATING_ENABLED &&
+        noiseProfiling &&
+        noiseProfileRef.current?.spectralData
+      ) {
+        spectralGatingCheck = spectralGating(
+          frequencyData,
+          noiseProfileRef.current.spectralData,
+          threshold
+        );
+      }
+
+      // === 6. SES KALİTESİ SKORU ===
+      const voiceQuality = calculateVoiceQuality(
+        cleanedRMS,
+        cleanedZCR,
+        voiceSpectralPower,
+        windSpectralPower,
+        threshold
+      );
+      const qualityCheck = voiceQuality >= CONFIG.MIN_VOICE_QUALITY;
+
+      // === 7. ADAPTİF EŞİK (Eğer aktifse - daha toleranslı) ===
+      let adaptiveCheck = true;
+      if (noiseSuppressionMode === "standard" && adaptiveThreshold && noiseProfiling && noiseProfileRef.current) {
+        const noiseLevel = calculateNoiseLevel();
+        const adaptiveThresh = calculateAdaptiveThreshold(
+          threshold,
+          noiseLevel
+        );
+        // Adaptif eşiğin üstünde olmalı (1.1x - daha toleranslı)
+        adaptiveCheck = cleanedRMS > adaptiveThresh * 1.1;
+      }
+
+      // === TÜM KONTROLLER ===
+      const checks = [
+        rmsCheck,
+        zcrCheck,
+        spectralCheck,
+        spectralGatingCheck,
+        qualityCheck,
+        adaptiveCheck,
+      ].filter(Boolean);
+
+      // KRISP BENZERİ KONTROL (İlk kelimeyi kaçırmamak için optimize)
+      // RNNoise modunda daha toleranslı kontrol (sesleri erken kesmemek için)
+      if (noiseSuppressionMode === "krisp") {
+        // RNNoise modunda: İlk algılamada çok daha toleranslı (ilk harfi kaçırmamak için)
+        // Eğer ses threshold'un 0.8x üstündeyse bile geç (çok düşük eşik)
+        if (cleanedRMS > threshold * 0.8) {
+          // ZCR veya spektral kontrol varsa hemen geç
+          if (zcrCheck || spectralCheck) {
+            return true; // İlk harfi kaçırmamak için çok agresif
+          }
+          // Sadece RMS bile yeterli (ilk algılamada)
+          return true;
+        }
+        
+        // RNNoise modunda: RMS geçmezse direkt reddet
+        if (!rmsCheck) return false;
+        
+        // RNNoise modunda: Güçlü ses varsa (threshold'un 1.0x üstünde) sadece RMS yeterli
+        if (cleanedRMS > threshold * 1.0) {
+          return true; // Güçlü sesler için hemen geç
+        }
+        
+        // RNNoise modunda: ZCR veya spektral kontrol geçerse yeterli
+        if (zcrCheck || spectralCheck) {
+          return true; // İnsan sesi karakteristikleri varsa hemen geç
+        }
+        
+        // RNNoise modunda: En az 1 kontrol yeterli (RMS zaten geçti)
+        return true;
+      }
+      
+      // Standart mod: Orijinal mantık
+      // RMS check her zaman önemli
+      if (!rmsCheck) return false; // RMS geçmezse direkt reddet
+
+      // Eğer güçlü ses varsa (threshold'un 1.4x üstünde) sadece RMS yeterli
+      if (cleanedRMS > threshold * 1.4) {
+        return true; // Güçlü sesler için hemen geç (ilk kelimeyi kaçırmasın)
+      }
+
+      // Eğer iyi ZCR ve spektral oran varsa (insan sesi karakteristikleri) hemen geç
+      if (zcrCheck && spectralCheck) {
+        return true; // İnsan sesi karakteristikleri varsa hemen geç
+      }
+
+      return checks.length >= 2; // En az 2 kontrol (RMS + 1 tane daha)
+    },
+    [
+      noiseProfiling,
+      adaptiveThreshold,
+      calculateNoiseLevel,
+      calculateAdaptiveThreshold,
+      subtractBackgroundNoise,
+      spectralGating,
+      calculateVoiceQuality,
+    ]
+  );
+
+  // ========== TEMİZLİK ==========
   const cleanup = useCallback(() => {
     isCleaningUpRef.current = true;
 
@@ -53,77 +578,257 @@ export function useVoiceProcessor() {
       cloneStreamRef.current = null;
     }
 
-    if (audioContextRef.current?.state !== "closed") {
-      try {
-        sourceRef.current?.disconnect();
-        audioContextRef.current?.close();
-      } catch (e) {}
+    // Tüm audio node'ları temizle
+    [
+      sourceRef,
+      analyserRef,
+      highPassFilterRef,
+      lowPassFilterRef,
+      notchFilterRef,
+      compressorRef,
+      gainNodeRef,
+      workletNodeRef,
+      rnnoiseNodeRef,
+    ].forEach((ref) => {
+      if (ref.current) {
+        try {
+          ref.current.disconnect();
+        } catch (e) {
+          // Disconnect hatası - node zaten bağlı değilse normal, sessizce yoksay
+          if (process.env.NODE_ENV === "development") {
+            console.warn("Audio node disconnect error:", e);
+          }
+        }
+        ref.current = null;
+      }
+    });
+
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
-
-    audioContextRef.current = null;
-    sourceRef.current = null;
-    analyserRef.current = null;
   }, []);
 
-  // --- EŞİK HESAPLAMA (LOGARİTMİK) ---
-  // Slider'daki %15 ile %50 arasındaki farkı insan kulağına göre ayarlar
-  const calculateThreshold = useCallback((sliderValue) => {
-    // 0-100 arasını daha hassas bir RMS değerine dönüştür
-    // Minimum gürültü (sessiz oda): 0.002
-    // Maksimum gürültü (bağırma): 0.1
-    const min = 0.002;
-    const max = 0.1;
-    const normalized = Math.pow(sliderValue / 100, 2); // Üstel artış (daha hassas ayar için)
-    return min + normalized * (max - min);
-  }, []);
-
-  // --- ANA EFFECT ---
+  // ========== ANA EFFECT ==========
   useEffect(() => {
     if (!localParticipant) return;
 
     isCleaningUpRef.current = false;
     let originalStreamTrack = null;
+    let trackPublishedHandler = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 10;
 
     const setupProcessor = async () => {
+      // Önce cleanup yap
+      cleanup();
+      isCleaningUpRef.current = false;
+
       const trackPublication = localParticipant.getTrackPublication(
         Track.Source.Microphone
       );
 
-      if (!trackPublication?.track) return;
-
+      if (!trackPublication?.track) {
+        // Track henüz hazır değil, event listener ekle
+        if (trackPublishedHandler) {
+          localParticipant.off(RoomEvent.TrackPublished, trackPublishedHandler);
+        }
+        
+        trackPublishedHandler = (pub) => {
+          if (pub.source === Track.Source.Microphone && pub.track) {
+            // Track hazır oldu, setup'ı tekrar dene
+            setTimeout(() => {
+              if (!isCleaningUpRef.current && localParticipant) {
+                setupProcessor();
+              }
+            }, 200);
+            if (trackPublishedHandler) {
+              localParticipant.off(RoomEvent.TrackPublished, trackPublishedHandler);
+              trackPublishedHandler = null;
+            }
+          }
+        };
+        localParticipant.on(RoomEvent.TrackPublished, trackPublishedHandler);
+        
+        // Retry mekanizması - eğer track bir süre sonra hala hazır değilse tekrar dene
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          setTimeout(() => {
+            if (!isCleaningUpRef.current && localParticipant) {
+              const checkTrack = localParticipant.getTrackPublication(Track.Source.Microphone);
+              if (!checkTrack?.track && retryCount < MAX_RETRIES) {
+                setupProcessor();
+              }
+            }
+          }, 500);
+        }
+        return;
+      }
+      
+      retryCount = 0; // Track bulundu, retry sayacını sıfırla
+      
       const track = trackPublication.track;
+      
+      // Track kontrolleri
+      if (!track.mediaStreamTrack) {
+        console.warn("Track'in mediaStreamTrack'i yok!");
+        return;
+      }
+      
+      // Track'in audio track olduğunu kontrol et
+      if (track.mediaStreamTrack.kind !== "audio") {
+        console.warn("Track audio track değil!");
+        return;
+      }
+      
+      // Track'in readyState'ini kontrol et
+      if (track.mediaStreamTrack.readyState === "ended") {
+        console.warn("Track zaten sonlandırılmış!");
+        return;
+      }
+      
       originalStreamTrack = track.mediaStreamTrack;
 
       try {
-        // 1. AudioContext Başlat
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioCtx();
-        audioContextRef.current = ctx;
+        // 1. AudioContext Oluştur
+        if (!audioContextRef.current) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          audioContextRef.current = new AudioCtx({
+            sampleRate: CONFIG.SAMPLE_RATE,
+            latencyHint: "interactive",
+          });
+        }
+        const ctx = audioContextRef.current;
 
         if (ctx.state === "suspended") {
           await ctx.resume();
         }
 
-        // 2. Analiz için Stream Klonla (Orijinal sesi bozmamak için)
-        const cloneStream = new MediaStream([originalStreamTrack.clone()]);
-        cloneStreamRef.current = cloneStream;
+        // 2. Stream Klonlama
+        const cloneStream = originalStreamTrack.clone();
+        cloneStreamRef.current = new MediaStream([cloneStream]);
 
-        // 3. Audio Zinciri
-        const source = ctx.createMediaStreamSource(cloneStream);
-        const analyser = ctx.createAnalyser();
-
-        analyser.fftSize = CONFIG.FFT_SIZE;
-        analyser.smoothingTimeConstant = CONFIG.SMOOTHING; // Sesi yumuşat
-
-        // Bağlantı: Source -> Analyser (Hoparlöre vermiyoruz, sadece analiz)
-        source.connect(analyser);
-
+        // 3. GELİŞMİŞ AUDIO ZİNCİRİ OLUŞTUR
+        const source = ctx.createMediaStreamSource(cloneStreamRef.current);
         sourceRef.current = source;
+
+        let currentNode = source;
+
+        // RNNOISE AI GÜRÜLTÜ BASTIRMA (Krisp modu)
+        // NOT: RNNoise sadece gürültü bastırma yapar, VAD yapmaz
+        // VAD sistemimiz RNNoise'dan SONRA çalışacak (RNNoise çıkışını analiz edecek)
+        // Bu sayede hem gürültü bastırma hem de VAD çalışır
+        if (noiseSuppressionMode === "krisp" && aiNoiseSuppression) {
+          try {
+            // RNNoise modülünü dinamik olarak yükle (SSR'dan kaçınmak için)
+            // AudioWorkletNode sadece tarayıcıda mevcut, SSR'da yüklenmemeli
+            if (!rnnoiseModuleRef.current) {
+              rnnoiseModuleRef.current = await import("simple-rnnoise-wasm");
+            }
+            const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModuleRef.current;
+            
+            // RNNoise'u kaydet ve yükle
+            // Next.js için WASM ve worklet dosyalarını public klasöründen yükle
+            const wasmUrl = "/rnnoise.wasm";
+            const workletUrl = "/rnnoise.worklet.js";
+            const assets = await rnnoise_loadAssets({
+              scriptSrc: workletUrl,
+              moduleSrc: wasmUrl
+            });
+            await RNNoiseNode.register(ctx, assets);
+            const rnnoiseNode = new RNNoiseNode(ctx);
+            currentNode.connect(rnnoiseNode);
+            currentNode = rnnoiseNode;
+            rnnoiseNodeRef.current = rnnoiseNode;
+            // VAD durumunu güncelle (opsiyonel, sadece bilgi için)
+            rnnoiseNode.update();
+            if (process.env.NODE_ENV === "development") {
+              console.log("RNNoise AI gürültü bastırma aktif (Krisp modu) - VAD RNNoise çıkışını analiz ediyor");
+            }
+          } catch (error) {
+            // RNNoise yüklenemezse mevcut sisteme devam et
+            console.warn("RNNoise yüklenemedi, Standart moda geçiliyor:", error);
+            rnnoiseNodeRef.current = null;
+            rnnoiseModuleRef.current = null; // Hata durumunda modülü temizle
+            // Hata durumunda Standart moda geç
+            if (settings?.setNoiseSuppressionMode) {
+              settings.setNoiseSuppressionMode("standard");
+            }
+          }
+        }
+
+        // HIGH-PASS FILTER (Düşük frekanslı gürültüleri kes - Dengeli)
+        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
+        if (noiseSuppressionMode === "standard" && (advancedNoiseReduction || spectralFiltering)) {
+          const highPass = ctx.createBiquadFilter();
+          highPass.type = "highpass";
+          highPass.frequency.value = CONFIG.VOICE_LOW_FREQ; // 100Hz altını kes (bass gürültüleri)
+          highPass.Q.value = 0.8; // Dengeli filtre
+          currentNode.connect(highPass);
+          currentNode = highPass;
+          highPassFilterRef.current = highPass;
+        }
+
+        // LOW-PASS FILTER (Yüksek frekanslı gürültüleri kes - Dengeli)
+        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
+        if (noiseSuppressionMode === "standard" && (advancedNoiseReduction || spectralFiltering)) {
+          const lowPass = ctx.createBiquadFilter();
+          lowPass.type = "lowpass";
+          lowPass.frequency.value = CONFIG.VOICE_HIGH_FREQ; // 7kHz üstünü kes (tiz gürültüleri)
+          lowPass.Q.value = 0.8; // Dengeli filtre
+          currentNode.connect(lowPass);
+          currentNode = lowPass;
+          lowPassFilterRef.current = lowPass;
+        }
+
+        // NOTCH FILTER (50/60Hz güç hattı gürültüsü)
+        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
+        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+          const notch = ctx.createBiquadFilter();
+          notch.type = "notch";
+          notch.frequency.value = 50; // Türkiye'de 50Hz
+          notch.Q.value = 10;
+          currentNode.connect(notch);
+          currentNode = notch;
+          notchFilterRef.current = notch;
+        }
+
+        // DYNAMIC RANGE COMPRESSOR (Ses seviyesini dengeler)
+        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
+        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+          const compressor = ctx.createDynamicsCompressor();
+          compressor.threshold.value = -24;
+          compressor.knee.value = 30;
+          compressor.ratio.value = 12;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.25;
+          currentNode.connect(compressor);
+          currentNode = compressor;
+          compressorRef.current = compressor;
+        }
+
+        // GAIN NODE (Sabit kazanç - gereksiz ayar kaldırıldı)
+        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
+        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+          const gain = ctx.createGain();
+          gain.gain.value = 1.0; // Sabit kazanç
+          currentNode.connect(gain);
+          currentNode = gain;
+          gainNodeRef.current = gain;
+        }
+
+        // ANALYSER (Ses analizi için)
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = CONFIG.FFT_SIZE;
+        analyser.smoothingTimeConstant = CONFIG.SPECTRAL_SMOOTHING;
+        currentNode.connect(analyser);
         analyserRef.current = analyser;
 
-        const dataArray = new Uint8Array(analyser.fftSize);
+        // 4. VERİ ARRAY'LERİ
+        const timeDataArray = new Uint8Array(analyser.fftSize);
+        const frequencyDataArray = new Float32Array(analyser.frequencyBinCount);
 
-        // --- SES KONTROL DÖNGÜSÜ ---
+        // 5. SES KONTROL DÖNGÜSÜ (Gelişmiş)
         const checkVolume = () => {
           if (
             isCleaningUpRef.current ||
@@ -132,66 +837,275 @@ export function useVoiceProcessor() {
           )
             return;
 
-          analyserRef.current.getByteTimeDomainData(dataArray);
+          // Time domain verisi (RMS ve ZCR için)
+          analyserRef.current.getByteTimeDomainData(timeDataArray);
 
-          // RMS (Root Mean Square) Hesaplama - Sesin gücü
-          let sumSquares = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const normalized = (dataArray[i] - 128) / 128.0;
-            sumSquares += normalized * normalized;
+          // Frequency domain verisi (Spektral analiz için)
+          analyserRef.current.getFloatFrequencyData(frequencyDataArray);
+          spectralDataRef.current = frequencyDataArray;
+
+          // === SES ANALİZİ ===
+
+          // 1. RMS Hesaplama
+          const rms = calculateRMS(timeDataArray);
+
+          // RMS Yumuşatma
+          smoothedRmsRef.current =
+            smoothedRmsRef.current * (1 - CONFIG.RMS_SMOOTHING) +
+            rms * CONFIG.RMS_SMOOTHING;
+
+          // 2. Zero-Crossing Rate
+          const zcr = calculateZCR(timeDataArray);
+
+          // 3. Spektral Güç Hesaplama
+          const voicePower = calculateSpectralPower(
+            frequencyDataArray,
+            CONFIG.VOICE_LOW_FREQ,
+            CONFIG.VOICE_HIGH_FREQ
+          );
+
+          const windPower = calculateSpectralPower(
+            frequencyDataArray,
+            CONFIG.WIND_LOW_FREQ,
+            CONFIG.WIND_HIGH_FREQ
+          );
+
+          const impactHighFreqPower = calculateSpectralPower(
+            frequencyDataArray,
+            CONFIG.IMPACT_HIGH_FREQ_START,
+            CONFIG.IMPACT_HIGH_FREQ_END
+          );
+
+          // 4. Temel Eşik Hesaplama
+          let threshold = calculateThreshold(voiceThreshold);
+
+          // 5. Adaptif Eşik (eğer aktifse - sadece Standart modda)
+          if (noiseSuppressionMode === "standard" && adaptiveThreshold && noiseProfiling) {
+            const noiseLevel = calculateNoiseLevel();
+            threshold = calculateAdaptiveThreshold(threshold, noiseLevel);
+            adaptiveThresholdRef.current = threshold;
           }
-          const rms = Math.sqrt(sumSquares / dataArray.length);
 
-          const threshold = calculateThreshold(voiceThreshold);
-          const currentRms = rms;
+          // 6. Gürültü Profili Güncelleme (sadece çok sessizlikte - Standart modda)
+          if (
+            noiseSuppressionMode === "standard" &&
+            noiseProfiling &&
+            smoothedRmsRef.current < CONFIG.NOISE_PROFILE_THRESHOLD
+          ) {
+            updateNoiseProfile(
+              smoothedRmsRef.current,
+              zcr,
+              frequencyDataArray,
+              threshold
+            );
+          }
 
-          // Eşiği geçti mi?
-          if (currentRms > threshold) {
+          // 7. Darbe gürültüsü tespiti (klavye/mouse/vurma) - ÇOK AGRESİF
+          const potentialImpact = detectImpactNoise({
+            rms: smoothedRmsRef.current,
+            zcr,
+            voicePower,
+            highFreqPower: impactHighFreqPower,
+            threshold,
+          });
+
+          const now = Date.now();
+          if (potentialImpact) {
+            impactBlockTimestampRef.current = now;
+            // Darbe gürültüsü sırasında mikrofonu hemen kapat
+            if (originalStreamTrack.enabled) {
+              originalStreamTrack.enabled = false;
+            }
+            // Darbe gürültüsü tespit edildiğinde ses algılamayı sıfırla
+            firstVoiceDetectionTimeRef.current = 0;
+            consecutiveVoiceDetectionsRef.current = 0;
+            lastSpeakingTimeRef.current = 0;
+          }
+          const impactActive =
+            impactBlockTimestampRef.current &&
+            now - impactBlockTimestampRef.current < CONFIG.IMPACT_HOLD_MS;
+
+          // 8. Voice Activity Detection (Çok Katı - Krisp Benzeri)
+          const isSpeaking = !impactActive && detectVoiceActivity(
+            smoothedRmsRef.current,
+            zcr,
+            voicePower,
+            windPower,
+            threshold,
+            frequencyDataArray
+          );
+
+          // === DENGELİ MİKROFON KONTROLÜ ===
+
+          if (isSpeaking) {
+            // Konuşma başladığında darbe blokajını sıfırla
+            impactBlockTimestampRef.current = 0;
+            // İlk ses algılanması
+            if (firstVoiceDetectionTimeRef.current === 0) {
+              firstVoiceDetectionTimeRef.current = Date.now();
+              consecutiveVoiceDetectionsRef.current = 0;
+            }
+
+            consecutiveVoiceDetectionsRef.current++;
+            consecutiveSilenceDetectionsRef.current = 0;
             lastSpeakingTimeRef.current = Date.now();
 
-            // Eğer kapalıysa hemen aç (ATTACK)
-            if (!isSpeakingRef.current) {
-              isSpeakingRef.current = true;
-              if (!originalStreamTrack.enabled) {
-                originalStreamTrack.enabled = true;
+            const voiceDuration =
+              Date.now() - firstVoiceDetectionTimeRef.current;
+
+            // === AKILLI SES AÇMA (En başı kesmemek için optimize) ===
+            // RNNoise modunda çok daha agresif açılma (ilk harfi kaçırmamak için)
+
+            // 1. İnsan sesi karakteristikleri kontrolü (ZCR + Spektral)
+            const hasGoodZCR =
+              zcr > CONFIG.ZCR_THRESHOLD_MIN && zcr < CONFIG.ZCR_THRESHOLD_MAX;
+            const hasGoodSpectralRatio =
+              voicePower > windPower * CONFIG.MIN_SPECTRAL_RATIO;
+            const hasVoiceCharacteristics = hasGoodZCR && hasGoodSpectralRatio;
+
+            // 2. Güçlü ses kontrolü (RNNoise modunda daha düşük eşik)
+            const strongVoiceMultiplier = noiseSuppressionMode === "krisp" ? 0.9 : 1.35;
+            const isStrongVoice = smoothedRmsRef.current > threshold * strongVoiceMultiplier;
+
+            // 3. Attack time geçti mi? (RNNoise modunda çok daha kısa)
+            const attackTime = noiseSuppressionMode === "krisp" 
+              ? CONFIG.ATTACK_TIME_RNNOISE 
+              : CONFIG.ATTACK_TIME;
+            const hasAttackTime = voiceDuration >= attackTime;
+
+            // 4. Minimum süre geçti mi? (RNNoise modunda çok daha kısa)
+            const minVoiceDuration = noiseSuppressionMode === "krisp" 
+              ? CONFIG.MIN_VOICE_DURATION_RNNOISE 
+              : CONFIG.MIN_VOICE_DURATION;
+            const hasMinDuration = voiceDuration >= minVoiceDuration;
+
+            // RNNoise modunda: Çok daha agresif açılma (ilk harfi kaçırmamak için)
+            if (noiseSuppressionMode === "krisp") {
+              // RNNoise modunda: Ses algılandığında HEMEN aç (ilk harfi kaçırmamak için)
+              // Sadece çok düşük sesler için bekle
+              if (smoothedRmsRef.current > threshold * 0.7 || hasVoiceCharacteristics || hasAttackTime) {
+                if (!originalStreamTrack.enabled) {
+                  originalStreamTrack.enabled = true;
+                }
+              }
+            } else {
+              // Standart mod: Orijinal mantık
+              // KRISP BENZERİ HEMEN AÇMA KOŞULLARI (İlk kelimeyi kaçırmamak için):
+              // - İnsan sesi karakteristikleri var (ZCR + Spektral) → HEMEN AÇ
+              // - VEYA güçlü ses (threshold'un 1.35x üstünde) → HEMEN AÇ
+              // - VEYA attack time geçti → HEMEN AÇ
+              // - VEYA minimum süre geçti → HEMEN AÇ
+              if (
+                hasVoiceCharacteristics || // İnsan sesi karakteristikleri varsa hemen aç
+                isStrongVoice || // Güçlü ses varsa hemen aç
+                hasAttackTime || // Attack time geçtiyse hemen aç
+                hasMinDuration // Minimum süre geçtiyse hemen aç
+              ) {
+                // Mikrofonu aç (ilk kelimeyi kaçırmamak için hemen)
+                if (!originalStreamTrack.enabled) {
+                  originalStreamTrack.enabled = true;
+                }
+              } else {
+                // Henüz açma koşulları sağlanmadı
+                // Çok kısa sesler (< 20ms) için kapalı tut (gürültü)
+                if (voiceDuration < CONFIG.MAX_SHORT_NOISE_DURATION) {
+                  // Çok kısa ses - muhtemelen gürültü, kapalı tut
+                } else {
+                  // Attack time'a yaklaşıyorsa aç (yakında geçecek)
+                  if (!originalStreamTrack.enabled) {
+                    originalStreamTrack.enabled = true;
+                  }
+                }
               }
             }
           } else {
-            // Ses eşiğin altında
-            // Konuşma bitti mi kontrol et (RELEASE)
+            // Ses algılanmadı
+            consecutiveSilenceDetectionsRef.current++;
+
+            // Ses kesildi, minimum süre kontrolünü sıfırla
+            if (firstVoiceDetectionTimeRef.current > 0) {
+              const voiceDuration =
+                Date.now() - firstVoiceDetectionTimeRef.current;
+
+              // Eğer çok kısa bir ses olduysa (gürültü), sıfırla
+              if (voiceDuration < CONFIG.MAX_SHORT_NOISE_DURATION) {
+                firstVoiceDetectionTimeRef.current = 0;
+                consecutiveVoiceDetectionsRef.current = 0;
+              }
+            }
+
+            // Ses kesildiğinde bekle (RELEASE_TIME)
+            // RNNoise modunda daha uzun bekleme süresi (sesleri erken kesmemek için)
+            const releaseTime = noiseSuppressionMode === "krisp" 
+              ? CONFIG.RELEASE_TIME_RNNOISE 
+              : CONFIG.RELEASE_TIME;
             const timeSinceLastSpeak = Date.now() - lastSpeakingTimeRef.current;
 
+            // Ardışık sessizlik algılaması veya release time geçtiyse kapat
             if (
-              isSpeakingRef.current &&
-              timeSinceLastSpeak > CONFIG.RELEASE_TIME
+              consecutiveSilenceDetectionsRef.current >= 8 ||
+              timeSinceLastSpeak > releaseTime
             ) {
-              isSpeakingRef.current = false;
+              firstVoiceDetectionTimeRef.current = 0;
+              consecutiveVoiceDetectionsRef.current = 0;
+
               if (originalStreamTrack.enabled) {
                 originalStreamTrack.enabled = false;
               }
             }
-            // Eğer süre dolmadıysa açık kalmaya devam etsin (Nefes alma araları vb.)
           }
         };
 
-        // Döngüyü başlat
+        // Döngüyü başlat (10ms aralıklarla - çok hızlı tepki)
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(checkVolume, CONFIG.CHECK_INTERVAL);
+
+        // İlk kontrolü hemen yap
+        checkVolume();
       } catch (err) {
-        console.error("Voice Processor Error:", err);
-        // Hata olursa mikrofonu açık bırak, kullanıcı mağdur olmasın
-        if (originalStreamTrack) originalStreamTrack.enabled = true;
+        console.error("Gelişmiş Voice Processor Hatası:", err);
+        if (originalStreamTrack) {
+          originalStreamTrack.enabled = true;
+        }
       }
     };
 
-    // İlk açılışta mikrofonun "ısınması" için kısa bir gecikme
-    const initTimer = setTimeout(setupProcessor, 1000);
+    // Hemen setup'ı dene (delay olmadan)
+    setupProcessor();
+    
+    // Eğer track henüz hazır değilse, bir süre sonra tekrar dene
+    const retryTimer = setTimeout(() => {
+      if (!isCleaningUpRef.current && localParticipant) {
+        const trackPublication = localParticipant.getTrackPublication(
+          Track.Source.Microphone
+        );
+        if (!trackPublication?.track) {
+          setupProcessor();
+        }
+      }
+    }, CONFIG.INIT_DELAY);
 
     return () => {
-      clearTimeout(initTimer);
+      clearTimeout(retryTimer);
+      if (trackPublishedHandler && localParticipant) {
+        localParticipant.off(RoomEvent.TrackPublished, trackPublishedHandler);
+      }
       cleanup();
-      // Component unmount olduğunda mikrofonu açık bırak ki diğer sayfalarda çalışsın
-      if (originalStreamTrack) originalStreamTrack.enabled = true;
+      if (originalStreamTrack) {
+        originalStreamTrack.enabled = true;
+      }
     };
-  }, [localParticipant, voiceThreshold, cleanup, calculateThreshold]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    localParticipant,
+    voiceThreshold,
+    noiseSuppressionMode,
+    advancedNoiseReduction,
+    adaptiveThreshold,
+    noiseProfiling,
+    spectralFiltering,
+    aiNoiseSuppression,
+    // Callback'ler useCallback ile memoize edildiği için dependency'ye eklenmelerine gerek yok
+    // Ama ayarlar değiştiğinde processor yeniden başlatılmalı, bu yüzden ayarları dependency'de tutuyoruz
+  ]);
 }

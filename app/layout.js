@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata = {
   title: "Netrex",
@@ -8,7 +9,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-gray-900 text-white overflow-hidden">{children}</body>
+      <body className="bg-gray-900 text-white overflow-hidden">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   collection,
   onSnapshot,
@@ -17,12 +17,32 @@ import {
   Trash2,
   Shield,
   ChevronDown,
+  Loader2,
+  HelpCircle,
 } from "lucide-react";
 import { useChatStore } from "@/src/store/chatStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { toast } from "sonner";
+import {
+  CHANNEL_NAME_MAX_LENGTH,
+  CHANNEL_NAME_MIN_LENGTH,
+  ROOM_NAME_MAX_LENGTH,
+  ROOM_NAME_MIN_LENGTH,
+} from "@/src/constants/appConfig";
+import ConfirmDialog from "./ConfirmDialog";
+import ShortcutHelpModal from "./ShortcutHelpModal";
 
-// BURAYA KENDİ FIREBASE UID'Nİ YAZACAKSIN
-const ADMIN_UID = "BURAYA_KENDI_FIREBASE_UID_YAZ";
+const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
+
+const sanitizeChannelNameInput = (value) =>
+  value
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-_]/g, "")
+    .slice(0, CHANNEL_NAME_MAX_LENGTH);
+
+const sanitizeRoomNameInput = (value) =>
+  value.replace(/[<>]/g, "").slice(0, ROOM_NAME_MAX_LENGTH);
 
 export default function RoomList({
   onJoin,
@@ -36,10 +56,10 @@ export default function RoomList({
 
   const {
     textChannels,
-    fetchTextChannels,
     createTextChannel,
     deleteTextChannel,
     unreadCounts, // YENİ: Okunmamış mesaj sayıları
+    startTextChannelListener,
   } = useChatStore();
 
   const { profileColor } = useSettingsStore();
@@ -49,7 +69,64 @@ export default function RoomList({
   const [showVoiceRoomModal, setShowVoiceRoomModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
+  const [channelError, setChannelError] = useState("");
+  const [roomError, setRoomError] = useState("");
+  const [globalError, setGlobalError] = useState("");
   const [hoveredChannel, setHoveredChannel] = useState(null);
+  const [showShortcutModal, setShowShortcutModal] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    confirmLabel: "",
+    variant: "danger",
+    action: null,
+    successMessage: "",
+    errorMessage: "",
+    itemToDelete: null, // Silinecek öğenin adı
+  });
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const openConfirmDialog = useCallback((config) => {
+    setConfirmDialog({
+      open: true,
+      variant: "danger",
+      confirmLabel: "Onayla",
+      successMessage: "",
+      errorMessage: "",
+      action: null,
+      ...config,
+    });
+  }, []);
+
+  const closeConfirmDialog = useCallback(() => {
+    setConfirmLoading(false);
+    setConfirmDialog((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const handleConfirmDialog = useCallback(async () => {
+    if (!confirmDialog.action) {
+      closeConfirmDialog();
+      return;
+    }
+    setConfirmLoading(true);
+    try {
+      await confirmDialog.action();
+      if (confirmDialog.successMessage) {
+        toast.success(confirmDialog.successMessage);
+      }
+      closeConfirmDialog();
+    } catch (error) {
+      console.error("Confirm action error:", error);
+      toast.error(confirmDialog.errorMessage || "İşlem tamamlanamadı.");
+      setConfirmLoading(false);
+    }
+  }, [confirmDialog, closeConfirmDialog]);
+
+  const isAdmin = useMemo(
+    () => Boolean(ADMIN_UID && user?.uid === ADMIN_UID),
+    [user?.uid]
+  );
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
@@ -62,42 +139,63 @@ export default function RoomList({
       setLoading(false);
     });
 
-    fetchTextChannels();
-    const refreshInterval = setInterval(() => {
-      fetchTextChannels();
-    }, 5000);
+    const stopTextChannelListener = startTextChannelListener();
 
     return () => {
       unsubscribe();
-      clearInterval(refreshInterval);
+      if (typeof stopTextChannelListener === "function") {
+        stopTextChannelListener();
+      }
     };
+  }, [startTextChannelListener]);
+
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "/") {
+        event.preventDefault();
+        setShowShortcutModal(true);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
 
   // --- ODA OLUŞTURMA ---
   const createRoom = async () => {
-    if (user?.uid !== ADMIN_UID) {
-      alert("Bu işlem için yetkiniz yok.");
+    if (!isAdmin) {
+      setGlobalError("Bu işlem için yetkiniz yok.");
+      toast.error("Bu işlem için yetkiniz yok.");
       return;
     }
+    setRoomError("");
     setShowVoiceRoomModal(true);
   };
 
   const handleCreateRoomSubmit = async (e) => {
     e.preventDefault();
-    if (!newRoomName.trim()) return;
+    const sanitizedName = sanitizeRoomNameInput(newRoomName.trim());
+    if (sanitizedName.length < ROOM_NAME_MIN_LENGTH) {
+      setRoomError("Kanal adı en az 3 karakter olmalıdır.");
+      return;
+    }
 
     setIsCreating(true);
+    setRoomError("");
     try {
       await addDoc(collection(db, "rooms"), {
-        name: newRoomName.trim(),
+        name: sanitizedName,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });
       setNewRoomName("");
       setShowVoiceRoomModal(false);
+      toast.success(`"${sanitizedName}" ses kanalı oluşturuldu.`);
     } catch (error) {
       console.error("Oda oluşturma hatası:", error);
-      alert("Oda oluşturulamadı.");
+      const message =
+        error?.message || "Oda oluşturulamadı. Lütfen tekrar deneyin.";
+      setRoomError(message);
+      toast.error(message);
     }
     setIsCreating(false);
   };
@@ -109,66 +207,113 @@ export default function RoomList({
 
   const handleCreateTextChannelSubmit = async (e) => {
     e.preventDefault();
-    if (!newChannelName.trim()) return;
+    const sanitizedName = sanitizeChannelNameInput(newChannelName);
+    if (!sanitizedName || sanitizedName.length < CHANNEL_NAME_MIN_LENGTH) {
+      setChannelError("Kanal adı en az 3 karakter olmalıdır.");
+      return;
+    }
 
     setIsCreatingTextChannel(true);
-    const result = await createTextChannel(newChannelName.trim(), user?.uid);
+    setChannelError("");
+    const result = await createTextChannel(sanitizedName, user?.uid);
     if (!result.success && result.error) {
-      alert(result.error);
+      setChannelError(result.error);
+      toast.error(result.error);
     } else {
-      fetchTextChannels();
       setNewChannelName("");
       setShowTextChannelModal(false);
+      toast.success(`#${sanitizedName} kanalı oluşturuldu.`);
     }
     setIsCreatingTextChannel(false);
   };
 
   // --- KANAL SİLME ---
-  const handleDeleteChannel = async (e, channelId) => {
+  const handleDeleteChannel = (e, channel) => {
     e.stopPropagation();
-    if (window.confirm("Bu kanalı silmek istediğinize emin misiniz?")) {
-      await deleteTextChannel(channelId);
-      fetchTextChannels();
-    }
+    openConfirmDialog({
+      title: "Metin Kanalını Sil",
+      description: `Bu kanalı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+      confirmLabel: "Kanalı Sil",
+      variant: "danger",
+      itemToDelete: `#${channel.name}`,
+      successMessage: `#${channel.name} kanalı silindi.`,
+      errorMessage: "Kanal silinemedi. Lütfen tekrar deneyin.",
+      action: async () => {
+        const result = await deleteTextChannel(channel.id);
+        if (!result.success) {
+          throw new Error(result.error || "Kanal silinemedi.");
+        }
+      },
+    });
   };
 
   // --- ODA SİLME ---
-  const handleDeleteRoom = async (e, roomId) => {
+  const handleDeleteRoom = (e, room) => {
     e.stopPropagation();
-    if (window.confirm("Bu ses odasını silmek istediğinize emin misiniz?")) {
-      try {
-        await deleteDoc(doc(db, "rooms", roomId));
-      } catch (error) {
-        console.error("Oda silinemedi:", error);
-      }
-    }
+    openConfirmDialog({
+      title: "Ses Kanalını Sil",
+      description: `Bu ses kanalını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      confirmLabel: "Kanalı Sil",
+      variant: "danger",
+      itemToDelete: room.name,
+      successMessage: `"${room.name}" ses kanalı silindi.`,
+      errorMessage: "Ses kanalı silinemedi.",
+      action: async () => {
+        await deleteDoc(doc(db, "rooms", room.id));
+      },
+    });
   };
 
-  const showCreateButton = user?.uid === ADMIN_UID;
+  const showCreateButton = isAdmin;
 
   return (
-    <div className="w-60 bg-[#2b2d31] h-full flex flex-col flex-shrink-0 select-none border-r border-[#1f2023]">
+    <div className="w-60 bg-gradient-to-b from-[#25272a] to-[#2b2d31] h-full flex flex-col flex-shrink-0 select-none border-r border-[#1f2023]/50 shadow-soft backdrop-blur-sm">
       {/* 1. ÜST BAŞLIK */}
-      <div className="h-12 border-b border-[#1f2023] flex items-center justify-between px-4 shadow-sm hover:bg-[#35373c] transition-colors cursor-pointer group mb-2">
-        <h1 className="font-bold text-white text-[15px] truncate">
+      <div className="h-14 border-b border-[#1f2023]/50 flex items-center justify-between px-4 shadow-soft hover:bg-[#35373c]/50 transition-all duration-300 cursor-pointer group hover-lift">
+        <h1 className="font-bold text-white text-[15px] truncate tracking-tight">
           Netrex Client
         </h1>
-        {showCreateButton && <Shield size={14} className="text-[#23a559]" />}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowShortcutModal(true)}
+            className="text-[#949ba4] hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-[#3a3b40]/80 hover:scale-110"
+            title="Klavye kısayolları (Ctrl + /)"
+          >
+            <HelpCircle size={16} />
+          </button>
+          {showCreateButton && (
+            <div className="relative">
+              <Shield size={14} className="text-[#23a559] drop-shadow-[0_0_4px_rgba(35,165,89,0.5)]" title="Yönetici" />
+              <div className="absolute inset-0 bg-[#23a559]/20 rounded-full blur-sm animate-pulse-slow"></div>
+            </div>
+          )}
+        </div>
       </div>
+      {globalError && (
+        <div className="mx-4 mb-3 px-4 py-3 rounded-xl glass-strong border border-red-500/30 text-red-300 text-xs font-medium flex items-center justify-between gap-4 animate-fadeIn shadow-soft">
+          <span>{globalError}</span>
+          <button
+            onClick={() => setGlobalError("")}
+            className="text-red-300 hover:text-white hover:scale-110 transition-all duration-200"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* 2. KANALLAR LİSTESİ */}
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-6 pt-2">
         {/* --- SES KANALLARI --- */}
         <div>
-          <div className="flex items-center justify-between px-1 mb-1 group text-[#949ba4] hover:text-[#dbdee1] transition-colors">
-            <div className="flex items-center gap-0.5 text-[11px] font-bold uppercase tracking-wide cursor-pointer hover:text-white">
-              <ChevronDown size={12} strokeWidth={3} />
+          <div className="flex items-center justify-between px-2 mb-2 group text-[#949ba4] hover:text-[#dbdee1] transition-all duration-200">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+              <ChevronDown size={12} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
               <span className="ml-0.5">Ses Kanalları</span>
             </div>
             {showCreateButton && (
               <button
                 onClick={createRoom}
-                className="hover:text-white transition-colors p-0.5 rounded"
+                className="hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-[#3a3b40]/60 hover:scale-110 hover:shadow-soft"
                 title="Ses Kanalı Oluştur"
               >
                 <Plus size={14} strokeWidth={3} />
@@ -188,7 +333,7 @@ export default function RoomList({
                   onClick={() => onJoin(room.name)}
                   onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
                   onMouseLeave={() => setHoveredChannel(null)}
-                  className="group flex items-center justify-between px-2 py-[6px] rounded-[4px] hover:bg-[#35373c] hover:text-[#dbdee1] text-[#949ba4] cursor-pointer transition-all active:bg-[#3f4147]"
+                  className="group flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#35373c]/80 hover:text-[#dbdee1] text-[#949ba4] cursor-pointer transition-all duration-200 active:bg-[#3f4147] hover-lift hover:shadow-soft"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <Volume2
@@ -200,10 +345,10 @@ export default function RoomList({
                     </span>
                   </div>
 
-                  {showCreateButton &&
-                    hoveredChannel === `voice-${room.id}` && (
-                      <button
-                        onClick={(e) => handleDeleteRoom(e, room.id)}
+                    {showCreateButton &&
+                      hoveredChannel === `voice-${room.id}` && (
+                        <button
+                          onClick={(e) => handleDeleteRoom(e, room)}
                         className="text-[#949ba4] hover:text-[#dbdee1] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Odayı Sil"
                       >
@@ -249,11 +394,11 @@ export default function RoomList({
                     onMouseEnter={() => setHoveredChannel(`text-${channel.id}`)}
                     onMouseLeave={() => setHoveredChannel(null)}
                     className={`
-                      group flex items-center justify-between px-2 py-[6px] rounded-[4px] cursor-pointer transition-all active:bg-[#3f4147]
+                      group flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 active:bg-[#3f4147] hover-lift hover:shadow-soft
                       ${
                         hasUnread
-                          ? "bg-[#35373c] text-white"
-                          : "text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]"
+                          ? "glass-strong text-white shadow-glow"
+                          : "text-[#949ba4] hover:bg-[#35373c]/80 hover:text-[#dbdee1]"
                       }
                     `}
                   >
@@ -282,12 +427,11 @@ export default function RoomList({
                     )}
 
                     {/* Silme Butonu */}
-                    {(channel.createdBy === user?.uid ||
-                      user?.uid === ADMIN_UID) &&
+                    {(channel.createdBy === user?.uid || isAdmin) &&
                       hoveredChannel === `text-${channel.id}` &&
                       !hasUnread && (
                         <button
-                          onClick={(e) => handleDeleteChannel(e, channel.id)}
+                          onClick={(e) => handleDeleteChannel(e, channel)}
                           className="text-[#949ba4] hover:text-[#dbdee1] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Kanalı Sil"
                         >
@@ -375,21 +519,23 @@ export default function RoomList({
                   type="text"
                   value={newChannelName}
                   onChange={(e) =>
-                    setNewChannelName(
-                      e.target.value.toLowerCase().replace(/\s+/g, "-")
-                    )
+                    setNewChannelName(sanitizeChannelNameInput(e.target.value))
                   }
                   placeholder="yeni-kanal"
                   className="w-full bg-[#1e1f22] text-[#dbdee1] p-2.5 pl-8 rounded border-none outline-none font-medium focus:ring-2 focus:ring-[#5865f2]"
                   autoFocus
                 />
               </div>
+              {channelError && (
+                <p className="text-xs text-[#f87171] mb-2">{channelError}</p>
+              )}
               <div className="flex gap-4 justify-end bg-[#2b2d31] -mx-6 -mb-6 p-4 mt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowTextChannelModal(false);
                     setNewChannelName("");
+                    setChannelError("");
                   }}
                   className="px-4 py-2 text-sm font-medium text-white hover:underline transition"
                 >
@@ -398,9 +544,12 @@ export default function RoomList({
                 <button
                   type="submit"
                   disabled={!newChannelName.trim() || isCreatingTextChannel}
-                  className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Kanal Oluştur
+                  {isCreatingTextChannel && (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  )}
+                  {isCreatingTextChannel ? "Oluşturuluyor..." : "Kanal Oluştur"}
                 </button>
               </div>
             </form>
@@ -426,18 +575,22 @@ export default function RoomList({
                 <input
                   type="text"
                   value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
+                  onChange={(e) => setNewRoomName(sanitizeRoomNameInput(e.target.value))}
                   placeholder="Genel Sohbet"
                   className="w-full bg-[#1e1f22] text-[#dbdee1] p-2.5 pl-10 rounded border-none outline-none font-medium focus:ring-2 focus:ring-[#5865f2]"
                   autoFocus
                 />
               </div>
+              {roomError && (
+                <p className="text-xs text-[#f87171] -mt-4 mb-4">{roomError}</p>
+              )}
               <div className="flex gap-4 justify-end bg-[#2b2d31] -mx-6 -mb-6 p-4 mt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowVoiceRoomModal(false);
                     setNewRoomName("");
+                    setRoomError("");
                   }}
                   className="px-4 py-2 text-sm font-medium text-white hover:underline transition"
                 >
@@ -446,15 +599,33 @@ export default function RoomList({
                 <button
                   type="submit"
                   disabled={!newRoomName.trim() || isCreating}
-                  className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Kanal Oluştur
+                  {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isCreating ? "Oluşturuluyor..." : "Kanal Oluştur"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ShortcutHelpModal
+        isOpen={showShortcutModal}
+        onClose={() => setShowShortcutModal(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDialog.open}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmLabel={confirmDialog.confirmLabel}
+        variant={confirmDialog.variant}
+        loading={confirmLoading}
+        itemToDelete={confirmDialog.itemToDelete}
+        onConfirm={handleConfirmDialog}
+        onCancel={closeConfirmDialog}
+      />
     </div>
   );
 }

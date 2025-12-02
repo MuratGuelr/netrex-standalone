@@ -101,11 +101,12 @@ const KEYCODE_MAP = {
   70: "ScrollLock",
   58: "CapsLock",
   119: "Pause",
+  3653: "Pause", // Windows Pause keycode
   3639: "PrintScreen",
   99: "PrintScreen", // Alternative keycode
 
   // Navigation Keys (extended)
-  3655: "Home",
+  3655: "Home", // Extended Home keycode (some systems use 3655 for Pause, but Home is more common)
   3663: "End",
   3657: "PageUp",
   3665: "PageDown",
@@ -115,6 +116,10 @@ const KEYCODE_MAP = {
   57424: "Arrow Down",
   3666: "Insert",
   3667: "Delete",
+  
+  // Windows-specific keycodes
+  3654: "Break", // Break key (often same as Pause)
+  3656: "Break", // Alternative Break keycode
 
   // Numpad
   82: "Numpad 0",
@@ -163,8 +168,26 @@ export function getKeyLabel(keycode) {
     // Could be F11 or End - prioritize F11 as it's more common
     return KEYCODE_MAP[87] || "F11";
   }
+  
+  if (keycode === 3653) {
+    // Windows Pause key - explicitly mapped
+    return KEYCODE_MAP[3653] || "Pause";
+  }
+  
+  if (keycode === 3655) {
+    // Could be Home or Pause depending on system
+    // Default to Home as it's more common, but check map first
+    return KEYCODE_MAP[3655] || "Home";
+  }
 
-  return KEYCODE_MAP[keycode] || `Unknown Key (${keycode})`;
+  // Try to find in map
+  if (KEYCODE_MAP[keycode]) {
+    return KEYCODE_MAP[keycode];
+  }
+
+  // For unknown keys, try to provide a better name based on common patterns
+  // This is a fallback for keys we haven't mapped yet
+  return `Unknown Key (${keycode})`;
 }
 
 /**

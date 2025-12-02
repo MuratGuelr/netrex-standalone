@@ -13,7 +13,8 @@ export default function UserContextMenu({
   const { userVolumes, setUserVolume } = useSettingsStore();
 
   const currentVol = (userVolumes && userVolumes[participant.identity]) ?? 100;
-  const [volume, setVolume] = useState(currentVol);
+  // Clamp to 200 max if stored value is higher
+  const [volume, setVolume] = useState(Math.min(currentVol, 200));
   const [coords, setCoords] = useState({ top: y, left: x });
 
   useEffect(() => {
@@ -53,27 +54,31 @@ export default function UserContextMenu({
   };
 
   const getIcon = () => {
-    if (volume === 0) return <VolumeX size={16} className="text-red-500" />;
-    if (volume < 50) return <Volume1 size={16} className="text-[#b5bac1]" />;
-    return <Volume2 size={16} className="text-[#b5bac1]" />;
+    if (volume === 0) return <VolumeX size={18} className="text-red-400" />;
+    if (volume < 50) return <Volume1 size={18} className="text-indigo-400" />;
+    if (volume > 100) return <Volume2 size={18} className="text-yellow-400" />;
+    return <Volume2 size={18} className="text-indigo-400" />;
   };
+
+  // Calculate percentage for display (0-200 range)
+  const displayPercent = Math.min((volume / 200) * 100, 100);
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] w-64 bg-[#111214] border border-[#1e1f22] rounded-lg shadow-xl p-3 flex flex-col gap-2 select-none"
+      className="fixed z-[9999] w-72 glass-strong border border-white/10 rounded-2xl shadow-soft-lg p-4 flex flex-col gap-3 select-none animate-scaleIn origin-top-left"
       style={{ top: coords.top, left: coords.left }}
       onContextMenu={(e) => e.preventDefault()}
-      // ÇÖZÜM BURADA:
-      // Menü içine yapılan tıklamaların yukarı (window) tırmanmasını engelliyoruz.
-      // Böylece window listener tetiklenmiyor ve menü kapanmıyor.
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Başlık */}
-      <div className="flex items-center gap-2 px-2 pb-2 border-b border-[#1f2023] mb-1">
-        <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-          {participant.identity?.charAt(0).toUpperCase()}
+      <div className="flex items-center gap-3 px-2 pb-3 border-b border-white/10 mb-1">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-sm opacity-60"></div>
+          <div className="relative w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-extrabold text-white shrink-0 shadow-glow">
+            {participant.identity?.charAt(0).toUpperCase()}
+          </div>
         </div>
         <span className="text-sm font-bold text-white truncate">
           {participant.identity}
@@ -82,48 +87,68 @@ export default function UserContextMenu({
 
       {/* Ses Slider */}
       {!isLocal ? (
-        <div className="px-2 py-1">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-[#b5bac1] uppercase">
+        <div className="px-2 py-2">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider">
               Kullanıcı Sesi
             </span>
-            <span className="text-xs font-mono text-indigo-400">{volume}%</span>
+            <span className={`text-sm font-mono font-bold ${
+              volume === 0 ? "text-red-400" :
+              volume > 100 ? "text-yellow-400" :
+              "text-indigo-400"
+            }`}>
+              {volume}%
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
-            {getIcon()}
-            <div className="relative flex-1 h-6 flex items-center w-full group">
+            <div className="shrink-0">
+              {getIcon()}
+            </div>
+            <div className="relative flex-1 h-7 flex items-center w-full group">
               {/* Arka Plan Bar */}
-              <div className="absolute w-full h-1.5 bg-[#2b2d31] rounded-full overflow-hidden">
+              <div className="absolute w-full h-2 bg-[#2b2d31] rounded-full overflow-hidden border border-white/5">
                 <div
-                  className="h-full bg-indigo-500 transition-all duration-75"
-                  style={{ width: `${volume}%` }}
+                  className={`h-full transition-all duration-150 rounded-full ${
+                    volume === 0 ? "bg-red-500/50" :
+                    volume > 100 ? "bg-gradient-to-r from-indigo-500 via-purple-500 to-yellow-500" :
+                    "bg-gradient-to-r from-indigo-500 to-purple-500"
+                  }`}
+                  style={{ width: `${displayPercent}%` }}
                 ></div>
               </div>
 
-              {/* Input - Z-Index ve Pointer Events ayarları kritik */}
+              {/* Input */}
               <input
                 type="range"
                 min="0"
-                max="100"
+                max="200"
                 value={volume}
                 onChange={handleVolumeChange}
-                // Input'a da stopPropagation ekledik garanti olsun diye
                 onMouseDown={(e) => e.stopPropagation()}
                 className="w-full absolute z-20 opacity-0 cursor-pointer h-full m-0 p-0"
-                title="Ses Seviyesi"
+                title="Ses Seviyesi (0-200%)"
               />
 
               {/* Thumb (Görsel Tutamaç) */}
               <div
-                className="absolute h-3.5 w-3.5 bg-white rounded-full shadow pointer-events-none z-10"
-                style={{ left: `${volume}%`, transform: "translateX(-50%)" }}
+                className={`absolute h-4 w-4 rounded-full shadow-lg pointer-events-none z-10 transition-all ${
+                  volume === 0 ? "bg-red-400 border-2 border-red-500" :
+                  volume > 100 ? "bg-yellow-400 border-2 border-yellow-500" :
+                  "bg-white border-2 border-indigo-400"
+                }`}
+                style={{ left: `${displayPercent}%`, transform: "translateX(-50%)" }}
               ></div>
             </div>
           </div>
+          {volume > 100 && (
+            <div className="mt-2 text-[10px] text-yellow-400/80 text-center">
+              ⚠️ 100%'den yüksek ses seviyesi
+            </div>
+          )}
         </div>
       ) : (
-        <div className="px-2 py-2 text-xs text-[#949ba4] italic text-center">
+        <div className="px-2 py-2 text-xs text-[#949ba4] italic text-center glass border border-white/5 rounded-xl">
           Kendi sesini buradan ayarlayamazsın.
         </div>
       )}

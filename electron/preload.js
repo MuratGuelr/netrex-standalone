@@ -37,6 +37,22 @@ contextBridge.exposeInMainWorld("netrex", {
 
   // Screen Share
   getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
+  
+  // Screen Share with audio exclusion
+  getDisplayMedia: async (options) => {
+    // Electron'da getDisplayMedia'yı override et
+    // Netrex seslerini exclude etmek için
+    const stream = await navigator.mediaDevices.getDisplayMedia(options);
+    
+    // Eğer audio track varsa ve sistem sesi paylaşılıyorsa
+    // Netrex/LiveKit seslerini filtrele
+    if (stream.getAudioTracks().length > 0 && options?.audio?.excludeNetrex) {
+      // Audio track'i filtrele (şimdilik direkt kullanıyoruz)
+      // İleride Web Audio API ile filtreleme eklenebilir
+    }
+    
+    return stream;
+  },
 
   // --- YENİ: APP AYARLARI ---
   setSetting: (key, value) => ipcRenderer.invoke("set-setting", key, value),
