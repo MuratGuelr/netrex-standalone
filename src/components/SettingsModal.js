@@ -22,6 +22,9 @@ import {
   Bell,
   Monitor,
   Type,
+  ExternalLink,
+  Github,
+  Youtube,
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
@@ -139,6 +142,13 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "appearance"}
             onClick={() => setActiveTab("appearance")}
           />
+          <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3"></div>
+          <SidebarItem
+            label="Uygulama Hakkında"
+            icon={<Info size={18} />}
+            active={activeTab === "about"}
+            onClick={() => setActiveTab("about")}
+          />
           <div className="mt-auto px-2 pb-2">
             <div className="text-[10px] text-[#5e626a] text-center">
               Netrex v{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}
@@ -166,6 +176,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             {activeTab === "appearance" && (
               <AppearanceSettings onSave={onClose} />
             )}
+            {activeTab === "about" && <AboutSettings />}
           </div>
           {/* Ayarları Kaydet Butonu */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#2b2d31] to-transparent border-t border-white/5 p-5 flex justify-end backdrop-blur-sm">
@@ -181,8 +192,8 @@ export default function SettingsModal({ isOpen, onClose }) {
             >
               Ayarları Kaydet
             </button>
-          </div>
         </div>
+      </div>
       </div>
       {/* Alt padding - blur altında kalmaması için */}
       <div className="h-20"></div>
@@ -236,6 +247,107 @@ function ToggleSwitch({ label, description, checked, onChange }) {
   );
 }
 
+function AboutSettings() {
+  const appVersion = "2.0.0";
+  const appName = "Netrex Client";
+  const appDescription = "Güvenli Masaüstü Sesli Sohbet Uygulaması";
+  const githubUrl = "https://github.com/MuratGuelr/netrex-standalone";
+  const youtubeUrl = "https://www.youtube.com/@ConsolAktif";
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
+      <h3 className="text-xl font-bold text-white mb-6">Uygulama Hakkında</h3>
+      
+      {/* Logo ve Uygulama Bilgileri */}
+      <div className="bg-[#1e1f22] rounded-lg overflow-hidden border border-[#1f2023] shadow-md mb-6">
+        <div className="h-24 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500"></div>
+        <div className="px-5 pb-5 relative">
+          <div className="flex justify-between items-end -mt-10 mb-4">
+            <div className="flex items-end gap-3">
+              <div className="p-1.5 bg-[#1e1f22] rounded-full">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-2xl">
+                  <div className="text-white font-black text-3xl">N</div>
+                </div>
+              </div>
+              <div className="mb-1">
+                <h2 className="text-2xl font-bold text-white leading-none mb-1">
+                  {appName}
+                </h2>
+                <span className="text-sm text-[#949ba4] font-medium">
+                  Versiyon {appVersion}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-[#2b2d31] rounded-lg p-4">
+            <p className="text-[#b5bac1] text-sm leading-relaxed">
+              {appDescription}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bilgiler */}
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Bilgiler
+        </h4>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[#b5bac1] text-sm">Versiyon</span>
+            <span className="text-white text-sm font-medium">{appVersion}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#b5bac1] text-sm">Platform</span>
+            <span className="text-white text-sm font-medium">Next.js & Electron</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#b5bac1] text-sm">Geliştirici</span>
+            <span className="text-white text-sm font-medium">ConsolAktif</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Linkler */}
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+          Linkler
+        </h4>
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              if (window.netrex?.openExternalLink) {
+                window.netrex.openExternalLink(githubUrl);
+              } else {
+                window.open(githubUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1e1f22] hover:bg-[#2b2d31] text-[#b5bac1] hover:text-white transition-all duration-200 group w-full text-left"
+          >
+            <Github size={18} className="group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-medium">GitHub Repository</span>
+            <ExternalLink size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+          <button
+            onClick={() => {
+              if (window.netrex?.openExternalLink) {
+                window.netrex.openExternalLink(youtubeUrl);
+              } else {
+                window.open(youtubeUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1e1f22] hover:bg-[#2b2d31] text-[#b5bac1] hover:text-white transition-all duration-200 group w-full text-left"
+          >
+            <Youtube size={18} className="group-hover:scale-110 transition-transform text-red-500" />
+            <span className="text-sm font-medium">YouTube Kanalı</span>
+            <ExternalLink size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ApplicationSettings() {
   const {
     closeToTray,
@@ -275,6 +387,24 @@ function ApplicationSettings() {
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
+  
+  // Admin kontrolü (sadece UID)
+  const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
+  const isAdmin = user && ADMIN_UID && user.uid === ADMIN_UID;
+  
+  // DevTools açma
+  const handleOpenDevTools = async () => {
+    if (window.netrex && isAdmin) {
+      try {
+        const result = await window.netrex.openDevTools(user?.uid);
+        if (!result.success) {
+          console.error("DevTools açılamadı:", result.error);
+        }
+      } catch (error) {
+        console.error("DevTools açma hatası:", error);
+      }
+    }
+  };
 
   // profileColor'dan mevcut değerleri parse et
   const parseProfileColor = useCallback((color) => {
@@ -415,6 +545,26 @@ function AccountSettings({ onClose }) {
           </div>
         </div>
       </div>
+      
+      {/* Admin DevTools Button */}
+      {isAdmin && window.netrex && (
+        <div className="mb-8">
+          <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
+            <ShieldAlert size={14} /> Admin Araçları
+          </h4>
+          <button
+            onClick={handleOpenDevTools}
+            className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+          >
+            <Monitor size={16} />
+            Developer Tools'u Aç
+          </button>
+          <p className="text-xs text-[#949ba4] mt-2 text-center">
+            Build edilmiş uygulamada console'u açmak için
+          </p>
+        </div>
+      )}
+      
       <div className="h-[1px] bg-[#3f4147] my-6"></div>
       <div className="mb-8">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
@@ -784,21 +934,21 @@ function KeybindRow({
             <X size={16} />
           </button>
         )}
-        <button
-          onClick={onClick}
-          className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
-            isRecording
-              ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
-              : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
-          }`}
-        >
-          <span className="relative z-10">
+      <button
+        onClick={onClick}
+        className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
+          isRecording
+            ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
+            : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
+        }`}
+      >
+        <span className="relative z-10">
             {isRecording ? "Tuşa Basın..." : shortcut || "Atanmadı"}
-          </span>
-          {isRecording && (
-            <div className="absolute inset-0 bg-[#f04747]/5 animate-pulse"></div>
-          )}
-        </button>
+        </span>
+        {isRecording && (
+          <div className="absolute inset-0 bg-[#f04747]/5 animate-pulse"></div>
+        )}
+      </button>
       </div>
     </div>
   );

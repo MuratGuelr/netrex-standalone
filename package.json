@@ -31,6 +31,14 @@
       {
         "from": "public/logo.ico",
         "to": "logo.ico"
+      },
+      {
+        "from": "public/rnnoise.wasm",
+        "to": "rnnoise.wasm"
+      },
+      {
+        "from": "public/rnnoise.worklet.js",
+        "to": "rnnoise.worklet.js"
       }
     ],
     "files": [

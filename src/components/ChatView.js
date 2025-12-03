@@ -128,8 +128,22 @@ export default function ChatView({ channelId, username, userId }) {
         const data = JSON.parse(decoder.decode(payload));
         if (data.type === "chat" && data.channelId === channelId) {
           if (data.message.userId !== userId) {
-            addIncomingMessage(data.message);
-            showDesktopNotification(data.message);
+            const message = data.message;
+            addIncomingMessage(message);
+            
+            // Toast bildirim göster (uygulama içindeyse)
+            if (typeof document !== "undefined" && !document.hidden && document.hasFocus()) {
+              const messageText = message.text 
+                ? (message.text.length > 50 ? message.text.slice(0, 50) + "..." : message.text)
+                : "Yeni mesaj";
+              toast.info(
+                `${message.username || "Bir kullanıcı"}: ${messageText}`,
+                { description: `#${currentChannelName}` }
+              );
+            }
+            
+            // Masaüstü bildirim göster (ayarlardan açtıysa ve pencere aktif değilse)
+            showDesktopNotification(message);
           }
         }
       } catch (error) {
@@ -138,7 +152,7 @@ export default function ChatView({ channelId, username, userId }) {
         }
       }
     },
-    [channelId, userId, addIncomingMessage, showDesktopNotification]
+    [channelId, userId, addIncomingMessage, showDesktopNotification, currentChannelName]
   );
 
   useEffect(() => {

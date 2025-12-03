@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useLocalParticipant } from "@livekit/components-react";
-import { Track, RoomEvent } from "livekit-client";
+import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
+import { Track, RoomEvent, ConnectionState } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
 // RNNoise sadece client-side'da çalışır, SSR'da yüklenmemeli
 
@@ -74,6 +74,7 @@ const CONFIG = {
 
 export function useVoiceProcessor() {
   const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
   const settings = useSettingsStore();
   const {
     voiceThreshold,
@@ -85,9 +86,29 @@ export function useVoiceProcessor() {
     aiNoiseSuppression,
   } = settings;
 
+  // DÜZELTME: Eğer noiseSuppressionMode "krisp" ise ama aiNoiseSuppression false ise,
+  // otomatik olarak true yap (eski ayarlardan kalan tutarsızlığı düzelt)
+  useEffect(() => {
+    if (noiseSuppressionMode === "krisp" && !aiNoiseSuppression) {
+      console.log("⚠️ Krisp modu aktif ama aiNoiseSuppression false, düzeltiliyor...");
+      const { setNoiseSuppressionMode } = useSettingsStore.getState();
+      setNoiseSuppressionMode("krisp"); // Bu otomatik olarak aiNoiseSuppression'ı true yapar
+      console.log("✅ Krisp modu düzeltildi");
+    }
+  }, [noiseSuppressionMode, aiNoiseSuppression]);
+  
+  // İLK YÜKLEME: noiseSuppressionMode değiştiğinde log göster (debug için)
+  useEffect(() => {
+    console.log("🔊 Noise suppression mode:", noiseSuppressionMode, {
+      aiNoiseSuppression,
+      hasLocalParticipant: !!localParticipant
+    });
+  }, [noiseSuppressionMode, aiNoiseSuppression, localParticipant]);
+
   // ========== REF'LER ==========
   const audioContextRef = useRef(null);
   const intervalRef = useRef(null);
+  const rnnoiseCheckIntervalRef = useRef(null); // RNNoise node kontrol interval'i
   const rnnoiseModuleRef = useRef(null); // RNNoise modülünü dinamik olarak yüklemek için
   const sourceRef = useRef(null);
   const analyserRef = useRef(null);
@@ -565,7 +586,7 @@ export function useVoiceProcessor() {
   );
 
   // ========== TEMİZLİK ==========
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((preserveRNNoise = false) => {
     isCleaningUpRef.current = true;
 
     if (intervalRef.current) {
@@ -573,13 +594,18 @@ export function useVoiceProcessor() {
       intervalRef.current = null;
     }
 
+    if (rnnoiseCheckIntervalRef.current) {
+      clearInterval(rnnoiseCheckIntervalRef.current);
+      rnnoiseCheckIntervalRef.current = null;
+    }
+
     if (cloneStreamRef.current) {
       cloneStreamRef.current.getTracks().forEach((track) => track.stop());
       cloneStreamRef.current = null;
     }
 
-    // Tüm audio node'ları temizle
-    [
+    // Tüm audio node'ları temizle (RNNoise hariç eğer preserve edilecekse)
+    const nodesToClean = [
       sourceRef,
       analyserRef,
       highPassFilterRef,
@@ -588,8 +614,14 @@ export function useVoiceProcessor() {
       compressorRef,
       gainNodeRef,
       workletNodeRef,
-      rnnoiseNodeRef,
-    ].forEach((ref) => {
+    ];
+    
+    // RNNoise'u sadece preserve edilmeyecekse temizle
+    if (!preserveRNNoise) {
+      nodesToClean.push(rnnoiseNodeRef);
+    }
+    
+    nodesToClean.forEach((ref) => {
       if (ref.current) {
         try {
           ref.current.disconnect();
@@ -603,26 +635,53 @@ export function useVoiceProcessor() {
       }
     });
 
+    // Audio context'i kapatma - sadece suspend et (RNNoise için önemli)
+    // Audio context kapanırsa RNNoise node'u da kaybolur
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
+      // Sadece suspend et, kapatma (RNNoise node'u korumak için)
+      if (audioContextRef.current.state === "running") {
+        audioContextRef.current.suspend().catch(() => {});
+      }
+      // Context'i kapatma - RNNoise için gerekli
+      // audioContextRef.current.close().catch(() => {});
+      // audioContextRef.current = null;
     }
   }, []);
 
   // ========== ANA EFFECT ==========
   useEffect(() => {
-    if (!localParticipant) return;
-
+    // Room bağlantısı tamamlanmadan önce başlatma
+    if (!localParticipant || !room) return;
+    
     isCleaningUpRef.current = false;
     let originalStreamTrack = null;
     let trackPublishedHandler = null;
     let retryCount = 0;
     const MAX_RETRIES = 10;
+    let retryTimer = null;
 
+    // setupProcessor fonksiyonunu önce tanımla (hoisting sorununu önlemek için)
     const setupProcessor = async () => {
-      // Önce cleanup yap
-      cleanup();
+      // Önce cleanup yap - ama RNNoise'u koru (eğer hala geçerliyse)
+      // İLK YÜKLEMEDE: Eğer noiseSuppressionMode "krisp" ise ama node yoksa, cleanup'ta node'u temizleme
+      // Çünkü ilk yüklemede node henüz oluşturulmamış olabilir
+      const shouldPreserveRNNoise = noiseSuppressionMode === "krisp" && 
+                                     rnnoiseNodeRef.current && 
+                                     audioContextRef.current &&
+                                     audioContextRef.current.state !== "closed";
+      
+      cleanup(!shouldPreserveRNNoise);
       isCleaningUpRef.current = false;
+      
+      // Audio context'i resume et (eğer suspend edildiyse)
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+      
+      // Audio context'in running olduğundan emin ol
+      if (audioContextRef.current && audioContextRef.current.state !== "running") {
+        await audioContextRef.current.resume();
+      }
 
       const trackPublication = localParticipant.getTrackPublication(
         Track.Source.Microphone
@@ -690,8 +749,8 @@ export function useVoiceProcessor() {
       originalStreamTrack = track.mediaStreamTrack;
 
       try {
-        // 1. AudioContext Oluştur
-        if (!audioContextRef.current) {
+        // 1. AudioContext Oluştur veya Mevcut Olanı Kullan
+        if (!audioContextRef.current || audioContextRef.current.state === "closed") {
           const AudioCtx = window.AudioContext || window.webkitAudioContext;
           audioContextRef.current = new AudioCtx({
             sampleRate: CONFIG.SAMPLE_RATE,
@@ -700,7 +759,13 @@ export function useVoiceProcessor() {
         }
         const ctx = audioContextRef.current;
 
+        // Audio context'i resume et (suspended ise)
         if (ctx.state === "suspended") {
+          await ctx.resume();
+        }
+        
+        // Audio context'in running olduğundan emin ol
+        if (ctx.state !== "running") {
           await ctx.resume();
         }
 
@@ -718,48 +783,160 @@ export function useVoiceProcessor() {
         // NOT: RNNoise sadece gürültü bastırma yapar, VAD yapmaz
         // VAD sistemimiz RNNoise'dan SONRA çalışacak (RNNoise çıkışını analiz edecek)
         // Bu sayede hem gürültü bastırma hem de VAD çalışır
-        if (noiseSuppressionMode === "krisp" && aiNoiseSuppression) {
-          try {
-            // RNNoise modülünü dinamik olarak yükle (SSR'dan kaçınmak için)
-            // AudioWorkletNode sadece tarayıcıda mevcut, SSR'da yüklenmemeli
-            if (!rnnoiseModuleRef.current) {
-              rnnoiseModuleRef.current = await import("simple-rnnoise-wasm");
-            }
-            const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModuleRef.current;
+        // DÜZELTME: noiseSuppressionMode === "krisp" yeterli, aiNoiseSuppression kontrolü gereksiz
+        if (noiseSuppressionMode === "krisp") {
+          // RNNoise node yoksa veya geçersizse, yeni oluştur
+          if (!rnnoiseNodeRef.current) {
+            try {
+              // Audio context'in hazır olduğundan emin ol (İLK YÜKLEME İÇİN ÖNEMLİ)
+              if (ctx.state !== "running") {
+                console.log("⚠️ Audio context suspended, resume ediliyor...");
+                await ctx.resume();
+                // Audio context'in tamamen hazır olması için bekle
+                await new Promise(resolve => setTimeout(resolve, 100));
+                console.log("✅ Audio context resumed, state:", ctx.state);
+              }
+              
+              // RNNoise modülünü dinamik olarak yükle (SSR'dan kaçınmak için)
+              // AudioWorkletNode sadece tarayıcıda mevcut, SSR'da yüklenmemeli
+              if (!rnnoiseModuleRef.current) {
+                console.log("🔊 RNNoise modülü yükleniyor...");
+                rnnoiseModuleRef.current = await import("simple-rnnoise-wasm");
+                console.log("✅ RNNoise modülü yüklendi");
+              }
+              const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModuleRef.current;
             
-            // RNNoise'u kaydet ve yükle
-            // Next.js için WASM ve worklet dosyalarını public klasöründen yükle
-            const wasmUrl = "/rnnoise.wasm";
-            const workletUrl = "/rnnoise.worklet.js";
-            const assets = await rnnoise_loadAssets({
-              scriptSrc: workletUrl,
-              moduleSrc: wasmUrl
-            });
-            await RNNoiseNode.register(ctx, assets);
-            const rnnoiseNode = new RNNoiseNode(ctx);
-            currentNode.connect(rnnoiseNode);
-            currentNode = rnnoiseNode;
-            rnnoiseNodeRef.current = rnnoiseNode;
-            // VAD durumunu güncelle (opsiyonel, sadece bilgi için)
-            rnnoiseNode.update();
-            if (process.env.NODE_ENV === "development") {
-              console.log("RNNoise AI gürültü bastırma aktif (Krisp modu) - VAD RNNoise çıkışını analiz ediyor");
+              // RNNoise'u kaydet ve yükle
+              // Electron build'de path'leri düzelt (file:// protokolü için absolute path kullan)
+              const isElectronBuild = typeof window !== 'undefined' && 
+                (window.location?.protocol === 'file:' || 
+                 window.navigator?.userAgent?.includes('Electron'));
+              
+              // Path'leri belirle
+              let wasmUrl, workletUrl;
+              
+              if (isElectronBuild) {
+                // Electron build'de: absolute file:// path kullan
+                // window.location.href = file:///C:/Users/.../out/index.html
+                // Dosyalar index.html ile aynı dizinde (out/)
+                const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+                wasmUrl = baseUrl + 'rnnoise.wasm';
+                workletUrl = baseUrl + 'rnnoise.worklet.js';
+              } else {
+                // Development/Web'de: relative path kullan
+                wasmUrl = "/rnnoise.wasm";
+                workletUrl = "/rnnoise.worklet.js";
+              }
+              
+              // Debug logging (her zaman göster - build'de de sorunları görmek için)
+              console.log("🔊 RNNoise yükleniyor...", {
+                isElectronBuild,
+                protocol: window?.location?.protocol,
+                wasmUrl,
+                workletUrl,
+                currentPath: window?.location?.href,
+                locationOrigin: window?.location?.origin,
+                locationPathname: window?.location?.pathname,
+                baseUrl: isElectronBuild ? window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1) : undefined
+              });
+              
+              console.log("🔊 RNNoise assets yükleniyor...", { wasmUrl, workletUrl });
+              const assets = await rnnoise_loadAssets({
+                scriptSrc: workletUrl,
+                moduleSrc: wasmUrl
+              });
+              console.log("✅ RNNoise assets yüklendi");
+              
+              // Audio context'in hala running olduğundan emin ol (register öncesi)
+              if (ctx.state !== "running") {
+                console.log("⚠️ Audio context tekrar suspended, resume ediliyor...");
+                await ctx.resume();
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+              
+              console.log("🔊 RNNoise node kaydediliyor...");
+              await RNNoiseNode.register(ctx, assets);
+              console.log("✅ RNNoise node kaydedildi");
+              
+              // Audio context'in hala running olduğundan emin ol (node oluşturma öncesi)
+              if (ctx.state !== "running") {
+                console.log("⚠️ Audio context tekrar suspended, resume ediliyor...");
+                await ctx.resume();
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+              
+              console.log("🔊 RNNoise node oluşturuluyor...");
+              const rnnoiseNode = new RNNoiseNode(ctx);
+              
+              // Node'u bağlamadan önce audio context'in running olduğundan emin ol
+              if (ctx.state !== "running") {
+                await ctx.resume();
+              }
+              
+              console.log("🔊 RNNoise node bağlanıyor...");
+              currentNode.connect(rnnoiseNode);
+              currentNode = rnnoiseNode;
+              rnnoiseNodeRef.current = rnnoiseNode;
+              
+              // VAD durumunu güncelle (opsiyonel, sadece bilgi için)
+              rnnoiseNode.update();
+              
+              console.log("✅ RNNoise AI gürültü bastırma aktif (Krisp modu) - YENİ NODE", {
+                nodeCreated: !!rnnoiseNode,
+                nodeConnected: true,
+                audioContextState: ctx.state,
+                nodeRef: !!rnnoiseNodeRef.current,
+                contextSampleRate: ctx.sampleRate
+              });
+            } catch (error) {
+              // RNNoise yüklenemezse mevcut sisteme devam et (modu değiştirme, sadece RNNoise'u devre dışı bırak)
+              console.error("❌ RNNoise yüklenemedi, RNNoise devre dışı bırakılıyor (mod korunuyor):", {
+                error: error.message,
+                stack: error.stack,
+                name: error.name,
+                isElectronBuild: typeof window !== 'undefined' && 
+                  (window.location?.protocol === 'file:' || 
+                   window.navigator?.userAgent?.includes('Electron')),
+                protocol: window?.location?.protocol,
+                currentPath: window?.location?.href,
+                currentMode: noiseSuppressionMode
+              });
+              rnnoiseNodeRef.current = null;
+              rnnoiseModuleRef.current = null; // Hata durumunda modülü temizle
+              // NOT: Modu değiştirme, sadece RNNoise'u devre dışı bırak
+              // Kullanıcı settings'te "krisp" seçmişse, bu seçimi koru
+              // RNNoise yüklenemezse standart işleme devam eder ama mod "krisp" olarak kalır
             }
-          } catch (error) {
-            // RNNoise yüklenemezse mevcut sisteme devam et
-            console.warn("RNNoise yüklenemedi, Standart moda geçiliyor:", error);
-            rnnoiseNodeRef.current = null;
-            rnnoiseModuleRef.current = null; // Hata durumunda modülü temizle
-            // Hata durumunda Standart moda geç
-            if (settings?.setNoiseSuppressionMode) {
-              settings.setNoiseSuppressionMode("standard");
+          } else {
+            // RNNoise node zaten var, mevcut source'a bağla
+            try {
+              const node = rnnoiseNodeRef.current;
+              // Önceki bağlantıları temizle (eğer varsa)
+              try {
+                node.disconnect();
+              } catch (e) {
+                // Disconnect hatası normal (zaten bağlı değilse)
+              }
+              // Yeni source'a bağla
+              currentNode.connect(node);
+              currentNode = node;
+              console.log("✅ RNNoise node yeniden kullanılıyor (mevcut node korundu)", {
+                nodeExists: !!node,
+                audioContextState: ctx.state
+              });
+            } catch (e) {
+              console.warn("⚠️ RNNoise node bağlantı hatası, yeniden oluşturuluyor:", e);
+              rnnoiseNodeRef.current = null;
+              // Yeniden oluşturma için tekrar dene (recursive call yerine flag kullan)
+              // Bu durumda bir sonraki setupProcessor çağrısında yeni node oluşturulacak
             }
           }
         }
 
         // HIGH-PASS FILTER (Düşük frekanslı gürültüleri kes - Dengeli)
-        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
-        if (noiseSuppressionMode === "standard" && (advancedNoiseReduction || spectralFiltering)) {
+        // Standart modda aktif, Krisp modunda RNNoise varsa RNNoise kendi işlemesini yapıyor
+        // Ama RNNoise yoksa standart filtreleri kullan
+        if ((noiseSuppressionMode === "standard" || (noiseSuppressionMode === "krisp" && !rnnoiseNodeRef.current)) && (advancedNoiseReduction || spectralFiltering)) {
           const highPass = ctx.createBiquadFilter();
           highPass.type = "highpass";
           highPass.frequency.value = CONFIG.VOICE_LOW_FREQ; // 100Hz altını kes (bass gürültüleri)
@@ -770,8 +947,9 @@ export function useVoiceProcessor() {
         }
 
         // LOW-PASS FILTER (Yüksek frekanslı gürültüleri kes - Dengeli)
-        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
-        if (noiseSuppressionMode === "standard" && (advancedNoiseReduction || spectralFiltering)) {
+        // Standart modda aktif, Krisp modunda RNNoise varsa RNNoise kendi işlemesini yapıyor
+        // Ama RNNoise yoksa standart filtreleri kullan
+        if ((noiseSuppressionMode === "standard" || (noiseSuppressionMode === "krisp" && !rnnoiseNodeRef.current)) && (advancedNoiseReduction || spectralFiltering)) {
           const lowPass = ctx.createBiquadFilter();
           lowPass.type = "lowpass";
           lowPass.frequency.value = CONFIG.VOICE_HIGH_FREQ; // 7kHz üstünü kes (tiz gürültüleri)
@@ -782,8 +960,9 @@ export function useVoiceProcessor() {
         }
 
         // NOTCH FILTER (50/60Hz güç hattı gürültüsü)
-        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
-        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+        // Standart modda aktif, Krisp modunda RNNoise varsa RNNoise kendi işlemesini yapıyor
+        // Ama RNNoise yoksa standart filtreleri kullan
+        if ((noiseSuppressionMode === "standard" || (noiseSuppressionMode === "krisp" && !rnnoiseNodeRef.current)) && advancedNoiseReduction) {
           const notch = ctx.createBiquadFilter();
           notch.type = "notch";
           notch.frequency.value = 50; // Türkiye'de 50Hz
@@ -794,8 +973,9 @@ export function useVoiceProcessor() {
         }
 
         // DYNAMIC RANGE COMPRESSOR (Ses seviyesini dengeler)
-        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
-        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+        // Standart modda aktif, Krisp modunda RNNoise varsa RNNoise kendi işlemesini yapıyor
+        // Ama RNNoise yoksa standart filtreleri kullan
+        if ((noiseSuppressionMode === "standard" || (noiseSuppressionMode === "krisp" && !rnnoiseNodeRef.current)) && advancedNoiseReduction) {
           const compressor = ctx.createDynamicsCompressor();
           compressor.threshold.value = -24;
           compressor.knee.value = 30;
@@ -808,8 +988,9 @@ export function useVoiceProcessor() {
         }
 
         // GAIN NODE (Sabit kazanç - gereksiz ayar kaldırıldı)
-        // Standart modda aktif, Krisp modunda RNNoise kendi işlemesini yapıyor
-        if (noiseSuppressionMode === "standard" && advancedNoiseReduction) {
+        // Standart modda aktif, Krisp modunda RNNoise varsa RNNoise kendi işlemesini yapıyor
+        // Ama RNNoise yoksa standart filtreleri kullan
+        if ((noiseSuppressionMode === "standard" || (noiseSuppressionMode === "krisp" && !rnnoiseNodeRef.current)) && advancedNoiseReduction) {
           const gain = ctx.createGain();
           gain.gain.value = 1.0; // Sabit kazanç
           currentNode.connect(gain);
@@ -824,6 +1005,17 @@ export function useVoiceProcessor() {
         currentNode.connect(analyser);
         analyserRef.current = analyser;
 
+        // RNNoise durumunu kontrol et ve logla
+        if (noiseSuppressionMode === "krisp") {
+          console.log("🔍 RNNoise durum kontrolü:", {
+            rnnoiseNodeExists: !!rnnoiseNodeRef.current,
+            audioContextState: ctx.state,
+            analyserConnected: !!analyserRef.current,
+            currentNodeType: currentNode.constructor.name,
+            sourceConnected: !!sourceRef.current
+          });
+        }
+
         // 4. VERİ ARRAY'LERİ
         const timeDataArray = new Uint8Array(analyser.fftSize);
         const frequencyDataArray = new Float32Array(analyser.frequencyBinCount);
@@ -836,6 +1028,13 @@ export function useVoiceProcessor() {
             !originalStreamTrack
           )
             return;
+
+          // Audio context state kontrolü - suspended olursa resume et
+          if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+            audioContextRef.current.resume().catch((err) => {
+              console.warn("Audio context resume hatası:", err);
+            });
+          }
 
           // Time domain verisi (RMS ve ZCR için)
           analyserRef.current.getByteTimeDomainData(timeDataArray);
@@ -1002,18 +1201,18 @@ export function useVoiceProcessor() {
                 hasMinDuration // Minimum süre geçtiyse hemen aç
               ) {
                 // Mikrofonu aç (ilk kelimeyi kaçırmamak için hemen)
-                if (!originalStreamTrack.enabled) {
-                  originalStreamTrack.enabled = true;
-                }
-              } else {
+            if (!originalStreamTrack.enabled) {
+              originalStreamTrack.enabled = true;
+            }
+          } else {
                 // Henüz açma koşulları sağlanmadı
                 // Çok kısa sesler (< 20ms) için kapalı tut (gürültü)
                 if (voiceDuration < CONFIG.MAX_SHORT_NOISE_DURATION) {
                   // Çok kısa ses - muhtemelen gürültü, kapalı tut
-                } else {
+            } else {
                   // Attack time'a yaklaşıyorsa aç (yakında geçecek)
-                  if (!originalStreamTrack.enabled) {
-                    originalStreamTrack.enabled = true;
+              if (!originalStreamTrack.enabled) {
+                originalStreamTrack.enabled = true;
                   }
                 }
               }
@@ -1062,6 +1261,31 @@ export function useVoiceProcessor() {
 
         // İlk kontrolü hemen yap
         checkVolume();
+
+        // Periyodik olarak audio context state kontrolü (sadece resume için, RNNoise yeniden bağlama yok)
+        // Önceki interval'i temizle
+        if (rnnoiseCheckIntervalRef.current) {
+          clearInterval(rnnoiseCheckIntervalRef.current);
+        }
+        
+        rnnoiseCheckIntervalRef.current = setInterval(() => {
+          if (isCleaningUpRef.current) {
+            if (rnnoiseCheckIntervalRef.current) {
+              clearInterval(rnnoiseCheckIntervalRef.current);
+              rnnoiseCheckIntervalRef.current = null;
+            }
+            return;
+          }
+
+          // Sadece audio context state kontrolü - suspended olursa resume et
+          if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+            console.warn("⚠️ Audio context suspended, resume ediliyor...");
+            audioContextRef.current.resume().catch((err) => {
+              console.warn("Audio context resume hatası:", err);
+            });
+          }
+          // RNNoise node kontrolü kaldırıldı - sonsuz döngüyü önlemek için
+        }, 5000); // Her 5 saniyede bir kontrol et (daha az agresif)
       } catch (err) {
         console.error("Gelişmiş Voice Processor Hatası:", err);
         if (originalStreamTrack) {
@@ -1070,23 +1294,39 @@ export function useVoiceProcessor() {
       }
     };
 
-    // Hemen setup'ı dene (delay olmadan)
-    setupProcessor();
-    
-    // Eğer track henüz hazır değilse, bir süre sonra tekrar dene
-    const retryTimer = setTimeout(() => {
-      if (!isCleaningUpRef.current && localParticipant) {
-        const trackPublication = localParticipant.getTrackPublication(
-          Track.Source.Microphone
-        );
-        if (!trackPublication?.track) {
-          setupProcessor();
-        }
+    // Room bağlantısı tamamlanana kadar bekle
+    const checkConnection = () => {
+      if (room.state === ConnectionState.Connected && !isCleaningUpRef.current) {
+        // Bağlantı tamamlandı, setupProcessor'ı başlat
+        setupProcessor();
+        
+        // Eğer track henüz hazır değilse, bir süre sonra tekrar dene
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          if (!isCleaningUpRef.current && localParticipant && room.state === ConnectionState.Connected) {
+            const trackPublication = localParticipant.getTrackPublication(
+              Track.Source.Microphone
+            );
+            if (!trackPublication?.track) {
+              setupProcessor();
+            }
+          }
+        }, CONFIG.INIT_DELAY);
       }
-    }, CONFIG.INIT_DELAY);
+    };
+    
+    // Room bağlantısı tamamlanmış mı kontrol et
+    if (room.state === ConnectionState.Connected) {
+      // Zaten bağlıysa hemen başlat
+      checkConnection();
+    } else {
+      // Bağlantı tamamlanana kadar bekle
+      room.on(RoomEvent.ConnectionStateChanged, checkConnection);
+    }
 
     return () => {
-      clearTimeout(retryTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      room.off(RoomEvent.ConnectionStateChanged, checkConnection);
       if (trackPublishedHandler && localParticipant) {
         localParticipant.off(RoomEvent.TrackPublished, trackPublishedHandler);
       }

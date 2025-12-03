@@ -57,6 +57,9 @@ export const useSettingsStore = create(
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
 
+      // Online/Offline durumu
+      userStatus: "online", // "online" | "offline" | "invisible"
+
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
@@ -164,6 +167,9 @@ export const useSettingsStore = create(
 
       // Kamera ayarları
       setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),
+
+      // Online/Offline ayarları
+      setUserStatus: (status) => set({ userStatus: status }),
 
       syncWithElectron: async () => {
         if (window.netrex) {

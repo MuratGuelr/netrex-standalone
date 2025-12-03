@@ -54,6 +54,14 @@ import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useChatStore } from "@/src/store/chatStore";
 import { toastOnce } from "@/src/utils/toast";
 import { useAuthStore } from "@/src/store/authStore";
+import { db } from "@/src/lib/firebase";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+} from "firebase/firestore";
 
 // --- STYLES ---
 const styleInjection = `
@@ -73,16 +81,26 @@ function MicrophoneManager() {
         // Volume sadece remote track'lere ayarlanabilir (local track'e ayarlanamaz)
         const isRemote = !trackRef.participant.isLocal;
         // userVolumes 0-200 arasında olabilir, ama AudioTrack 0-1 aralığı bekliyor
-        // 100% = 1.0 (normal ses), 200% = 1.0 (maksimum - clamp edilmiş)
+        // Ses algısı logaritmik olduğu için exponential mapping kullanıyoruz
         const volumePercent = isRemote
           ? userVolumes[trackRef.participant.identity] ?? 100
           : undefined;
 
-        // 0-200 arası değeri 0-1 aralığına normalize et
-        // 100% ve üzeri = 1.0 (maksimum ses seviyesi)
+        // Logaritmik (exponential) mapping: ses algısı logaritmik olduğu için
+        // Linear mapping yerine exponential kullanıyoruz
+        // Formül:
+        // - 0-100%: volume = (percent/100)^2.5 (daha hassas düşük ses kontrolü)
+        // - 100-200%: volume = 1.0 - (200-percent)/100 * 0.2 (100%'den 200%'e yumuşak artış, max 1.0)
+        // NOT: HTMLMediaElement volume 0-1 aralığında olmalı, bu yüzden 1.0 ile sınırlıyoruz
+        // %100-200 arası için daha hassas kontrol sağlamak için exponential mapping kullanıyoruz
+        // 100% = 1.0, 150% = 0.9, 200% = 0.8 (daha yumuşak eğri)
         const volume =
           volumePercent !== undefined
-            ? Math.min(volumePercent / 100, 1.0) // 100% = 1.0, 200% = 2.0 ama clamp edilmiş = 1.0
+            ? volumePercent === 0
+              ? 0 // 0% = 0 (sessiz)
+              : volumePercent <= 100
+              ? Math.pow(volumePercent / 100, 2.5) // 0-100% arası için exponential
+              : Math.min(1.0 - ((200 - volumePercent) / 100) * 0.2, 1.0) // 100-200% arası için yumuşak artış, ama max 1.0 (HTMLMediaElement limiti)
             : undefined;
 
         return (
@@ -103,6 +121,8 @@ function GlobalChatListener({ showChatPanel }) {
   const { incrementUnread, currentChannel } = useChatStore();
   const { user } = useAuthStore();
   const { playSound } = useSoundEffects();
+  const { desktopNotifications, notifyOnMessage } = useSettingsStore();
+
   useEffect(() => {
     if (!room) return;
     const handleData = (payload, participant, kind, topic) => {
@@ -111,12 +131,82 @@ function GlobalChatListener({ showChatPanel }) {
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload));
         if (data.type === "chat" && data.message.userId !== user?.uid) {
+          const message = data.message;
+          const channelId = data.channelId;
+
+          // Toast bildirim göster (uygulama içindeyse)
+          if (
+            typeof document !== "undefined" &&
+            !document.hidden &&
+            document.hasFocus()
+          ) {
+            const channelName = currentChannel?.name || "sohbet";
+            const messageText = message.text
+              ? message.text.length > 50
+                ? message.text.slice(0, 50) + "..."
+                : message.text
+              : "Yeni mesaj";
+            toastOnce(
+              `${message.username || "Bir kullanıcı"}: ${messageText}`,
+              "info",
+              { description: `#${channelName}` }
+            );
+          }
+
+          // Masaüstü bildirim göster (ayarlardan açtıysa)
+          if (desktopNotifications && notifyOnMessage) {
+            if (typeof window !== "undefined" && "Notification" in window) {
+              if (Notification.permission === "granted") {
+                // Eğer pencere aktifse masaüstü bildirim gösterme (toast yeterli)
+                if (
+                  typeof document !== "undefined" &&
+                  (document.hidden || !document.hasFocus())
+                ) {
+                  const channelName = currentChannel?.name || "sohbet";
+                  const body = message.text
+                    ? message.text.length > 120
+                      ? message.text.slice(0, 120) + "..."
+                      : message.text
+                    : "Yeni mesaj";
+
+                  try {
+                    const notification = new Notification(
+                      `${
+                        message.username || "Bir kullanıcı"
+                      } - #${channelName}`,
+                      {
+                        body: body,
+                        icon: "/favicon.ico",
+                        badge: "/favicon.ico",
+                        tag: `message-${channelId}-${Date.now()}`,
+                        silent: false,
+                      }
+                    );
+
+                    // Bildirime tıklanınca pencereyi focus et
+                    notification.onclick = () => {
+                      if (window) {
+                        window.focus();
+                      }
+                      notification.close();
+                    };
+
+                    // 5 saniye sonra otomatik kapat
+                    setTimeout(() => notification.close(), 5000);
+                  } catch (error) {
+                    console.error("Masaüstü bildirim hatası:", error);
+                  }
+                }
+              }
+            }
+          }
+
           if (
             !currentChannel ||
-            currentChannel.id !== data.channelId ||
+            currentChannel.id !== channelId ||
             !showChatPanel
           ) {
-            incrementUnread(data.channelId);
+            incrementUnread(channelId);
             playSound("message");
           }
         }
@@ -126,7 +216,16 @@ function GlobalChatListener({ showChatPanel }) {
     };
     room.on(RoomEvent.DataReceived, handleData);
     return () => room.off(RoomEvent.DataReceived, handleData);
-  }, [room, currentChannel, incrementUnread, user, showChatPanel, playSound]);
+  }, [
+    room,
+    currentChannel,
+    incrementUnread,
+    user,
+    showChatPanel,
+    playSound,
+    desktopNotifications,
+    notifyOnMessage,
+  ]);
   return null;
 }
 
@@ -265,8 +364,8 @@ function SettingsUpdater() {
               video: {
                 deviceId:
                   videoId !== "default" ? { exact: videoId } : undefined,
-                width: { ideal: 480, max: 480 },
-                height: { ideal: 360, max: 360 },
+                width: { ideal: 320, max: 320 },
+                height: { ideal: 240, max: 240 },
                 frameRate: { ideal: 18, max: 18 },
               },
             };
@@ -283,14 +382,14 @@ function SettingsUpdater() {
               // Eski track'i durdur
               oldTrack.stop();
 
-              // Yeni track'i publish et
+              // Yeni track'i publish et - Minimum bandwidth kullanımı
               const newPublication = await localParticipant.publishTrack(
                 newTrack,
                 {
                   source: Track.Source.Camera,
                   videoEncoding: {
-                    maxBitrate: 120000,
-                    maxFramerate: 18,
+                    maxBitrate: 50000, // 50kbps (minimum bandwidth)
+                    maxFramerate: 18, // 18 fps
                   },
                   videoCodec: "vp8",
                   simulcast: false,
@@ -444,13 +543,107 @@ function ConnectionStatusIndicator() {
   );
 }
 
-function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
+function RoomEventsHandler({ onConnected, onDisconnected, onError, roomName }) {
   const room = useRoomContext();
   const { playSound } = useSoundEffects();
+  const {
+    desktopNotifications,
+    notifyOnJoin,
+    notifyOnLeave,
+    notificationSound,
+  } = useSettingsStore();
+  const { user } = useAuthStore();
+
+  // Bildirim izni kontrolü ve isteği
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "default" && desktopNotifications) {
+      // İzin henüz istenmemişse ve bildirimler açıksa, izin iste
+      Notification.requestPermission().catch((error) => {
+        console.error("Bildirim izni hatası:", error);
+      });
+    }
+  }, [desktopNotifications]);
+
+  // Bildirim gösterme fonksiyonu
+  const showNotification = useCallback(
+    (title, body, silent = false) => {
+      if (!desktopNotifications) return;
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") {
+        // İzin yoksa sessizce devam et (kullanıcı reddetmiş olabilir)
+        return;
+      }
+
+      // Eğer pencere aktifse bildirim gösterme
+      if (document && !document.hidden && document.hasFocus()) return;
+
+      try {
+        const notification = new Notification(title, {
+          body,
+          icon: "/logo.ico",
+          badge: "/logo.ico",
+          tag: `netrex-${Date.now()}`, // Her bildirimi benzersiz yap
+          silent: silent || !notificationSound,
+        });
+
+        // Bildirime tıklanınca pencereyi focus et
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+
+        // 5 saniye sonra otomatik kapat
+        setTimeout(() => notification.close(), 5000);
+      } catch (error) {
+        console.error("Bildirim hatası:", error);
+      }
+    },
+    [desktopNotifications, notificationSound]
+  );
+
   useEffect(() => {
     if (!room) return;
-    const onJoin = () => playSound("join");
-    const onLeave = () => playSound("someone-left");
+
+    const onJoin = (participant) => {
+      playSound("join");
+
+      // Bildirim göster (sadece remote participant'lar için)
+      if (
+        notifyOnJoin &&
+        participant &&
+        !participant.isLocal &&
+        participant.identity !== user?.displayName
+      ) {
+        showNotification(
+          "Kullanıcı Katıldı",
+          `${participant.identity || "Bir kullanıcı"} ${
+            roomName ? `"${roomName}"` : ""
+          } odasına katıldı`,
+          false
+        );
+      }
+    };
+
+    const onLeave = (participant) => {
+      playSound("someone-left");
+
+      // Bildirim göster (sadece remote participant'lar için)
+      if (
+        notifyOnLeave &&
+        participant &&
+        !participant.isLocal &&
+        participant.identity !== user?.displayName
+      ) {
+        showNotification(
+          "Kullanıcı Ayrıldı",
+          `${participant.identity || "Bir kullanıcı"} ${
+            roomName ? `"${roomName}"` : ""
+          } odasından ayrıldı`,
+          false
+        );
+      }
+    };
 
     // Bağlantı event'leri
     const onRoomConnected = () => {
@@ -534,20 +727,24 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
     // İlk kontrol
     checkConnectionState();
 
-    // Event'leri dinle
-    room.on(RoomEvent.Connected, onRoomConnected);
-    room.on(RoomEvent.Disconnected, onRoomDisconnected);
-    room.on(RoomEvent.Reconnecting, () => {
+    // Reconnecting ve Reconnected handler'larını sakla (cleanup için)
+    const onReconnecting = () => {
       if (process.env.NODE_ENV === "development") {
         console.log("Room reconnecting...");
       }
-    });
-    room.on(RoomEvent.Reconnected, () => {
+    };
+    const onReconnected = () => {
       if (process.env.NODE_ENV === "development") {
         console.log("Room reconnected");
       }
       if (onConnected) onConnected();
-    });
+    };
+
+    // Event'leri dinle
+    room.on(RoomEvent.Connected, onRoomConnected);
+    room.on(RoomEvent.Disconnected, onRoomDisconnected);
+    room.on(RoomEvent.Reconnecting, onReconnecting);
+    room.on(RoomEvent.Reconnected, onReconnected);
     room.on(RoomEvent.ConnectionStateChanged, checkConnectionState);
     room.on(RoomEvent.ParticipantConnected, onJoin);
     room.on(RoomEvent.ParticipantDisconnected, onLeave);
@@ -564,6 +761,8 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
     return () => {
       room.off(RoomEvent.Connected, onRoomConnected);
       room.off(RoomEvent.Disconnected, onRoomDisconnected);
+      room.off(RoomEvent.Reconnecting, onReconnecting);
+      room.off(RoomEvent.Reconnected, onReconnected);
       room.off(RoomEvent.ConnectionStateChanged, checkConnectionState);
       room.off(RoomEvent.ParticipantConnected, onJoin);
       room.off(RoomEvent.ParticipantDisconnected, onLeave);
@@ -574,7 +773,20 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError }) {
         room.off("error", onRoomError);
       }
     };
-  }, [room, playSound, onConnected, onDisconnected, onError]);
+  }, [
+    room,
+    playSound,
+    onConnected,
+    onDisconnected,
+    onError,
+    roomName,
+    desktopNotifications,
+    notifyOnJoin,
+    notifyOnLeave,
+    notificationSound,
+    showNotification,
+    user,
+  ]);
   return null;
 }
 function DeafenManager({ isDeafened }) {
@@ -835,21 +1047,28 @@ export default function ActiveRoom({
   }, []);
 
   useEffect(() => {
+    // Room değiştiğinde state'leri sıfırla (eski room'dan temiz çıkış için)
+    setToken(""); // Token'ı sıfırla ki eski room'dan disconnect olsun
+    setConnectionError(null);
+    setIsReconnecting(false);
+    setHasConnectedOnce(false);
+    hasConnectedOnceRef.current = false;
+    setActiveStreamId(null); // Aktif stream'i sıfırla
+    setIsCameraOn(false); // Kamera durumunu sıfırla
+
+    // Timeout'u temizle
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+
     (async () => {
       try {
         if (window.netrex) {
           const t = await window.netrex.getLiveKitToken(roomName, username);
           setToken(t);
-          // Token alındığında hataları sıfırla
-          setConnectionError(null);
-          setIsReconnecting(false);
-          setHasConnectedOnce(false);
-          hasConnectedOnceRef.current = false; // Reset
 
           // 20 saniye içinde bağlantı kurulamazsa hata göster
-          if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-          }
           connectionTimeoutRef.current = setTimeout(() => {
             // Eğer hala bağlanmadıysa hata göster
             if (!hasConnectedOnceRef.current) {
@@ -867,17 +1086,49 @@ export default function ActiveRoom({
     return () => {
       if (connectionTimeoutRef.current) {
         clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
       }
     };
-  }, [roomName, username]);
+  }, [roomName, username, userId]);
 
-  const handleManualLeave = () => {
+  // Component unmount veya room değiştiğinde cleanup
+  useEffect(() => {
+    return () => {
+      // Component unmount olduğunda Firebase'den temizle - Optimize: cleanup
+      if (userId && roomName) {
+        const presenceRef = doc(db, "room_presence", roomName);
+        updateDoc(presenceRef, {
+          users: arrayRemove({ userId, username }),
+        }).catch((error) => {
+          // Document yoksa veya zaten silinmişse sessizce devam et
+          if (error.code !== "not-found") {
+            console.error("Room presence cleanup hatası (unmount):", error);
+          }
+        });
+      }
+    };
+  }, [roomName, username, userId]);
+
+  const handleManualLeave = async () => {
     playSound("left");
+
+    // Firebase'den kullanıcıyı çıkar (room presence) - Optimize: timestamp yok
+    if (userId && roomName) {
+      try {
+        const presenceRef = doc(db, "room_presence", roomName);
+        await updateDoc(presenceRef, {
+          users: arrayRemove({ userId, username }),
+        });
+      } catch (error) {
+        console.error("Room presence çıkarma hatası:", error);
+      }
+    }
+
     onLeave();
   };
 
   // Bağlantı başarılı olduğunda
-  const handleConnected = () => {
+  const handleConnected = async () => {
     hasConnectedOnceRef.current = true;
     setHasConnectedOnce(true);
     setIsReconnecting(false);
@@ -888,14 +1139,49 @@ export default function ActiveRoom({
       connectionTimeoutRef.current = null;
     }
     console.log("LiveKit bağlantısı başarılı");
+
+    // Firebase'e kullanıcıyı ekle (room presence) - Optimize: sadece userId ve username
+    if (userId && roomName) {
+      try {
+        const presenceRef = doc(db, "room_presence", roomName);
+        const userData = { userId, username };
+        await updateDoc(presenceRef, {
+          users: arrayUnion(userData),
+        }).catch(async (error) => {
+          // Document yoksa oluştur
+          if (error.code === "not-found") {
+            await setDoc(presenceRef, {
+              users: [userData],
+            });
+          }
+        });
+      } catch (error) {
+        console.error("Room presence ekleme hatası:", error);
+      }
+    }
   };
 
   // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
-  const handleDisconnect = (reason) => {
+  const handleDisconnect = async (reason) => {
     console.log("LiveKit bağlantısı koptu:", reason);
     // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
     if (hasConnectedOnce) {
       setIsReconnecting(true);
+    }
+
+    // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
+    if (userId && roomName) {
+      try {
+        const presenceRef = doc(db, "room_presence", roomName);
+        await updateDoc(presenceRef, {
+          users: arrayRemove({ userId, username }),
+        });
+      } catch (error) {
+        // Document yoksa veya zaten silinmişse sessizce devam et
+        if (error.code !== "not-found") {
+          console.error("Room presence cleanup hatası:", error);
+        }
+      }
     }
     // İlk bağlantı başarısız olduysa zaten timeout'ta hata gösterilecek
   };
@@ -935,6 +1221,8 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
+      // KEY: roomName değiştiğinde component'i tamamen yeniden mount et (eski room'dan disconnect için)
+      key={roomName}
       // DÜZELTME: video={false} yapıyoruz ki otomatik yönetim manuel fonksiyonumuzla çakışmasın.
       video={false}
       audio={true}
@@ -959,6 +1247,7 @@ export default function ActiveRoom({
         onConnected={handleConnected}
         onDisconnected={handleDisconnect}
         onError={handleError}
+        roomName={roomName}
       />
       <MicrophoneManager />
 
@@ -1281,6 +1570,7 @@ function StageManager({
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef(null);
   const userStoppedWatchingRef = useRef(false); // Kullanıcı manuel olarak izlemeyi durdurdu mu?
+  const prevScreenTracksRef = useRef([]); // Önceki screen share track'lerini takip etmek için
 
   // Resize handler - throttle ile optimize edilmiş
   const resizeTimeoutRef = useRef(null);
@@ -1346,6 +1636,38 @@ function StageManager({
     : null;
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
+  const { desktopNotifications, notifyOnJoin } = useSettingsStore();
+
+  // Yayın açıldığında bildirim göster
+  useEffect(() => {
+    if (screenTracks.length > prevScreenTracksRef.current.length) {
+      // Yeni bir yayın başladı
+      const newTracks = screenTracks.filter(
+        (t) =>
+          !prevScreenTracksRef.current.find(
+            (pt) => pt.participant.sid === t.participant.sid
+          )
+      );
+
+      newTracks.forEach((track) => {
+        if (
+          !track.participant.isLocal &&
+          desktopNotifications &&
+          notifyOnJoin
+        ) {
+          const participantName = track.participant.identity || "Birisi";
+          if (Notification.permission === "granted") {
+            new Notification("Yayın Başladı", {
+              body: `${participantName} ekran paylaşımı başlattı`,
+              icon: "/favicon.ico",
+              tag: `screen-share-${track.participant.sid}`,
+            });
+          }
+        }
+      });
+    }
+    prevScreenTracksRef.current = screenTracks;
+  }, [screenTracks, desktopNotifications, notifyOnJoin]);
 
   // activeStreamId'yi yönet - sadece track değiştiğinde veya track kaybolduğunda güncelle
   // Kullanıcı manuel olarak durdurduğunda (null yaptığında) tekrar seçme
@@ -1366,10 +1688,16 @@ function StageManager({
       return;
     }
 
-    // Yeni track geldiyse ve aktif track yoksa, ilk track'i seç
+    // YENİ: Otomatik seçim kaldırıldı - kullanıcılar manuel olarak yayına katılacak
+    // Sadece kendi yayınını açan kişi için otomatik olarak kendi yayınını göster
     if (screenTracks.length > 0 && !activeStreamId) {
-      userStoppedWatchingRef.current = false; // Otomatik seçim, reset
-      setActiveStreamId(screenTracks[0].participant.identity);
+      const myScreenShare = screenTracks.find((t) => t.participant.isLocal);
+      if (myScreenShare) {
+        // Kendi yayınını açan kişi için otomatik olarak kendi yayınını göster
+        userStoppedWatchingRef.current = false;
+        setActiveStreamId(myScreenShare.participant.identity);
+      }
+      // Diğer kullanıcılar için otomatik seçim yok - manuel olarak katılmaları gerekiyor
     }
   }, [screenTracks, activeStreamId, setActiveStreamId]);
 
@@ -1634,7 +1962,21 @@ function ScreenShareStage({
       } else {
         // Ses açıldığında tüm kontrolleri geri al
         audioRef.current.muted = false;
-        audioRef.current.volume = volume / 100;
+        // Logaritmik (exponential) mapping: ses algısı logaritmik olduğu için
+        // Linear mapping yerine exponential kullanıyoruz
+        // Formül:
+        // - 0-100%: volume = (percent/100)^2.5 (daha hassas düşük ses kontrolü)
+        // - 100-200%: volume = 1.0 - (200-percent)/100 * 0.2 (100%'den 200%'e yumuşak artış, max 1.0)
+        // NOT: HTMLMediaElement volume 0-1 aralığında olmalı, bu yüzden 1.0 ile sınırlıyoruz
+        // %100-200 arası için daha hassas kontrol sağlamak için exponential mapping kullanıyoruz
+        // 100% = 1.0, 150% = 0.9, 200% = 0.8 (daha yumuşak eğri)
+        const mappedVolume =
+          volume === 0
+            ? 0
+            : volume <= 100
+            ? Math.pow(volume / 100, 2.5) // 0-100% arası için exponential
+            : Math.min(1.0 - ((200 - volume) / 100) * 0.2, 1.0); // 100-200% arası için yumuşak artış, ama max 1.0 (HTMLMediaElement limiti)
+        audioRef.current.volume = mappedVolume;
         audioRef.current.play().catch(() => {}); // AutoPlay policy nedeniyle hata olabilir, yoksay
         // Track'i tekrar aktif et
         if (audioTrackRef?.publication?.track?.mediaStreamTrack) {
@@ -1802,20 +2144,20 @@ function ScreenShareStage({
           <div className="pointer-events-auto">
             {/* Bottom Controls - Profesyonel Tasarım */}
             <div className="flex justify-between items-end animate-in fade-in slide-in-from-bottom-2 duration-300 gap-4">
-              {/* İzleyici Sayısı - Modern Badge */}
-              <div className="flex items-center gap-2.5 glass-strong px-5 py-3 rounded-2xl border border-white/10 shadow-soft-lg backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/90 to-[#1e1f22]/90 hover:border-indigo-500/30 transition-all duration-300 group/viewers">
+              {/* İzleyici Sayısı - Kompakt Badge */}
+              <div className="flex items-center gap-2 glass-strong px-3 py-1.5 rounded-lg border border-white/10 shadow-soft backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/90 to-[#1e1f22]/90 hover:border-indigo-500/30 transition-all duration-300 group/viewers">
                 <div className="relative">
                   <Users
-                    size={20}
+                    size={14}
                     className="text-indigo-400 group-hover/viewers:text-indigo-300 transition-colors"
                   />
-                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#1e1f22] animate-pulse"></div>
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#1e1f22] animate-pulse"></div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs text-[#949ba4] font-medium leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-[#949ba4] font-medium leading-tight">
                     Canlı İzleyici
                   </span>
-                  <span className="text-base font-bold text-white leading-tight">
+                  <span className="text-xs font-bold text-white leading-tight">
                     {viewerCount}
                   </span>
                 </div>
@@ -2006,6 +2348,115 @@ function ParticipantList({
   );
 }
 
+// Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame
+function ScreenSharePreviewComponent({ trackRef }) {
+  const [previewImage, setPreviewImage] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const hasCapturedRef = useRef(false);
+  const captureTimeoutRef = useRef(null);
+  const trackSidRef = useRef(null);
+
+  // Track değiştiğinde reset - trackSid'i stabilize et
+  const currentTrackSid = trackRef?.participant?.sid ?? null;
+
+  useEffect(() => {
+    if (currentTrackSid !== trackSidRef.current) {
+      hasCapturedRef.current = false;
+      setPreviewImage(null);
+      trackSidRef.current = currentTrackSid;
+    }
+  }, [currentTrackSid]);
+
+  // Video element'ini track'e bağla - trackSid ve publication'ı stabilize et
+  const trackPublicationSid = trackRef?.publication?.trackSid ?? null;
+
+  useEffect(() => {
+    if (!trackRef?.publication?.track || hasCapturedRef.current) return;
+
+    const trackPublication = trackRef.publication;
+
+    const track = trackPublication.track;
+    const video = videoRef.current;
+
+    if (!video) return;
+
+    track.attach(video);
+
+    // Video yüklendiğinde 1 saniye sonra frame yakala
+    const handleLoadedMetadata = () => {
+      if (hasCapturedRef.current) return;
+
+      captureTimeoutRef.current = setTimeout(() => {
+        if (video && canvasRef.current && !hasCapturedRef.current) {
+          try {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext("2d");
+
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 360;
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL("image/jpeg", 0.8);
+            setPreviewImage(imageData);
+            hasCapturedRef.current = true;
+
+            // Video track'i detach et (artık gerek yok, bandwidth tasarrufu)
+            track.detach(video);
+          } catch (error) {
+            console.warn("Preview capture error:", error);
+          }
+        }
+      }, 1000); // 1 saniye sonra yakala
+    };
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      if (captureTimeoutRef.current) {
+        clearTimeout(captureTimeoutRef.current);
+        captureTimeoutRef.current = null;
+      }
+      if (track && video) {
+        track.detach(video);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackSid, trackPublicationSid]);
+
+  return (
+    <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl">
+      {!hasCapturedRef.current && (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+            style={{
+              filter: "blur(2px) brightness(0.7)",
+            }}
+          />
+          <canvas ref={canvasRef} className="hidden" />
+        </>
+      )}
+      {previewImage && (
+        <img
+          src={previewImage}
+          alt="Screen share preview"
+          className="w-full h-full object-cover"
+          style={{
+            filter: "blur(2px) brightness(0.7)",
+          }}
+        />
+      )}
+      <div className="absolute inset-0 bg-black/30"></div>
+    </div>
+  );
+}
+
 function UserCard({
   participant,
   totalCount,
@@ -2142,9 +2593,10 @@ function UserCard({
     >
       <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
         {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
+        {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
         {shouldShowVideo &&
         videoTrack &&
-        (!hasScreenShare || isCurrentlyWatching) ? (
+        (!hasScreenShare || isCurrentlyWatching || !activeStreamId) ? (
           <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg">
             <VideoTrack
               trackRef={videoTrack}
@@ -2174,7 +2626,7 @@ function UserCard({
             {/* Alt kısımda hafif gradient overlay (isim için kontrast) */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent pointer-events-none" />
           </div>
-        ) : !hasScreenShare || isCurrentlyWatching ? (
+        ) : !hasScreenShare || isCurrentlyWatching || !activeStreamId ? (
           <div
             className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold shadow-soft-lg z-10 relative transition-all duration-300 group-hover:scale-110 ${
               isSpeaking
@@ -2264,18 +2716,9 @@ function UserCard({
           </span>
         </div>
 
-        {/* Screen Share Önizleme - Az blur'lu arka plan (sadece izlenmiyorsa) */}
+        {/* Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame (sadece izlenmiyorsa) */}
         {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl">
-            <VideoTrack
-              trackRef={screenShareTrack}
-              className="w-full h-full object-cover"
-              style={{
-                filter: "blur(2px) brightness(0.7)",
-              }}
-            />
-            <div className="absolute inset-0 bg-black/30"></div>
-          </div>
+          <ScreenSharePreviewComponent trackRef={screenShareTrack} />
         )}
 
         {/* Üstte çok küçük "yayın yapıyor" badge'i - Screen share varsa ve izleniyorsa */}
@@ -2293,7 +2736,7 @@ function UserCard({
 
         {/* Üstte "yayın yapıyor" badge'i - Screen share varsa ama izlenmiyorsa */}
         {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <div className="absolute top-3 left-3 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
+          <div className="absolute top-0.5 left-0.5 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
             <span className="font-medium text-white text-xs drop-shadow-lg flex items-center gap-1.5">
               <div className="relative">
                 <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
@@ -2315,14 +2758,14 @@ function UserCard({
             }}
             className="absolute inset-0 z-20 flex items-center justify-center group/join"
           >
-            <div className="glass-strong hover:glass border-2 border-white/30 hover:border-white/50 bg-gradient-to-r from-indigo-500/90 to-purple-500/90 hover:from-indigo-500 hover:to-purple-500 px-8 py-4 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-105 hover:shadow-glow flex items-center gap-3 font-bold text-white text-base shadow-soft-lg">
+            <div className="glass-strong hover:glass border border-white/30 hover:border-white/50 bg-gradient-to-r from-indigo-500/90 to-purple-500/90 hover:from-indigo-500 hover:to-purple-500 px-2 py-1 rounded-lg backdrop-blur-md transition-all duration-200 hover:scale-105 hover:shadow-glow flex items-center gap-2 font-semibold text-white text-xs shadow-soft">
               <div className="relative">
                 <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
-                <div className="relative w-3 h-3 bg-red-500 rounded-full"></div>
+                <div className="relative w-2 h-2 bg-red-500 rounded-full"></div>
               </div>
               <span className="drop-shadow-lg">Yayına Katıl</span>
               <Tv
-                size={20}
+                size={14}
                 className="group-hover/join:scale-110 transition-transform"
               />
             </div>
@@ -2360,6 +2803,7 @@ function BottomControls({
   stopScreenShare,
 }) {
   const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
   const [isMuted, setMuted] = useState(false);
   const { profileColor, enableCamera, videoId } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
@@ -2387,48 +2831,20 @@ function BottomControls({
   const isUpdatingMetadataRef = useRef(false);
   const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
 
-  // İlk metadata'yı gönder (localParticipant hazır olduğunda)
+  // Room bağlantı durumunu kontrol et
+  const isRoomConnected = room?.state === ConnectionState.Connected;
+
   useEffect(() => {
-    if (!localParticipant || hasSentInitialMetadataRef.current) return;
-
-    // Room bağlantısını bekle (kısa bir gecikme)
-    const sendInitialMetadata = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500)); // Room bağlantısı için bekle
-
-      if (!localParticipant || hasSentInitialMetadataRef.current) return;
-
-      const initialMetadata = JSON.stringify({
-        isDeafened,
-        isMuted,
-        profileColor,
-        isCameraOn,
-      });
-
-      try {
-        await localParticipant.setMetadata(initialMetadata);
-        lastMetadataRef.current = initialMetadata;
-        hasSentInitialMetadataRef.current = true;
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            "✅ İlk metadata gönderildi:",
-            JSON.parse(initialMetadata)
-          );
-        }
-      } catch (error) {
-        // İlk gönderimde hata olursa, normal update mekanizması devreye girecek
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            "⏳ İlk metadata gönderilemedi, normal update mekanizması devreye girecek:",
-            error.message
-          );
-        }
+    // Room bağlantısı tamamlanmadan önce metadata güncelleme yapma
+    if (!isRoomConnected) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "⏳ Room bağlantısı tamamlanmadı, metadata güncellemesi bekleniyor"
+        );
       }
-    };
+      return;
+    }
 
-    sendInitialMetadata();
-  }, [localParticipant, isDeafened, isMuted, profileColor, isCameraOn]);
-
-  useEffect(() => {
     if (!localParticipant) {
       if (process.env.NODE_ENV === "development") {
         console.log("⚠️ Local participant yok, metadata güncellenemedi");
@@ -2460,8 +2876,19 @@ function BottomControls({
       clearTimeout(metadataUpdateRef.current);
     }
 
-    // Yeni timeout başlat (100ms debounce - çok daha hızlı)
+    // Yeni timeout başlat (300ms debounce)
     metadataUpdateRef.current = setTimeout(async () => {
+      // Bağlantı durumunu tekrar kontrol et
+      if (!isRoomConnected || room?.state !== ConnectionState.Connected) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "⏳ Room bağlantısı kesildi, metadata güncellemesi iptal edildi"
+          );
+        }
+        isUpdatingMetadataRef.current = false;
+        return;
+      }
+
       // Eğer zaten güncelleme yapılıyorsa bekle
       if (isUpdatingMetadataRef.current) return;
 
@@ -2476,11 +2903,12 @@ function BottomControls({
 
       isUpdatingMetadataRef.current = true;
       try {
-        // setMetadata çağrısı yapılmadan önce participant'ın room'una erişebildiğimizden emin ol
-        // Room kontrolünü kaldırdık - LiveKit kendi kontrolünü yapıyor
+        // setMetadata çağrısı yapılmadan önce room bağlantısının tamamlandığından emin ol
         await localParticipant.setMetadata(newMetadata);
         lastMetadataRef.current = newMetadata;
-        console.log("✅ Metadata güncellendi:", JSON.parse(newMetadata));
+        if (process.env.NODE_ENV === "development") {
+          console.log("✅ Metadata güncellendi:", JSON.parse(newMetadata));
+        }
       } catch (error) {
         // Bağlantı hatalarını ve timeout hatalarını sessizce yoksay
         const errorMessage = error?.message || "";
@@ -2498,22 +2926,32 @@ function BottomControls({
         } else {
           // Bağlantı hatası varsa, metadata'yı güncelleme (retry için)
           // lastMetadataRef.current'i güncelleme, böylece tekrar denenecek
-          console.log(
-            "⏳ Bağlantı hatası, metadata güncellemesi ertelendi:",
-            errorMessage
-          );
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              "⏳ Bağlantı hatası, metadata güncellemesi ertelendi:",
+              errorMessage
+            );
+          }
         }
       } finally {
         isUpdatingMetadataRef.current = false;
       }
-    }, 300); // 300ms debounce (daha hızlı)
+    }, 300); // 300ms debounce
 
     return () => {
       if (metadataUpdateRef.current) {
         clearTimeout(metadataUpdateRef.current);
       }
     };
-  }, [isDeafened, isMuted, localParticipant, profileColor, isCameraOn]);
+  }, [
+    isDeafened,
+    isMuted,
+    localParticipant,
+    profileColor,
+    isCameraOn,
+    isRoomConnected,
+    room,
+  ]);
 
   // Video track durumunu senkronize et (sadece event'lerde, sürekli kontrol yok)
   const isTogglingCameraRef = useRef(false); // Toggle sırasında event listener'ları devre dışı bırak
@@ -2636,13 +3074,13 @@ function BottomControls({
           }
         }
 
-        // Kamera stream'i al - ÜCRETSİZ PLAN İÇİN DENGELİ AYARLAR
+        // Kamera stream'i al - Minimum bandwidth kullanımı
         const constraints = {
           video: {
             deviceId: videoId !== "default" ? { exact: videoId } : undefined,
-            width: { ideal: 480, max: 480 },
-            height: { ideal: 360, max: 360 },
-            frameRate: { ideal: 18, max: 18 }, // Tasarruf + akıcılık
+            width: { ideal: 320, max: 320 },
+            height: { ideal: 240, max: 240 },
+            frameRate: { ideal: 12, max: 12 }, // Minimum bandwidth
             // Bandwidth tasarrufu için ekstra constraint'ler
             facingMode: "user", // Ön kamera (daha verimli)
           },
@@ -2662,8 +3100,8 @@ function BottomControls({
           if (videoTrack.applyConstraints) {
             try {
               await videoTrack.applyConstraints({
-                width: { ideal: 480, max: 480 },
-                height: { ideal: 360, max: 360 },
+                width: { ideal: 320, max: 320 },
+                height: { ideal: 240, max: 240 },
                 frameRate: { ideal: 18, max: 18 },
               });
             } catch (err) {
@@ -2683,19 +3121,17 @@ function BottomControls({
           });
         }
 
-        // Video track'i LiveKit'e publish et - ÜCRETSİZ PLAN DENGELİ BANDWIDTH
+        // Video track'i LiveKit'e publish et - Minimum bandwidth kullanımı
         let publication;
         try {
           publication = await localParticipant.publishTrack(videoTrack, {
             source: Track.Source.Camera,
             videoEncoding: {
-              maxBitrate: 120000, // 120kbps max (daha net görüntü)
-              maxFramerate: 18, // Biraz daha akıcı
-              // Adaptive bitrate kapalı (sabit bitrate daha tasarruflu)
+              maxBitrate: 50000, // 50kbps (minimum bandwidth)
+              maxFramerate: 12, // 12 fps (daha az bandwidth)
             },
             videoCodec: "vp8", // VP8 daha az bandwidth kullanır
             simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
-            // Adaptive stream kapalı (sabit kalite)
           });
         } catch (publishError) {
           console.error("❌ Track publish hatası:", publishError);
@@ -3030,17 +3466,20 @@ function BottomControls({
       }
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
-      // Optimize edilmiş bitrate: Daha düşük kaynak kullanımı
-      // 1080p: 800kbps, 720p: 500kbps, 480p: 300kbps
+      // Minimum bandwidth kullanımı için optimize edilmiş bitrate
+      // 1080p: 200kbps, 720p: 150kbps, 480p: 100kbps
       const maxBitrate =
-        resolution === 1080 ? 800000 : resolution === 720 ? 500000 : 300000;
+        resolution === 1080 ? 200000 : resolution === 720 ? 150000 : 100000;
+
+      // Frame rate'i de düşür (daha az bandwidth)
+      const optimizedFps = Math.min(fps, 15); // Max 15 fps
 
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
         videoCodec: "vp8",
-        simulcast: true,
-        videoEncoding: { maxBitrate, maxFramerate: fps },
+        simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
+        videoEncoding: { maxBitrate, maxFramerate: optimizedFps },
       });
 
       const audioTrack = stream.getAudioTracks()[0];
@@ -3220,7 +3659,7 @@ function ControlButton({
         </div>
       )}
       {danger && !disabled && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-500/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-500/20 via-transparen7t to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
       )}
     </button>
   );

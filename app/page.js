@@ -5,6 +5,7 @@ import RoomList from "@/src/components/RoomList";
 import ActiveRoom from "@/src/components/ActiveRoom";
 import SettingsModal from "@/src/components/SettingsModal";
 import UpdateNotification from "@/src/components/UpdateNotification"; // EKLENDİ
+import UpdateSplash from "@/src/components/UpdateSplash"; // EKLENDİ
 import InfoModal from "@/src/components/InfoModal";
 import { Radio, Mic, Headphones } from "lucide-react";
 
@@ -27,6 +28,27 @@ export default function Home() {
     title: "",
     message: "",
   });
+  const [showUpdateSplash, setShowUpdateSplash] = useState(false);
+
+  // 0. Güncelleme Splash Ekranı Kontrolü
+  useEffect(() => {
+    // Sadece Electron'da ve güncelleme kontrolü açıksa göster
+    if (typeof window !== "undefined" && window.netrex) {
+      // Güncelleme kontrolü ayarını kontrol et
+      window.netrex.getSetting("checkUpdatesOnStartup").then((enabled) => {
+        if (enabled !== false) {
+          // Varsayılan olarak true, eğer false değilse göster
+          setShowUpdateSplash(true);
+        }
+      }).catch(() => {
+        // Hata durumunda varsayılan olarak göster
+        setShowUpdateSplash(true);
+      });
+    } else {
+      // Electron yoksa (web) splash gösterme
+      setShowUpdateSplash(false);
+    }
+  }, []);
 
   // 1. Auth Dinleyicisi
   useEffect(() => {
@@ -43,6 +65,36 @@ export default function Home() {
       });
     }
   }, []);
+
+  // 3. Admin DevTools Hotkey (Ctrl+Shift+D) ve UID güncelleme
+  useEffect(() => {
+    if (!isAuth || !user || !window.netrex) return;
+    
+    const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
+    const isAdmin = ADMIN_UID && user.uid === ADMIN_UID;
+    
+    // UID'yi Electron'a gönder (context menu için)
+    if (window.netrex.setCurrentUserUid) {
+      window.netrex.setCurrentUserUid(user.uid).catch(console.error);
+    }
+    
+    if (!isAdmin) return;
+    
+    const handleKeyDown = async (e) => {
+      // Ctrl+Shift+D
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        try {
+          await window.netrex.openDevTools(user.uid);
+        } catch (error) {
+          console.error("DevTools açma hatası:", error);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAuth, user]);
 
   const handleGoogleLogin = () => {
     if (window.netrex) {
@@ -144,6 +196,9 @@ export default function Home() {
     );
   }
 
+  // NOT: Splash ekranı artık Electron'da ayrı bir pencerede gösteriliyor
+  // Bu component artık kullanılmıyor, ama yine de tutuyoruz (fallback için)
+
   // --- ANA UYGULAMA ---
   return (
     <div className="flex h-screen w-screen bg-gray-800 overflow-hidden text-white relative">
@@ -182,6 +237,7 @@ export default function Home() {
           setViewMode("chat");
         }}
         user={user}
+        currentRoom={currentRoom}
         onOpenSettings={() => setShowSettings(true)}
       />
 

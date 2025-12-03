@@ -60,4 +60,16 @@ contextBridge.exposeInMainWorld("netrex", {
 
   // Cleanup
   removeListener: (channel) => ipcRenderer.removeAllListeners(channel),
+
+  // Electron path helpers for WASM files
+  getAppPath: () => ipcRenderer.invoke("get-app-path"),
+  getResourcesPath: () => ipcRenderer.invoke("get-resources-path"),
+
+  // DevTools (Admin only)
+  openDevTools: (userUid) => ipcRenderer.invoke("open-devtools", userUid),
+  isAdmin: (userUid) => ipcRenderer.invoke("is-admin", userUid),
+  setCurrentUserUid: (userUid) => ipcRenderer.invoke("set-current-user-uid", userUid),
+
+  // Splash screen
+  notifySplashComplete: () => ipcRenderer.invoke("splash-complete"),
 });
