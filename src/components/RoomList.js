@@ -379,7 +379,7 @@ export default function RoomList({
         const result = await deleteTextChannel(channel.id);
         if (!result.success) {
           throw new Error(result.error || "Kanal silinemedi.");
-        }
+    }
       },
     });
   };
@@ -396,17 +396,17 @@ export default function RoomList({
       successMessage: `"${room.name}" ses kanalı silindi.`,
       errorMessage: "Ses kanalı silinemedi.",
       action: async () => {
-        try {
+      try {
           // Eğer kullanıcı bu kanalda ise önce çıkar
           if (currentRoom === room.name) {
             onJoin(null);
           }
           await deleteDoc(doc(db, "rooms", room.id));
           console.log("✅ Ses kanalı Firebase'den silindi:", room.id);
-        } catch (error) {
+      } catch (error) {
           console.error("❌ Ses kanalı silme hatası:", error);
           throw error; // ConfirmDialog'a hata fırlat ki kullanıcıya göstersin
-        }
+      }
       },
     });
   };
@@ -430,7 +430,7 @@ export default function RoomList({
             <h1 className="font-semibold text-white text-[14px] tracking-tight leading-none">Netrex</h1>
             <span className="text-[10px] text-[#5c6370] font-medium mt-0.5">Client</span>
           </div>
-        </div>
+      </div>
         
         {/* Sağ butonlar */}
         <div className="flex items-center gap-1 relative z-10">
@@ -506,9 +506,9 @@ export default function RoomList({
                   <div key={room.id} className="mb-0.5">
                     {/* Kanal Başlığı */}
                     <div
-                      onClick={() => onJoin(room.name)}
-                      onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
-                      onMouseLeave={() => setHoveredChannel(null)}
+                  onClick={() => onJoin(room.name)}
+                  onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
+                  onMouseLeave={() => setHoveredChannel(null)}
                       className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors duration-200 relative ${
                         currentRoom === room.name
                           ? "bg-white/[0.08] text-white"
@@ -521,31 +521,31 @@ export default function RoomList({
                       )}
                       
                       <div className="flex items-center gap-2.5 min-w-0 flex-1 relative z-10">
-                        <Volume2
-                          size={18}
+                    <Volume2
+                      size={18}
                           className={`shrink-0 transition-colors duration-200 ${
                             currentRoom === room.name
                               ? "text-white"
                               : "text-[#5c6370] group-hover:text-[#949ba4]"
                           }`}
-                        />
+                    />
                         <span className={`truncate text-[14px] ${
                           currentRoom === room.name ? "font-semibold" : "font-medium"
                         }`}>
-                          {room.name}
-                        </span>
-                      </div>
+                      {room.name}
+                    </span>
+                  </div>
 
                       {showCreateButton && (
-                        <button
+                      <button
                           onClick={(e) => handleDeleteRoom(e, room)}
                           className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0 hover:bg-red-500/10"
-                          title="Odayı Sil"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
+                        title="Odayı Sil"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                </div>
                     
                     {/* Kullanıcı listesi - Kanalın altında */}
                     {userCount > 0 && (
@@ -614,7 +614,14 @@ export default function RoomList({
                 return (
                   <div
                     key={channel.id}
-                    onClick={() => {
+                    onClick={async () => {
+                      // Önce ses kanalı kontrolü yap
+                      if (!currentRoom) {
+                        // Bu durumda parent'a bildir, o modal gösterecek
+                        onJoinTextChannel(channel.id);
+                        return;
+                      }
+                      
                       // Aynı kanala tıklanırsa toggle yap
                       if (currentChannel?.id === channel.id) {
                         toggleChatPanel();
@@ -622,9 +629,14 @@ export default function RoomList({
                         // Farklı kanala tıklanırsa paneli aç ve kanalı değiştir
                         setShowChatPanel(true);
                         // Önce store'u güncelle (hemen currentChannel güncellensin)
-                        loadChannelMessages(channel.id);
-                        // Sonra parent'a bildir
-                        onJoinTextChannel(channel.id);
+                        try {
+                          await loadChannelMessages(channel.id);
+                          // Sonra parent'a bildir
+                          onJoinTextChannel(channel.id);
+                        } catch (error) {
+                          console.error("Kanal mesajları yüklenirken hata:", error);
+                          toast.error("Kanal açılamadı. Lütfen tekrar deneyin.");
+                        }
                       }
                     }}
                     onMouseEnter={() => setHoveredChannel(`text-${channel.id}`)}
@@ -660,14 +672,14 @@ export default function RoomList({
 
                     {/* Silme Butonu */}
                     {(channel.createdBy === user?.uid || isAdmin) && !hasUnread && (
-                      <button
+                        <button
                         onClick={(e) => handleDeleteChannel(e, channel)}
                         className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-500/10"
-                        title="Kanalı Sil"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
+                          title="Kanalı Sil"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                   </div>
                 );
               })
@@ -718,18 +730,18 @@ export default function RoomList({
               {userStatus === "offline" && "Offline"}
               {userStatus === "invisible" && "Görünmez"}
             </div>
+            </div>
           </div>
-        </div>
 
         {/* Settings Butonu */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenSettings();
-          }}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSettings();
+              }}
           className="w-8 h-8 flex items-center justify-center rounded-md text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
-          title="Kullanıcı Ayarları"
-        >
+              title="Kullanıcı Ayarları"
+            >
           <Settings size={18} />
         </button>
 
@@ -777,7 +789,7 @@ export default function RoomList({
             </button>
           </div>
         )}
-      </div>
+        </div>
 
       {/* 4. MODALLAR (PORTAL İLE BODY'YE RENDER) */}
       {showTextChannelModal &&
@@ -795,7 +807,7 @@ export default function RoomList({
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl animate-pulse-slow"></div>
                 <div className="absolute bottom-1/4 right-1/4 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
-              </div>
+      </div>
 
               <div className="relative z-10 p-8">
                 {/* Header */}
@@ -810,13 +822,13 @@ export default function RoomList({
                         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
                       </h3>
                       <p className="text-xs text-[#949ba4] font-medium mt-0.5">
-                        Metin Kanalı
-                      </p>
+              Metin Kanalı
+            </p>
                     </div>
                   </div>
                 </div>
 
-                <form onSubmit={handleCreateTextChannelSubmit}>
+            <form onSubmit={handleCreateTextChannelSubmit}>
                   <div className="glass-strong rounded-2xl p-6 border border-white/10 shadow-soft-lg mb-6 relative group/card hover:shadow-xl transition-all duration-300">
                     {/* Hover glow */}
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none rounded-2xl"></div>
@@ -824,22 +836,22 @@ export default function RoomList({
                     <div className="relative z-10">
                       <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-1.5 block">
                         <Hash size={12} className="text-indigo-400" /> Kanal Adı
-                      </label>
+              </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#949ba4] text-lg font-medium">
-                          #
-                        </span>
-                        <input
-                          type="text"
-                          value={newChannelName}
-                          onChange={(e) =>
+                  #
+                </span>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) =>
                             setNewChannelName(sanitizeChannelNameInput(e.target.value))
-                          }
-                          placeholder="yeni-kanal"
+                  }
+                  placeholder="yeni-kanal"
                           className="w-full bg-[#1e1f22] text-white p-3.5 pl-10 rounded-xl border border-white/10 outline-none font-medium transition-all duration-300 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 focus:bg-[#25272a] placeholder:text-[#4e5058]"
-                          autoFocus
-                        />
-                      </div>
+                  autoFocus
+                />
+              </div>
                       {channelError && (
                         <div className="mt-3 bg-gradient-to-r from-red-500/15 to-red-600/15 text-red-300 p-3 rounded-xl flex items-center gap-2 text-sm border border-red-500/30 shadow-soft backdrop-blur-sm animate-fadeIn">
                           <div className="w-1 h-1 bg-red-400 rounded-full"></div>
@@ -851,24 +863,24 @@ export default function RoomList({
 
                   {/* Footer buttons */}
                   <div className="flex gap-3 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowTextChannelModal(false);
-                        setNewChannelName("");
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTextChannelModal(false);
+                    setNewChannelName("");
                         setChannelError("");
-                      }}
+                  }}
                       onMouseDown={(e) => e.preventDefault()}
                       className="px-6 py-3 text-sm font-semibold text-[#b5bac1] hover:text-white transition-all duration-300 rounded-xl hover:bg-white/5 focus:outline-none"
-                    >
-                      Vazgeç
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!newChannelName.trim() || isCreatingTextChannel}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newChannelName.trim() || isCreatingTextChannel}
                       onMouseDown={(e) => e.preventDefault()}
                       className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 relative overflow-hidden group/save disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none"
-                    >
+                >
                       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
                       <span className="relative z-10 flex items-center gap-2">
                         {isCreatingTextChannel && (
@@ -876,14 +888,14 @@ export default function RoomList({
                         )}
                         {isCreatingTextChannel ? "Oluşturuluyor..." : "Kanal Oluştur"}
                       </span>
-                    </button>
-                  </div>
-                </form>
+                </button>
               </div>
-            </div>
+            </form>
+          </div>
+        </div>
           </div>,
           document.body
-        )}
+      )}
 
       {showVoiceRoomModal &&
         typeof window !== "undefined" &&
@@ -915,13 +927,13 @@ export default function RoomList({
                         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
                       </h3>
                       <p className="text-xs text-[#949ba4] font-medium mt-0.5">
-                        Ses Kanalı
-                      </p>
+              Ses Kanalı
+            </p>
                     </div>
                   </div>
                 </div>
 
-                <form onSubmit={handleCreateRoomSubmit}>
+            <form onSubmit={handleCreateRoomSubmit}>
                   <div className="glass-strong rounded-2xl p-6 border border-white/10 shadow-soft-lg mb-6 relative group/card hover:shadow-xl transition-all duration-300">
                     {/* Hover glow */}
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none rounded-2xl"></div>
@@ -929,20 +941,20 @@ export default function RoomList({
                     <div className="relative z-10">
                       <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-1.5 block">
                         <Volume2 size={12} className="text-indigo-400" /> Kanal Adı
-                      </label>
+              </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#949ba4]">
                           <Volume2 size={18} className="text-indigo-400/60" />
-                        </span>
-                        <input
-                          type="text"
-                          value={newRoomName}
+                </span>
+                <input
+                  type="text"
+                  value={newRoomName}
                           onChange={(e) => setNewRoomName(sanitizeRoomNameInput(e.target.value))}
-                          placeholder="Genel Sohbet"
+                  placeholder="Genel Sohbet"
                           className="w-full bg-[#1e1f22] text-white p-3.5 pl-12 rounded-xl border border-white/10 outline-none font-medium transition-all duration-300 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 focus:bg-[#25272a] placeholder:text-[#4e5058]"
-                          autoFocus
-                        />
-                      </div>
+                  autoFocus
+                />
+              </div>
                       {roomError && (
                         <div className="mt-3 bg-gradient-to-r from-red-500/15 to-red-600/15 text-red-300 p-3 rounded-xl flex items-center gap-2 text-sm border border-red-500/30 shadow-soft backdrop-blur-sm animate-fadeIn">
                           <div className="w-1 h-1 bg-red-400 rounded-full"></div>
@@ -954,34 +966,34 @@ export default function RoomList({
 
                   {/* Footer buttons */}
                   <div className="flex gap-3 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowVoiceRoomModal(false);
-                        setNewRoomName("");
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVoiceRoomModal(false);
+                    setNewRoomName("");
                         setRoomError("");
-                      }}
+                  }}
                       onMouseDown={(e) => e.preventDefault()}
                       className="px-6 py-3 text-sm font-semibold text-[#b5bac1] hover:text-white transition-all duration-300 rounded-xl hover:bg-white/5 focus:outline-none"
-                    >
-                      Vazgeç
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!newRoomName.trim() || isCreating}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newRoomName.trim() || isCreating}
                       onMouseDown={(e) => e.preventDefault()}
                       className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 relative overflow-hidden group/save disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none"
-                    >
+                >
                       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
                       <span className="relative z-10 flex items-center gap-2">
                         {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
                         {isCreating ? "Oluşturuluyor..." : "Kanal Oluştur"}
                       </span>
-                    </button>
-                  </div>
-                </form>
+                </button>
               </div>
-            </div>
+            </form>
+          </div>
+        </div>
           </div>,
           document.body
         )}
