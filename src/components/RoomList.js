@@ -624,7 +624,12 @@ export default function RoomList({
                       
                       // Aynı kanala tıklanırsa toggle yap
                       if (currentChannel?.id === channel.id) {
-                        toggleChatPanel();
+                        // Panel açıksa kapat, kapalıysa aç
+                        if (showChatPanel) {
+                          setShowChatPanel(false);
+                        } else {
+                          setShowChatPanel(true);
+                        }
                       } else {
                         // Farklı kanala tıklanırsa paneli aç ve kanalı değiştir
                         setShowChatPanel(true);
@@ -636,6 +641,8 @@ export default function RoomList({
                         } catch (error) {
                           console.error("Kanal mesajları yüklenirken hata:", error);
                           toast.error("Kanal açılamadı. Lütfen tekrar deneyin.");
+                          // Hata durumunda paneli kapat
+                          setShowChatPanel(false);
                         }
                       }
                     }}

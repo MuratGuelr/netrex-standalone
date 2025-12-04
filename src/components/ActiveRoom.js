@@ -279,11 +279,11 @@ function MicrophoneManager() {
             : undefined;
 
         return (
-        <AudioTrack
-          key={trackRef.publication.trackSid}
-          trackRef={trackRef}
+          <AudioTrack
+            key={trackRef.publication.trackSid}
+            trackRef={trackRef}
             {...(isRemote && { volume })} // Sadece remote track'lere volume prop'u ekle
-        />
+          />
         );
       })}
     </>
@@ -293,7 +293,8 @@ function MicrophoneManager() {
 // --- GLOBAL CHAT & EVENTS ---
 function GlobalChatListener({ showChatPanel, setShowChatPanel }) {
   const room = useRoomContext();
-  const { incrementUnread, currentChannel, textChannels, loadChannelMessages } = useChatStore();
+  const { incrementUnread, currentChannel, textChannels, loadChannelMessages } =
+    useChatStore();
   const { user } = useAuthStore();
   const { playSound } = useSoundEffects();
   const { desktopNotifications, notifyOnMessage } = useSettingsStore();
@@ -309,7 +310,7 @@ function GlobalChatListener({ showChatPanel, setShowChatPanel }) {
           const message = data.message;
           const channelId = data.channelId;
           // Mesajın geldiği kanalın adını bul
-          const messageChannel = textChannels.find(ch => ch.id === channelId);
+          const messageChannel = textChannels.find((ch) => ch.id === channelId);
           const channelName = messageChannel?.name || "sohbet";
 
           // Toast bildirim göster (uygulama içindeyse VE sohbet paneli kapalıysa)
@@ -342,9 +343,11 @@ function GlobalChatListener({ showChatPanel, setShowChatPanel }) {
             if (typeof window !== "undefined" && "Notification" in window) {
               if (Notification.permission === "granted") {
                 // Pencere arka plandaysa VEYA sohbet paneli kapalıysa masaüstü bildirim göster
-                const isAppInBackground = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
+                const isAppInBackground =
+                  typeof document !== "undefined" &&
+                  (document.hidden || !document.hasFocus());
                 const shouldNotify = isAppInBackground || !showChatPanel;
-                
+
                 if (shouldNotify) {
                   const body = message.text
                     ? message.text.length > 120
@@ -354,7 +357,9 @@ function GlobalChatListener({ showChatPanel, setShowChatPanel }) {
 
                   try {
                     const notification = new Notification(
-                      `${message.username || "Bir kullanıcı"} - #${channelName}`,
+                      `${
+                        message.username || "Bir kullanıcı"
+                      } - #${channelName}`,
                       {
                         body: body,
                         icon: "/favicon.ico",
@@ -709,8 +714,12 @@ function ConnectionStatusIndicator() {
               }`}
               style={{
                 height: `${bar * 3}px`,
-                backgroundColor: bar <= qualityInfo.bars ? qualityInfo.color : undefined,
-                boxShadow: bar <= qualityInfo.bars ? `0 0 4px ${qualityInfo.color}50` : undefined,
+                backgroundColor:
+                  bar <= qualityInfo.bars ? qualityInfo.color : undefined,
+                boxShadow:
+                  bar <= qualityInfo.bars
+                    ? `0 0 4px ${qualityInfo.color}50`
+                    : undefined,
               }}
             />
           ))}
@@ -729,7 +738,9 @@ function ConnectionStatusIndicator() {
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-4 py-2.5 bg-[#0d0e10] border border-white/10 rounded-xl shadow-2xl text-xs text-[#dbdee1] opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 whitespace-nowrap z-50 backdrop-blur-xl">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-6">
-            <span className="text-[#949ba4] font-medium">Bağlantı Kalitesi</span>
+            <span className="text-[#949ba4] font-medium">
+              Bağlantı Kalitesi
+            </span>
             <span className="font-bold" style={{ color: qualityInfo.color }}>
               {qualityInfo.label}
             </span>
@@ -1200,11 +1211,11 @@ function useAudioActivity(participant) {
           }
 
           try {
-          analyser.getByteFrequencyData(data);
-          let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i];
-          setIsActive(sum / data.length > 5);
-          raf = requestAnimationFrame(loop);
+            analyser.getByteFrequencyData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i];
+            setIsActive(sum / data.length > 5);
+            raf = requestAnimationFrame(loop);
           } catch (e) {
             // Analyser hatası - cleanup yap
             cleanup();
@@ -1326,7 +1337,12 @@ export default function ActiveRoom({
   const [hideIncomingVideo, setHideIncomingVideo] = useState(false);
 
   const [showVoicePanel, setShowVoicePanel] = useState(true);
-  const { showChatPanel, setShowChatPanel } = useChatStore();
+  const {
+    showChatPanel,
+    setShowChatPanel,
+    currentChannel,
+    clearCurrentChannel,
+  } = useChatStore();
   const [chatPosition, setChatPosition] = useState("right");
   const [chatWidth, setChatWidth] = useState(400); // Chat genişliği (pixel)
   const [contextMenu, setContextMenu] = useState(null);
@@ -1340,6 +1356,24 @@ export default function ActiveRoom({
   const { noiseSuppression, echoCancellation, autoGainControl } =
     useSettingsStore();
   const { playSound } = useSoundEffects();
+
+  // currentTextChannel null olduğunda paneli kapat
+  useEffect(() => {
+    if (!currentTextChannel && showChatPanel) {
+      setShowChatPanel(false);
+    }
+  }, [currentTextChannel, showChatPanel, setShowChatPanel]);
+
+  // currentTextChannel ile currentChannel senkronizasyonu
+  useEffect(() => {
+    if (currentTextChannel && currentChannel?.id !== currentTextChannel) {
+      // currentTextChannel set edilmiş ama currentChannel farklıysa, currentChannel'ı güncelle
+      // Bu durumda loadChannelMessages zaten çağrılmış olmalı, sadece kontrol ediyoruz
+    } else if (!currentTextChannel && currentChannel) {
+      // currentTextChannel null ama currentChannel set edilmişse, temizle
+      clearCurrentChannel();
+    }
+  }, [currentTextChannel, currentChannel, clearCurrentChannel]);
 
   // Not: Metin kanalına tıklama artık RoomList'te handle ediliyor (toggle mantığı ile)
   useEffect(() => {
@@ -1468,7 +1502,7 @@ export default function ActiveRoom({
     console.log("LiveKit bağlantısı koptu:", reason);
     // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
     if (hasConnectedOnce) {
-    setIsReconnecting(true);
+      setIsReconnecting(true);
     }
 
     // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
@@ -1542,7 +1576,10 @@ export default function ActiveRoom({
         reconnect: true,
       }}
     >
-      <GlobalChatListener showChatPanel={showChatPanel} setShowChatPanel={setShowChatPanel} />
+      <GlobalChatListener
+        showChatPanel={showChatPanel}
+        setShowChatPanel={setShowChatPanel}
+      />
       <VoiceProcessorHandler />
       <SettingsUpdater />
       <RoomEventsHandler
@@ -1650,119 +1687,124 @@ export default function ActiveRoom({
         {/* Arka plan katmanları */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#1a1b1e] via-[#1e1f22] to-[#1a1b1e]"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent"></div>
-        
+
         {/* Alt border glow */}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#2b2d31] to-transparent"></div>
-        
+
         {/* Sol taraf - Kanal bilgisi */}
         <div className="flex items-center gap-4 overflow-hidden relative z-10">
           <div className="flex items-center gap-3 min-w-0 group">
             {/* Kanal icon container */}
             <div className="relative">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2b2d31] to-[#25272a] flex items-center justify-center border border-white/5 shadow-lg group-hover:border-indigo-500/30 transition-all duration-300 group-hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]">
-                <Volume2 size={18} className="text-[#949ba4] group-hover:text-indigo-400 transition-colors duration-300" />
+                <Volume2
+                  size={18}
+                  className="text-[#949ba4] group-hover:text-indigo-400 transition-colors duration-300"
+                />
               </div>
               {/* Online indicator */}
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#1a1b1e] rounded-full flex items-center justify-center">
                 <div className="w-2 h-2 bg-[#23a559] rounded-full shadow-[0_0_6px_rgba(35,165,89,0.6)] animate-pulse"></div>
               </div>
             </div>
-            
+
             {/* Kanal adı */}
             <div className="flex flex-col min-w-0">
               <span className="text-white font-bold text-[15px] tracking-tight truncate group-hover:text-[#dbdee1] transition-colors duration-300">
-              {roomName}
-            </span>
-              <span className="text-[10px] text-[#949ba4] font-medium tracking-wide">Ses Kanalı</span>
-          </div>
+                {roomName}
+              </span>
+              <span className="text-[10px] text-[#949ba4] font-medium tracking-wide">
+                Ses Kanalı
+              </span>
             </div>
-          
+          </div>
+
           {/* Ayırıcı */}
           <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1 hidden sm:block"></div>
-          
+
           {/* Bağlantı durumu */}
           <ConnectionStatusIndicator />
-          </div>
-        
+        </div>
+
         {/* Sağ taraf - Kontrol butonları */}
         <div className="flex items-center gap-0.5 relative z-10 bg-[#111214]/80 rounded-md p-0.5">
           {/* Kullanıcılar butonu */}
-            <button
-              onClick={() => setShowVoicePanel(!showVoicePanel)}
+          <button
+            onClick={() => setShowVoicePanel(!showVoicePanel)}
             className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
-                showVoicePanel
+              showVoicePanel
                 ? "bg-white/10 text-white"
                 : "text-[#949ba4] hover:text-white hover:bg-white/5"
-              }`}
-            >
+            }`}
+          >
             <Users size={14} />
             <span className="hidden sm:inline">Kişiler</span>
-            </button>
-          
+          </button>
+
           {/* Chat butonu */}
-            {currentTextChannel && (
-              <button
-                onClick={() => setShowChatPanel(!showChatPanel)}
+          {currentTextChannel && (
+            <button
+              onClick={() => setShowChatPanel(!showChatPanel)}
               className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
-                  showChatPanel
+                showChatPanel
                   ? "bg-white/10 text-white"
                   : "text-[#949ba4] hover:text-white hover:bg-white/5"
-                }`}
-              >
+              }`}
+            >
               <MessageSquare size={14} />
               <span className="hidden sm:inline">Sohbet</span>
-              </button>
-            )}
-          
+            </button>
+          )}
+
           {/* Chat pozisyon değiştirme */}
-            {showVoicePanel && showChatPanel && currentTextChannel && (
-              <button
-                onClick={() =>
-                  setChatPosition(chatPosition === "right" ? "left" : "right")
-                }
+          {showVoicePanel && showChatPanel && currentTextChannel && (
+            <button
+              onClick={() =>
+                setChatPosition(chatPosition === "right" ? "left" : "right")
+              }
               className="p-1 rounded text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
-              >
-                {chatPosition === "right" ? (
+            >
+              {chatPosition === "right" ? (
                 <ChevronLeft size={14} />
-                ) : (
+              ) : (
                 <ChevronRight size={14} />
-                )}
-              </button>
-            )}
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       <ScreenShareManager
         setActiveStreamId={setActiveStreamId}
         renderStageManager={(stopScreenShare) => (
-      <StageManager
-        showVoicePanel={showVoicePanel}
-        showChatPanel={showChatPanel}
-        currentTextChannel={currentTextChannel}
-        chatPosition={chatPosition}
+          <StageManager
+            showVoicePanel={showVoicePanel}
+            showChatPanel={showChatPanel}
+            currentTextChannel={currentTextChannel}
+            chatPosition={chatPosition}
             chatWidth={chatWidth}
             setChatWidth={setChatWidth}
-        username={username}
-        userId={userId}
-        onUserContextMenu={handleUserContextMenu}
-        activeStreamId={activeStreamId}
-        setActiveStreamId={setActiveStreamId}
-        hideIncomingVideo={hideIncomingVideo}
+            username={username}
+            userId={userId}
+            onUserContextMenu={handleUserContextMenu}
+            activeStreamId={activeStreamId}
+            setActiveStreamId={setActiveStreamId}
+            hideIncomingVideo={hideIncomingVideo}
             stopScreenShare={stopScreenShare}
-      />
+          />
         )}
         renderBottomControls={(stopScreenShare) => (
-      <BottomControls
-        username={username}
-        onLeave={handleManualLeave}
-        onOpenSettings={() => setShowSettings(true)}
-        isDeafened={isDeafened}
-        setIsDeafened={setIsDeafened}
-        playSound={playSound}
-        setActiveStreamId={setActiveStreamId}
-        isCameraOn={isCameraOn}
-        setIsCameraOn={setIsCameraOn}
+          <BottomControls
+            username={username}
+            onLeave={handleManualLeave}
+            onOpenSettings={() => setShowSettings(true)}
+            isDeafened={isDeafened}
+            setIsDeafened={setIsDeafened}
+            playSound={playSound}
+            setActiveStreamId={setActiveStreamId}
+            isCameraOn={isCameraOn}
+            setIsCameraOn={setIsCameraOn}
             stopScreenShare={stopScreenShare}
           />
         )}
@@ -1995,7 +2037,7 @@ function StageManager({
               icon: "/favicon.ico",
               tag: `screen-share-${track.participant.sid}`,
             });
-            
+
             notification.onclick = () => {
               if (window.netrex?.focusWindow) {
                 window.netrex.focusWindow();
@@ -2179,19 +2221,19 @@ function StageManager({
           )}
           <div
             className={`overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
-            chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
-          }`}
+              chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
+            }`}
             style={{
               width: `${chatWidth}px`,
               flexShrink: 0,
             }}
-        >
-          <ChatView
-            channelId={currentTextChannel}
-            username={username}
-            userId={userId}
-          />
-        </div>
+          >
+            <ChatView
+              channelId={currentTextChannel}
+              username={username}
+              userId={userId}
+            />
+          </div>
         </>
       )}
       {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
@@ -2433,28 +2475,28 @@ function ScreenShareStage({
               </div>
             </div>
             <span className="text-white font-bold drop-shadow-lg text-base tracking-tight">
-                {isLocalSharing
-                  ? "Senin Yayının"
-                  : `${participant?.identity} yayını`}
-              </span>
-            </div>
+              {isLocalSharing
+                ? "Senin Yayının"
+                : `${participant?.identity} yayını`}
+            </span>
+          </div>
           <div className="flex gap-2 pointer-events-auto">
-              {isLocalSharing && (
-                <button
-                  onClick={onHideLocal}
+            {isLocalSharing && (
+              <button
+                onClick={onHideLocal}
                 className={`glass-strong hover:glass border border-white/10 hover:border-white/20 text-gray-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow group/btn ${
                   showOverlay ? "opacity-100" : "opacity-0"
                 }`}
-                  title="Önizlemeyi Gizle"
-                >
+                title="Önizlemeyi Gizle"
+              >
                 <EyeOff
                   size={20}
                   className="group-hover/btn:scale-110 transition-transform"
                 />
-                </button>
-              )}
+              </button>
+            )}
             {/* İzlemeyi Durdur butonu - Her zaman görünür ve tıklanabilir */}
-              <button
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -2467,15 +2509,15 @@ function ScreenShareStage({
                 }
               }}
               className="glass-strong hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-gray-300 hover:text-red-400 p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow-red group/btn z-[100]"
-                title="İzlemeyi Durdur"
-              >
+              title="İzlemeyi Durdur"
+            >
               <Minimize
                 size={20}
                 className="group-hover/btn:scale-110 transition-transform"
               />
-              </button>
-            </div>
+            </button>
           </div>
+        </div>
 
         {/* Overlay içeriği - Bottom controls */}
         <div
@@ -2494,7 +2536,7 @@ function ScreenShareStage({
                     className="text-indigo-400 group-hover/viewers:text-indigo-300 transition-colors"
                   />
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#1e1f22] animate-pulse"></div>
-            </div>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-[#949ba4] font-medium leading-tight">
                     Canlı İzleyici
@@ -2508,46 +2550,46 @@ function ScreenShareStage({
               {/* Kontrol Butonları - Premium Tasarım */}
               <div className="flex items-center gap-3">
                 {/* Ses Kısma Butonu - Yayın yapıldığında da görünür, tam ekran butonunun solunda */}
-              {!isLocalSharing && (
+                {!isLocalSharing && (
                   <div className="flex items-center gap-3 group/vol">
-                  {isAudioDisabled ? (
-                    <div
+                    {isAudioDisabled ? (
+                      <div
                         className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20"
-                      title="Ses döngüsünü önlemek için ses kapatıldı."
-                    >
+                        title="Ses döngüsünü önlemek için ses kapatıldı."
+                      >
                         <AlertTriangle size={18} />
                         <span className="hidden group-hover/vol:inline whitespace-nowrap">
-                        Ses Kapalı
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={toggleMuteStream}
+                          Ses Kapalı
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={toggleMuteStream}
                           className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 group/btn ${
                             volume === 0
                               ? "text-red-400 hover:text-red-300 hover:bg-red-500/20 hover:border-red-500/30"
                               : "text-white hover:text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30"
                           } border border-white/10 hover:border-current hover:shadow-glow backdrop-blur-sm`}
-                        title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
-                      >
-                        {volume === 0 ? (
+                          title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
+                        >
+                          {volume === 0 ? (
                             <VolumeX
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                        ) : volume < 50 ? (
+                          ) : volume < 50 ? (
                             <Volume1
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                        ) : (
+                          ) : (
                             <Volume2
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                        )}
-                      </button>
+                          )}
+                        </button>
                         <div className="w-0 group-hover/vol:w-36 overflow-hidden transition-all duration-300 flex items-center">
                           <div className="relative w-32 h-7 flex items-center">
                             {/* Progress Bar Background */}
@@ -2560,11 +2602,11 @@ function ScreenShareStage({
                             </div>
 
                             {/* Slider Input */}
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={volume}
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={volume}
                               onChange={(e) =>
                                 setVolume(Number(e.target.value))
                               }
@@ -2585,15 +2627,15 @@ function ScreenShareStage({
                               }}
                             ></div>
                           </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {/* Ayırıcı - Sadece ses kısma butonu görünürken */}
-              {!isLocalSharing && !isAudioDisabled && (
+                {!isLocalSharing && !isAudioDisabled && (
                   <div className="w-[1px] h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
-              )}
+                )}
                 {/* Tam Ekran Butonu - Her zaman görünür (yayın yapıldığında da) */}
                 <button
                   onClick={toggleFullscreen}
@@ -2654,16 +2696,16 @@ function ParticipantList({
             className="min-w-[140px] h-full"
             style={{ overflow: "visible", padding: "2px" }}
           >
-        <UserCard
-          participant={p}
-          totalCount={count}
-          onContextMenu={(e) => onUserContextMenu(e, p)}
-          compact={true}
-          hideIncomingVideo={hideIncomingVideo}
+            <UserCard
+              participant={p}
+              totalCount={count}
+              onContextMenu={(e) => onUserContextMenu(e, p)}
+              compact={true}
+              hideIncomingVideo={hideIncomingVideo}
               setActiveStreamId={setActiveStreamId}
               activeStreamId={activeStreamId}
-        />
-      </div>
+            />
+          </div>
         ))}
       </div>
     );
@@ -3006,8 +3048,8 @@ function UserCard({
                   : "default",
             }}
           >
-          <VideoTrack
-            trackRef={videoTrack}
+            <VideoTrack
+              trackRef={videoTrack}
               className="w-full h-full object-cover transition-all duration-500 relative z-0"
               style={{
                 filter: isSpeaking
@@ -3126,8 +3168,16 @@ function UserCard({
 
             {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
             {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-              <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center pointer-events-none backdrop-blur-sm">
-                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300">
+              <div
+                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (setActiveStreamId && participant.identity) {
+                    setActiveStreamId(participant.identity);
+                  }
+                }}
+              >
+                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
                   <div className="relative">
                     <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
                     <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
@@ -3191,7 +3241,7 @@ function UserCard({
                     opacity: 0.3,
                   }}
                 />
-              <div
+                <div
                   className="absolute inset-0 rounded-2xl animate-ping"
                   style={{
                     border: `2px solid ${getBorderColor(userColor)}`,
@@ -3201,7 +3251,29 @@ function UserCard({
                 />
               </>
             )}
+
+            {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
+            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+              <div
+                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50 rounded-2xl"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (setActiveStreamId && participant.identity) {
+                    setActiveStreamId(participant.identity);
+                  }
+                }}
+              >
+                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/avatar:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
+                    <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
+                  </div>
+                  <span className="drop-shadow-lg">Yayına Katıl</span>
+                  <Tv size={16} className="drop-shadow-lg" />
+                </div>
               </div>
+            )}
+          </div>
         )}
 
         {/* İsim - Alt kısımda - Enhanced with status indicator */}
@@ -3235,18 +3307,18 @@ function UserCard({
                 <div className="absolute inset-0 bg-green-500/30 rounded-full blur-sm animate-ping"></div>
               </div>
             )}
-          <span
+            <span
               className={`font-semibold text-white tracking-normal truncate block drop-shadow-2xl ${
                 compact ? "text-[10px] leading-tight" : "text-sm"
-            }`}
+              }`}
               style={{
                 textShadow:
                   "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
               }}
-          >
-            {identity}
-          </span>
-        </div>
+            >
+              {identity}
+            </span>
+          </div>
         </div>
 
         {/* Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame (sadece izlenmiyorsa) */}
@@ -3283,7 +3355,7 @@ function UserCard({
       {!shouldShowVideo && isSpeaking && (
         <>
           {/* Ana glow layer - Container içinde, padding ile */}
-        <div
+          <div
             className="absolute pointer-events-none rounded-2xl animate-speaking-glow overflow-hidden"
             style={{
               top: "4px",
@@ -3420,12 +3492,12 @@ function BottomControls({
       return;
     }
 
-        const newMetadata = JSON.stringify({
-          isDeafened,
-          isMuted,
-          profileColor,
+    const newMetadata = JSON.stringify({
+      isDeafened,
+      isMuted,
+      profileColor,
       isCameraOn,
-        });
+    });
 
     // Aynı metadata ise güncelleme yapma
     if (lastMetadataRef.current === newMetadata) {
@@ -3614,14 +3686,14 @@ function BottomControls({
     setIsCameraOn(newState);
 
     try {
-    if (newState) {
+      if (newState) {
         // ÜCRETSİZ PLAN İÇİN DENGELİ (KALİTE + TASARRUF) AYARLAR
         const videoConstraints = {
           resolution: { width: 480, height: 360 }, // Dengeli çözünürlük (küçük UI'da yeterli netlik)
           frameRate: 18, // Biraz daha akıcı görünüm (15fps'den iyi)
           maxBitrate: 120000, // 120kbps (tasarruf + okunabilirlik dengesi)
           simulcast: false, // Simulcast bandwidth artırır, kapalı
-        deviceId: videoId !== "default" ? videoId : undefined,
+          deviceId: videoId !== "default" ? videoId : undefined,
         };
 
         // Önce eski video track'i kaldır (eğer varsa)
@@ -3787,7 +3859,7 @@ function BottomControls({
                 }
                 publication = retryPublication;
                 retryStream.getAudioTracks().forEach((track) => track.stop());
-    } else {
+              } else {
                 throw new Error("Retry başarısız");
               }
             }
@@ -4027,15 +4099,15 @@ function BottomControls({
       if (window.netrex && sourceId) {
         // Electron: getUserMedia ile chromeMediaSource kullan
         // Sadece mandatory kullan, diğer constraint'leri sonra applyConstraints ile uygula
-      const constraints = {
+        const constraints = {
           audio: audioConstraints || false,
-        video: {
-          mandatory: {
-            chromeMediaSource: "desktop",
-            chromeMediaSourceId: sourceId,
+          video: {
+            mandatory: {
+              chromeMediaSource: "desktop",
+              chromeMediaSourceId: sourceId,
+            },
           },
-        },
-      };
+        };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         // Track'i aldıktan sonra resolution ve frame rate ayarlarını uygula
@@ -4192,27 +4264,27 @@ function BottomControls({
             }
           >
             <div className="relative z-10">
-            {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+              {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
             </div>
           </button>
           <div className="relative" ref={screenShareButtonRef}>
-          <button
+            <button
               onClick={() => {
                 if (isScreenSharing) {
                   setShowScreenShareMenu(!showScreenShareMenu);
                 } else {
                   setShowScreenShareModal(true);
-            }
+                }
               }}
               className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
-              isScreenSharing
+                isScreenSharing
                   ? "bg-green-500 text-white hover:bg-green-600 active:scale-95"
                   : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
-            }`}
+              }`}
               title={
                 isScreenSharing ? "Ekran Paylaşımı Seçenekleri" : "Ekran Paylaş"
               }
-          >
+            >
               <div className="relative z-10">
                 {isScreenSharing ? (
                   <MonitorOff size={20} />
@@ -4220,7 +4292,7 @@ function BottomControls({
                   <Monitor size={20} />
                 )}
               </div>
-          </button>
+            </button>
 
             {/* Ekran Paylaşımı Menüsü */}
             {showScreenShareMenu && isScreenSharing && (
@@ -4323,7 +4395,7 @@ function ControlButton({
     >
       {/* Icon Container */}
       <div className="relative z-10">
-      {isActive ? activeIcon : inactiveIcon}
+        {isActive ? activeIcon : inactiveIcon}
       </div>
 
       {/* Disabled Overlay */}
