@@ -91,9 +91,9 @@ const getSplashHtml = () => `
       box-sizing: border-box;
     }
     body {
-      background: linear-gradient(135deg, #0f0f11 0%, #1a1b1e 50%, #1e1f22 100%);
-      color: #dbdee1;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -101,171 +101,368 @@ const getSplashHtml = () => `
       height: 100vh;
       overflow: hidden;
       user-select: none;
+      position: relative;
     }
-    .background-decoration {
+    
+    /* Animated Background Gradient */
+    .bg-gradient {
+      position: absolute;
+      inset: 0;
+      background: 
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
+      animation: gradient-shift 8s ease infinite;
+    }
+    
+    /* Floating Particles */
+    .particles {
       position: absolute;
       width: 100%;
       height: 100%;
       overflow: hidden;
     }
-    .bg-circle-1 {
+    .particle {
       position: absolute;
-      top: 25%;
-      right: 25%;
-      width: 384px;
-      height: 384px;
-      background: rgba(99, 102, 241, 0.05);
+      width: 4px;
+      height: 4px;
+      background: rgba(99, 102, 241, 0.6);
       border-radius: 50%;
-      filter: blur(80px);
-      animation: pulse 4s ease-in-out infinite;
+      animation: float 15s infinite ease-in-out;
     }
-    .bg-circle-2 {
+    .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+    .particle:nth-child(2) { left: 20%; animation-delay: 2s; }
+    .particle:nth-child(3) { left: 30%; animation-delay: 4s; }
+    .particle:nth-child(4) { left: 40%; animation-delay: 1s; }
+    .particle:nth-child(5) { left: 50%; animation-delay: 3s; }
+    .particle:nth-child(6) { left: 60%; animation-delay: 5s; }
+    .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
+    .particle:nth-child(8) { left: 80%; animation-delay: 4.5s; }
+    .particle:nth-child(9) { left: 90%; animation-delay: 1.5s; }
+    
+    /* Grid Pattern */
+    .grid-overlay {
       position: absolute;
-      bottom: 25%;
-      left: 25%;
-      width: 384px;
-      height: 384px;
-      background: rgba(168, 85, 247, 0.05);
-      border-radius: 50%;
-      filter: blur(80px);
-      animation: pulse 4s ease-in-out infinite;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      opacity: 0.4;
+      animation: grid-pulse 4s ease-in-out infinite;
     }
-    .logo-container {
+    
+    /* Main Container */
+    .main-container {
       position: relative;
       z-index: 10;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 32px;
+      gap: 48px;
+      animation: fade-in-up 0.8s ease-out;
     }
-    .logo-wrapper {
+    
+    /* Logo Container with 3D Effect */
+    .logo-container {
       position: relative;
+      perspective: 1000px;
     }
-    .logo-glow {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #6366f1 100%);
-      border-radius: 50%;
-      filter: blur(32px);
-      opacity: 0.3;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    .logo-rings {
+    
+    .logo-3d {
       position: relative;
-      width: 96px;
-      height: 96px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 140px;
+      height: 140px;
+      transform-style: preserve-3d;
+      animation: logo-float 6s ease-in-out infinite;
     }
-    .ring-outer {
+    
+    /* Outer Glow Rings */
+    .glow-ring-1 {
       position: absolute;
-      inset: 0;
-      border: 4px solid transparent;
+      inset: -20px;
+      border: 3px solid transparent;
       border-top-color: #6366f1;
       border-right-color: #a855f7;
       border-radius: 50%;
-      animation: spin-slow 3s linear infinite;
+      animation: spin 4s linear infinite;
+      filter: blur(1px);
     }
-    .ring-inner {
+    .glow-ring-2 {
       position: absolute;
-      inset: 8px;
-      border: 3px solid transparent;
+      inset: -10px;
+      border: 2px solid transparent;
       border-bottom-color: #818cf8;
       border-left-color: #c084fc;
       border-radius: 50%;
-      animation: spin-reverse-slow 2s linear infinite;
+      animation: spin-reverse 3s linear infinite;
+      filter: blur(0.5px);
     }
+    .glow-ring-3 {
+      position: absolute;
+      inset: -30px;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 50%;
+      animation: spin 5s linear infinite;
+      filter: blur(2px);
+    }
+    
+    /* Center Logo with Glassmorphism */
     .logo-center {
       position: relative;
-      width: 64px;
-      height: 64px;
-      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-      border-radius: 12px;
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(168, 85, 247, 0.9) 100%);
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 20px 40px rgba(99, 102, 241, 0.4);
+      box-shadow: 
+        0 0 40px rgba(99, 102, 241, 0.5),
+        0 0 80px rgba(168, 85, 247, 0.3),
+        inset 0 2px 10px rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      animation: logo-pulse 3s ease-in-out infinite;
     }
+    
     .logo-center::before {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 100%);
-      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, transparent 50%);
+      border-radius: 24px;
+      pointer-events: none;
     }
+    
+    .logo-center::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+      border-radius: 26px;
+      z-index: -1;
+      opacity: 0.5;
+      filter: blur(20px);
+      animation: logo-glow 2s ease-in-out infinite;
+    }
+    
     .logo-letter {
       color: white;
       font-weight: 900;
-      font-size: 24px;
+      font-size: 48px;
+      text-shadow: 0 2px 20px rgba(255, 255, 255, 0.5);
+      letter-spacing: -2px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
       z-index: 1;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
     }
+    
+    /* Text Container */
     .text-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 20px;
+      animation: fade-in-delay 1s ease-out;
     }
+    
     .loading-text {
-      color: white;
-      font-size: 20px;
-      font-weight: 700;
+      color: rgba(255, 255, 255, 0.95);
+      font-size: 18px;
+      font-weight: 600;
       letter-spacing: 0.5px;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .progress-bar-container {
-      width: 128px;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 999px;
+    
+    /* Modern Progress Bar */
+    .progress-wrapper {
+      width: 200px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
       overflow: hidden;
-      margin-top: 8px;
+      position: relative;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
     }
+    
     .progress-bar {
       height: 100%;
-      background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #6366f1 100%);
-      border-radius: 999px;
-      animation: progress-bar 2s ease-in-out infinite;
+      width: 100%;
+      background: linear-gradient(90deg, 
+        #6366f1 0%, 
+        #818cf8 25%, 
+        #a855f7 50%, 
+        #c084fc 75%, 
+        #ec4899 100%);
+      border-radius: 10px;
+      position: relative;
+      animation: progress-shimmer 2s ease-in-out infinite;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
+    
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.4) 50%, 
+        transparent 100%);
+      animation: shimmer 2s ease-in-out infinite;
+    }
+    
+    /* Animations */
+    @keyframes gradient-shift {
+      0%, 100% { opacity: 1; }
       50% { opacity: 0.8; }
     }
-    @keyframes spin-slow {
+    
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(100vh) translateX(0) scale(1);
+        opacity: 0;
+      }
+      10% {
+        opacity: 1;
+      }
+      90% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(-100px) translateX(50px) scale(0.5);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes grid-pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.6; }
+    }
+    
+    @keyframes fade-in-up {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fade-in-delay {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes logo-float {
+      0%, 100% {
+        transform: translateY(0) rotateY(0deg);
+      }
+      50% {
+        transform: translateY(-10px) rotateY(5deg);
+      }
+    }
+    
+    @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-    @keyframes spin-reverse-slow {
+    
+    @keyframes spin-reverse {
       from { transform: rotate(360deg); }
       to { transform: rotate(0deg); }
     }
-    @keyframes progress-bar {
+    
+    @keyframes logo-pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 
+          0 0 40px rgba(99, 102, 241, 0.5),
+          0 0 80px rgba(168, 85, 247, 0.3);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 
+          0 0 60px rgba(99, 102, 241, 0.7),
+          0 0 100px rgba(168, 85, 247, 0.5);
+      }
+    }
+    
+    @keyframes logo-glow {
+      0%, 100% {
+        opacity: 0.5;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.1);
+      }
+    }
+    
+    @keyframes progress-shimmer {
       0% {
-        width: 0%;
         transform: translateX(-100%);
       }
       50% {
-        width: 70%;
         transform: translateX(0%);
       }
       100% {
-        width: 100%;
         transform: translateX(100%);
+      }
+    }
+    
+    @keyframes shimmer {
+      0% {
+        transform: translateX(-100%);
+      }
+      100% {
+        transform: translateX(200%);
       }
     }
   </style>
 </head>
 <body>
-  <div class="background-decoration">
-    <div class="bg-circle-1"></div>
-    <div class="bg-circle-2"></div>
+  <div class="bg-gradient"></div>
+  <div class="grid-overlay"></div>
+  
+  <div class="particles">
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
   </div>
   
-  <div class="logo-container">
-    <div class="logo-wrapper">
-      <div class="logo-glow"></div>
-      <div class="logo-rings">
-        <div class="ring-outer"></div>
-        <div class="ring-inner"></div>
+  <div class="main-container">
+    <div class="logo-container">
+      <div class="logo-3d">
+        <div class="glow-ring-3"></div>
+        <div class="glow-ring-1"></div>
+        <div class="glow-ring-2"></div>
         <div class="logo-center">
           <div class="logo-letter">N</div>
         </div>
@@ -274,7 +471,7 @@ const getSplashHtml = () => `
     
     <div class="text-container">
       <div class="loading-text" id="loadingText">Güncellemeler kontrol ediliyor</div>
-      <div class="progress-bar-container">
+      <div class="progress-wrapper">
         <div class="progress-bar"></div>
       </div>
     </div>
@@ -736,6 +933,11 @@ autoUpdater.on("update-downloaded", (info) => {
 });
 
 app.on("ready", async () => {
+  // Windows'ta bildirim app adını düzgün göstermek için
+  if (process.platform === "win32") {
+    app.setAppUserModelId("Netrex Client");
+  }
+
   if (process.platform === "darwin") {
     systemPreferences.askForMediaAccess("microphone");
     systemPreferences.askForMediaAccess("camera");
@@ -773,7 +975,69 @@ app.on("ready", async () => {
   }
 });
 
-app.on("will-quit", () => uIOhook.stop());
+let isCleaningUp = false;
+let cleanupTimeout = null;
+let cleanupCompleteHandler = null;
+
+app.on("before-quit", (event) => {
+  // Eğer zaten cleanup yapıyorsak, tekrar başlatma
+  if (isCleaningUp) {
+    return;
+  }
+
+  // Cleanup başlat
+  isCleaningUp = true;
+  event.preventDefault(); // Kapatmayı geciktir
+
+  // Renderer process'e cleanup mesajı gönder
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("app-will-quit");
+    
+    // Önceki handler'ı temizle (eğer varsa)
+    if (cleanupCompleteHandler) {
+      ipcMain.removeListener("cleanup-complete", cleanupCompleteHandler);
+    }
+    
+    // Cleanup tamamlandı mesajını dinle
+    cleanupCompleteHandler = () => {
+      if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+        cleanupTimeout = null;
+      }
+      isCleaningUp = false;
+      cleanupCompleteHandler = null;
+      uIOhook.stop();
+      app.exit(0);
+    };
+    
+    ipcMain.once("cleanup-complete", cleanupCompleteHandler);
+    
+    // Cleanup tamamlandı mesajını bekle
+    cleanupTimeout = setTimeout(() => {
+      // 5 saniye içinde cleanup tamamlanmazsa zorla kapat
+      console.warn("⚠️ Cleanup timeout, zorla kapatılıyor...");
+      if (cleanupCompleteHandler) {
+        ipcMain.removeListener("cleanup-complete", cleanupCompleteHandler);
+        cleanupCompleteHandler = null;
+      }
+      isCleaningUp = false;
+      cleanupTimeout = null;
+      uIOhook.stop();
+      app.exit(0);
+    }, 5000);
+  } else {
+    // Pencere yoksa direkt kapat
+    isCleaningUp = false;
+    uIOhook.stop();
+    app.exit(0);
+  }
+});
+
+app.on("will-quit", (event) => {
+  // will-quit'te sadece uIOhook'u durdur
+  // Cleanup zaten before-quit'te yapıldı
+  uIOhook.stop();
+});
 
 // --- IPC HANDLERS ---
 ipcMain.handle("start-oauth", async () => {
@@ -862,6 +1126,17 @@ ipcMain.handle("set-setting", (e, k, v) => {
   return true;
 });
 ipcMain.handle("get-setting", (e, k) => store.get(`settings.${k}`));
+
+// Pencereyi ön plana al (bildirime tıklandığında)
+ipcMain.handle("focus-window", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
 
 // Path helpers for WASM files
 ipcMain.handle("get-app-path", () => app.getAppPath());

@@ -42,6 +42,11 @@ export const useChatStore = create((set, get) => ({
   hasMoreMessages: false,
   error: null,
 
+  // UI State: Sohbet paneli açık/kapalı
+  showChatPanel: false,
+  setShowChatPanel: (show) => set({ showChatPanel: show }),
+  toggleChatPanel: () => set((state) => ({ showChatPanel: !state.showChatPanel })),
+
   // YENİ: Okunmamış Mesaj Sayıları { channelId: sayi }
   unreadCounts: {},
 
@@ -152,7 +157,10 @@ export const useChatStore = create((set, get) => ({
   deleteTextChannel: async (channelId) => {
     set({ isLoading: true, error: null });
     try {
-      await deleteDoc(doc(db, "text_channels", channelId));
+      const channelRef = doc(db, "text_channels", channelId);
+      console.log("🗑️ Text channel Firebase'den siliniyor:", channelId);
+      await deleteDoc(channelRef);
+      console.log("✅ Text channel Firebase'den silindi:", channelId);
 
       const updatedChannels = get().textChannels.filter(
         (c) => c.id !== channelId
@@ -166,7 +174,7 @@ export const useChatStore = create((set, get) => ({
       set({ textChannels: updatedChannels, isLoading: false });
       return { success: true };
     } catch (error) {
-      console.error("Error deleting channel:", error);
+      console.error("❌ Text channel silme hatası:", error);
       set({ error: error.message, isLoading: false });
       return { success: false, error: error.message };
     }
@@ -174,7 +182,10 @@ export const useChatStore = create((set, get) => ({
 
   // Kanal mesajlarını yükle
   loadChannelMessages: async (channelId) => {
+    // Hemen currentChannel'ı güncelle (UI'da hemen görünsün, race condition'ı önlemek için)
+    const channel = get().textChannels.find(ch => ch.id === channelId);
     set({
+      currentChannel: channel ? { id: channelId, ...channel } : { id: channelId },
       isLoading: true,
       error: null,
       messages: [],
@@ -383,8 +394,9 @@ export const useChatStore = create((set, get) => ({
   // YENİ: Okunmamış Sayısını Artır
   incrementUnread: (channelId) => {
     const current = get().currentChannel;
-    // Eğer şu an o kanal açıksa artırma
-    if (current && current.id === channelId) return;
+    const isPanelOpen = get().showChatPanel;
+    // Eğer şu an o kanal açıksa VE panel görünüyorsa artırma
+    if (current && current.id === channelId && isPanelOpen) return;
 
     set((state) => ({
       unreadCounts: {

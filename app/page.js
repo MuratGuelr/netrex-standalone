@@ -8,6 +8,7 @@ import UpdateNotification from "@/src/components/UpdateNotification"; // EKLEND�
 import UpdateSplash from "@/src/components/UpdateSplash"; // EKLENDİ
 import InfoModal from "@/src/components/InfoModal";
 import { Radio, Mic, Headphones } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Home() {
   const {
@@ -135,8 +136,8 @@ export default function Home() {
         <div className="w-96 p-10 glass-strong rounded-2xl shadow-soft-lg border border-white/10 animate-scaleIn relative z-10">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Netrex
-            </h1>
+            Netrex
+          </h1>
             <p className="text-[#949ba4] text-sm">Güvenli Sesli Sohbet</p>
           </div>
 
@@ -272,41 +273,41 @@ export default function Home() {
                 />
               </div>
               <h2 className="text-3xl font-bold text-white mb-3 tracking-tight text-center">
-                Hoş Geldin, {user?.displayName || "Misafir"}!
-              </h2>
+              Hoş Geldin, {user?.displayName || "Misafir"}!
+            </h2>
               <p className="text-[#949ba4] text-sm text-center max-w-md mb-12 leading-relaxed mx-auto">
-                Arkadaşlarınla konuşmaya başlamak için sol taraftaki ses
-                kanallarından birine tıklayabilirsin.
-              </p>
+              Arkadaşlarınla konuşmaya başlamak için sol taraftaki ses
+              kanallarından birine tıklayabilirsin.
+            </p>
               <div className="flex items-center gap-8 glass px-10 py-4 rounded-2xl border border-white/10 shadow-soft hover-lift mx-auto">
-                <div className="flex items-center gap-3 group">
+              <div className="flex items-center gap-3 group">
                   <div className="p-2 glass-light rounded-lg text-[#949ba4] group-hover:text-white group-hover:bg-indigo-500/20 transition-all duration-200">
                     <Mic size={16} />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wider">
-                      Sustur
-                    </span>
-                    <span className="text-[10px] text-[#949ba4]">
-                      Kısayol Tuşu
-                    </span>
-                  </div>
                 </div>
-                <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
-                <div className="flex items-center gap-3 group">
-                  <div className="p-2 glass-light rounded-lg text-[#949ba4] group-hover:text-white group-hover:bg-indigo-500/20 transition-all duration-200">
-                    <Headphones size={16} />
-                  </div>
-                  <div className="flex flex-col">
+                <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wider">
-                      Sağırlaştır
-                    </span>
-                    <span className="text-[10px] text-[#949ba4]">
-                      Kısayol Tuşu
-                    </span>
-                  </div>
+                    Sustur
+                  </span>
+                  <span className="text-[10px] text-[#949ba4]">
+                    Kısayol Tuşu
+                  </span>
                 </div>
               </div>
+                <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+              <div className="flex items-center gap-3 group">
+                  <div className="p-2 glass-light rounded-lg text-[#949ba4] group-hover:text-white group-hover:bg-indigo-500/20 transition-all duration-200">
+                    <Headphones size={16} />
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-[#dbdee1] uppercase tracking-wider">
+                    Sağırlaştır
+                  </span>
+                  <span className="text-[10px] text-[#949ba4]">
+                    Kısayol Tuşu
+                  </span>
+                </div>
+              </div>
+            </div>
             </div>
             <div className="absolute bottom-6 text-[10px] text-[#5e626a] font-mono z-10">
               Netrex Client v{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}

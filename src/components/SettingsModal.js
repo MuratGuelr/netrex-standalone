@@ -92,11 +92,39 @@ export default function SettingsModal({ isOpen, onClose }) {
   if (!mounted || !isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm animate-fadeIn">
-      <div className="glass-strong w-[850px] h-[650px] rounded-2xl shadow-soft-lg flex overflow-hidden border border-white/10 animate-scaleIn">
-        <div className="w-60 bg-gradient-to-b from-[#25272a] to-[#2b2d31] p-3 flex flex-col gap-1 border-r border-white/10">
-          <div className="px-3 pt-4 pb-2">
-            <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-fadeIn">
+      {/* Animated background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+
+      <div className="glass-strong w-[900px] h-[700px] rounded-3xl shadow-2xl flex overflow-hidden border border-white/20 animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95 relative">
+        {/* ESC Close Button - En üstte */}
+        <div
+          className="absolute top-6 right-6 flex flex-col items-center group cursor-pointer z-[10000]"
+          onClick={onClose}
+        >
+          <div className="w-10 h-10 rounded-xl glass-strong border border-white/10 flex items-center justify-center text-[#949ba4] group-hover:bg-gradient-to-br group-hover:from-red-500/20 group-hover:to-red-600/20 group-hover:text-red-400 group-hover:border-red-500/30 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative group/close">
+            <X
+              size={20}
+              strokeWidth={2.5}
+              className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300"></div>
+          </div>
+          <span className="text-[10px] font-bold text-[#949ba4] mt-1.5 group-hover:text-[#dbdee1] transition-colors">
+            ESC
+          </span>
+        </div>
+        
+        {/* Top glow effect */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
+
+        <div className="w-64 bg-gradient-to-b from-[#25272a] via-[#2b2d31] to-[#313338] p-4 flex flex-col gap-1 border-r border-white/10 relative overflow-hidden">
+          {/* Sidebar background glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-purple-500/5 pointer-events-none"></div>
+
+          <div className="px-3 pt-4 pb-3 relative z-10">
+            <h2 className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wider flex items-center gap-2">
+              <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
               Kullanıcı Ayarları
             </h2>
           </div>
@@ -106,9 +134,10 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "account"}
             onClick={() => setActiveTab("account")}
           />
-          <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3"></div>
-          <div className="px-3 pt-2 pb-2">
-            <h2 className="text-xs font-bold text-[#949ba4] uppercase tracking-wide">
+          <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3 relative z-10"></div>
+          <div className="px-3 pt-2 pb-3 relative z-10">
+            <h2 className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wider flex items-center gap-2">
+              <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
               Uygulama Ayarları
             </h2>
           </div>
@@ -136,67 +165,65 @@ export default function SettingsModal({ isOpen, onClose }) {
             active={activeTab === "notifications"}
             onClick={() => setActiveTab("notifications")}
           />
-          <SidebarItem
-            label="Görünüm"
-            icon={<Palette size={18} />}
-            active={activeTab === "appearance"}
-            onClick={() => setActiveTab("appearance")}
-          />
-          <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3"></div>
+          <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-3 my-3 relative z-10"></div>
           <SidebarItem
             label="Uygulama Hakkında"
             icon={<Info size={18} />}
             active={activeTab === "about"}
             onClick={() => setActiveTab("about")}
           />
-          <div className="mt-auto px-2 pb-2">
-            <div className="text-[10px] text-[#5e626a] text-center">
+          <div className="mt-auto px-2 pb-3 relative z-10">
+            <div className="text-[10px] text-[#5e626a] text-center bg-[#1e1f22]/50 rounded-lg py-1.5 px-2 border border-white/5">
               Netrex v{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}
             </div>
           </div>
         </div>
         <div className="flex-1 bg-gradient-to-br from-[#2b2d31] to-[#313338] relative flex flex-col min-w-0">
-          <div
-            className="absolute top-5 right-5 z-10 flex flex-col items-center group cursor-pointer"
-            onClick={onClose}
-          >
-            <div className="w-10 h-10 rounded-xl glass border border-white/10 flex items-center justify-center text-[#949ba4] group-hover:bg-red-500/20 group-hover:text-red-400 group-hover:border-red-500/30 transition-all duration-200 hover:scale-110 hover:shadow-soft">
-              <X size={20} strokeWidth={2.5} />
-            </div>
-            <span className="text-[10px] font-bold text-[#949ba4] mt-1.5 group-hover:text-[#dbdee1] transition-colors">
-              ESC
-            </span>
+          {/* Header */}
+          <div className="relative z-10 p-6 pb-4 border-b border-white/10 bg-gradient-to-r from-[#25272a]/50 to-transparent">
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-10 pr-16 pb-20">
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pr-12 pb-24 relative">
+            {/* Animated background particles */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
+              <div
+                className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl animate-pulse-slow"
+                style={{ animationDelay: "1s" }}
+              ></div>
+            </div>
+
+            <div className="relative z-10">
             {activeTab === "account" && <AccountSettings onClose={onClose} />}
             {activeTab === "application" && <ApplicationSettings />}
             {activeTab === "voice" && <VoiceSettings />}
             {activeTab === "keybinds" && <KeybindSettings />}
-            {activeTab === "notifications" && <NotificationSettings />}
-            {activeTab === "appearance" && (
-              <AppearanceSettings onSave={onClose} />
-            )}
-            {activeTab === "about" && <AboutSettings />}
+              {activeTab === "notifications" && <NotificationSettings />}
+              {activeTab === "about" && <AboutSettings />}
+            </div>
           </div>
-          {/* Ayarları Kaydet Butonu */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#2b2d31] to-transparent border-t border-white/5 p-5 flex justify-end backdrop-blur-sm">
+
+          {/* Footer with save button */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#2b2d31] via-[#25272a] to-transparent border-t border-white/10 p-6 flex justify-end backdrop-blur-xl relative">
+            {/* Top glow */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+
             <button
               onClick={() => {
                 toast.success("Ayarlar kaydedildi!");
-                // Ayarlar zaten otomatik kaydediliyor (zustand persist), sadece feedback veriyoruz
                 setTimeout(() => {
                   onClose();
                 }, 500);
               }}
-              className="px-8 py-3 gradient-primary hover:shadow-glow text-white rounded-xl font-semibold transition-all duration-200 hover-lift btn-modern"
+              onMouseDown={(e) => e.preventDefault()}
+              className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-110 relative overflow-hidden group/save focus:outline-none"
             >
-              Ayarları Kaydet
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
+              <span className="relative z-10">Ayarları Kaydet</span>
             </button>
+          </div>
         </div>
       </div>
-      </div>
-      {/* Alt padding - blur altında kalmaması için */}
-      <div className="h-20"></div>
     </div>
   );
 }
@@ -205,14 +232,35 @@ function SidebarItem({ label, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-all duration-200 w-full text-left mb-1 hover-lift ${
+      onMouseDown={(e) => e.preventDefault()} // Prevent default focus outline
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-all duration-300 w-full text-left mb-1 relative group/item overflow-hidden focus:outline-none ${
         active
-          ? "glass-strong text-white shadow-soft border border-white/10"
-          : "text-[#b5bac1] hover:bg-[#35373c]/60 hover:text-[#dbdee1]"
+          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-white shadow-soft border border-indigo-500/30"
+          : "text-[#b5bac1] hover:bg-[#35373c]/60 hover:text-white border border-transparent"
       }`}
     >
-      <div className={active ? "text-white" : "text-[#b5bac1]"}>{icon}</div>
-      <span>{label}</span>
+      {/* Hover glow */}
+      <div
+        className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
+          active ? "opacity-100" : "opacity-0 group-hover/item:opacity-100"
+        }`}
+      ></div>
+
+      <div
+        className={`relative z-10 transition-all duration-300 ${
+          active
+            ? "text-indigo-300 scale-110"
+            : "text-[#b5bac1] group-hover/item:text-white group-hover/item:scale-110"
+      }`}
+    >
+        {icon}
+      </div>
+      <span className="relative z-10">{label}</span>
+
+      {/* Active indicator */}
+      {active && (
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-indigo-400 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.6)] animate-pulse"></div>
+      )}
     </button>
   );
 }
@@ -220,28 +268,36 @@ function SidebarItem({ label, icon, active, onClick }) {
 // ... (ToggleSwitch, ApplicationSettings, AccountSettings, KeybindSettings AYNI KALSIN) ...
 function ToggleSwitch({ label, description, checked, onChange }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <div className="pr-4">
-        <div className="font-medium text-[#dbdee1] mb-0.5">{label}</div>
-        <div className="text-xs text-[#949ba4]">{description}</div>
+    <div className="flex items-center justify-between py-2 group/toggle">
+      <div className="pr-4 flex-1">
+        <div className="font-medium text-white mb-0.5 group-hover/toggle:text-[#dbdee1] transition-colors">
+          {label}
+        </div>
+        <div className="text-xs text-[#949ba4] group-hover/toggle:text-[#b5bac1] transition-colors">
+          {description}
+        </div>
       </div>
       <button
         onClick={onChange}
-        className={`w-12 h-6 rounded-full relative transition-colors duration-300 ease-in-out border-2 border-transparent shrink-0 focus:outline-none ${
-          checked ? "bg-[#23a559]" : "bg-[#80848e]"
+        className={`w-14 h-7 rounded-full relative transition-all duration-500 ease-in-out border-2 shrink-0 focus:outline-none ${
+          checked
+            ? "bg-gradient-to-r from-green-500 to-green-600 border-green-400/50 shadow-[0_0_20px_rgba(34,197,94,0.5)]"
+            : "bg-[#404249] border-white/10 hover:border-white/20"
         }`}
       >
         <div
-          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
-            checked ? "translate-x-6" : "translate-x-0"
+          className={`absolute top-[2px] left-[2px] w-6 h-6 bg-white rounded-full shadow-lg transform transition-all duration-500 ease-in-out flex items-center justify-center ${
+            checked ? "translate-x-[26px]" : "translate-x-0"
           }`}
         >
-          {checked ? (
-            <Check size={10} className="text-[#23a559] stroke-[4]" />
-          ) : (
-            <X size={10} className="text-[#80848e] stroke-[4]" />
+          {checked && (
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           )}
         </div>
+        {/* Glow effect */}
+        {checked && (
+          <div className="absolute inset-0 bg-green-500/20 rounded-full blur-sm animate-pulse"></div>
+        )}
       </button>
     </div>
   );
@@ -256,16 +312,25 @@ function AboutSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-xl font-bold text-white mb-6">Uygulama Hakkında</h3>
-      
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Uygulama Hakkında</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
+
       {/* Logo ve Uygulama Bilgileri */}
-      <div className="bg-[#1e1f22] rounded-lg overflow-hidden border border-[#1f2023] shadow-md mb-6">
-        <div className="h-24 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500"></div>
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
+
+        <div className="h-28 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 relative">
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/20"></div>
+        </div>
         <div className="px-5 pb-5 relative">
           <div className="flex justify-between items-end -mt-10 mb-4">
             <div className="flex items-end gap-3">
               <div className="p-1.5 bg-[#1e1f22] rounded-full">
-                <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-2xl">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-2xl">
                   <div className="text-white font-black text-3xl">N</div>
                 </div>
               </div>
@@ -279,8 +344,8 @@ function AboutSettings() {
               </div>
             </div>
           </div>
-          <div className="bg-[#2b2d31] rounded-lg p-4">
-            <p className="text-[#b5bac1] text-sm leading-relaxed">
+          <div className="glass-strong rounded-xl p-4 border border-white/10 relative z-10">
+            <p className="text-white text-sm leading-relaxed font-medium">
               {appDescription}
             </p>
           </div>
@@ -288,32 +353,48 @@ function AboutSettings() {
       </div>
 
       {/* Bilgiler */}
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
           Bilgiler
         </h4>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="space-y-3 relative z-10">
+          <div className="flex items-center justify-between py-1.5">
             <span className="text-[#b5bac1] text-sm">Versiyon</span>
-            <span className="text-white text-sm font-medium">{appVersion}</span>
+            <span className="text-white text-sm font-semibold">
+              {appVersion}
+            </span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="h-px bg-white/10"></div>
+          <div className="flex items-center justify-between py-1.5">
             <span className="text-[#b5bac1] text-sm">Platform</span>
-            <span className="text-white text-sm font-medium">Next.js & Electron</span>
+            <span className="text-white text-sm font-semibold">
+              Next.js & Electron
+            </span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="h-px bg-white/10"></div>
+          <div className="flex items-center justify-between py-1.5">
             <span className="text-[#b5bac1] text-sm">Geliştirici</span>
-            <span className="text-white text-sm font-medium">ConsolAktif</span>
+            <span className="text-white text-sm font-semibold">
+              ConsolAktif
+            </span>
           </div>
         </div>
       </div>
 
       {/* Linkler */}
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
           Linkler
         </h4>
-        <div className="space-y-2">
+        <div className="space-y-2 relative z-10">
           <button
             onClick={() => {
               if (window.netrex?.openExternalLink) {
@@ -322,11 +403,21 @@ function AboutSettings() {
                 window.open(githubUrl, "_blank", "noopener,noreferrer");
               }
             }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1e1f22] hover:bg-[#2b2d31] text-[#b5bac1] hover:text-white transition-all duration-200 group w-full text-left"
+            onMouseDown={(e) => e.preventDefault()}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1e1f22] border border-white/10 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:border-indigo-500/30 text-[#b5bac1] hover:text-white transition-all duration-300 group/link w-full text-left relative overflow-hidden focus:outline-none"
           >
-            <Github size={18} className="group-hover:scale-110 transition-transform" />
-            <span className="text-sm font-medium">GitHub Repository</span>
-            <ExternalLink size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/link:opacity-100 transition-opacity duration-300"></div>
+            <Github
+              size={18}
+              className="relative z-10 group-hover/link:scale-110 transition-transform duration-300"
+            />
+            <span className="text-sm font-medium relative z-10">
+              GitHub Repository
+            </span>
+            <ExternalLink
+              size={14}
+              className="ml-auto opacity-0 group-hover/link:opacity-100 transition-opacity relative z-10"
+            />
           </button>
           <button
             onClick={() => {
@@ -336,11 +427,21 @@ function AboutSettings() {
                 window.open(youtubeUrl, "_blank", "noopener,noreferrer");
               }
             }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1e1f22] hover:bg-[#2b2d31] text-[#b5bac1] hover:text-white transition-all duration-200 group w-full text-left"
+            onMouseDown={(e) => e.preventDefault()}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1e1f22] border border-white/10 hover:bg-gradient-to-r hover:from-red-500/10 hover:to-red-600/10 hover:border-red-500/30 text-[#b5bac1] hover:text-white transition-all duration-300 group/link w-full text-left relative overflow-hidden focus:outline-none"
           >
-            <Youtube size={18} className="group-hover:scale-110 transition-transform text-red-500" />
-            <span className="text-sm font-medium">YouTube Kanalı</span>
-            <ExternalLink size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/link:opacity-100 transition-opacity duration-300"></div>
+            <Youtube
+              size={18}
+              className="relative z-10 group-hover/link:scale-110 transition-transform duration-300 text-red-500"
+            />
+            <span className="text-sm font-medium relative z-10">
+              YouTube Kanalı
+            </span>
+            <ExternalLink
+              size={14}
+              className="ml-auto opacity-0 group-hover/link:opacity-100 transition-opacity relative z-10"
+            />
           </button>
         </div>
       </div>
@@ -357,28 +458,43 @@ function ApplicationSettings() {
   } = useSettingsStore();
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Uygulama Ayarları</h3>
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Uygulama Ayarları</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
           Pencere Davranışı
         </h4>
+        <div className="relative z-10">
         <ToggleSwitch
           label="Sistem Tepsisine Küçült"
           description="Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt köşedeki (saat yanı) simge durumuna küçülür."
           checked={closeToTray}
           onChange={() => setCloseToTray(!closeToTray)}
         />
+        </div>
       </div>
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
           Güncellemeler
         </h4>
-        <ToggleSwitch
-          label="Açılışta Güncelleme Kontrolü"
-          description="Uygulama açıldığında otomatik olarak güncellemeleri kontrol eder."
-          checked={checkUpdatesOnStartup}
-          onChange={() => setCheckUpdatesOnStartup(!checkUpdatesOnStartup)}
-        />
+        <div className="relative z-10">
+          <ToggleSwitch
+            label="Açılışta Güncelleme Kontrolü"
+            description="Uygulama açıldığında otomatik olarak güncellemeleri kontrol eder."
+            checked={checkUpdatesOnStartup}
+            onChange={() => setCheckUpdatesOnStartup(!checkUpdatesOnStartup)}
+          />
+        </div>
       </div>
     </div>
   );
@@ -387,11 +503,11 @@ function ApplicationSettings() {
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
-  
+
   // Admin kontrolü (sadece UID)
   const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
   const isAdmin = user && ADMIN_UID && user.uid === ADMIN_UID;
-  
+
   // DevTools açma
   const handleOpenDevTools = async () => {
     if (window.netrex && isAdmin) {
@@ -484,12 +600,21 @@ function AccountSettings({ onClose }) {
   };
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-xl font-bold text-white mb-6">Hesabım</h3>
-      <div className="bg-[#1e1f22] rounded-lg overflow-hidden border border-[#1f2023] shadow-md mb-8">
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Hesabım</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg mb-8 relative group/card hover:shadow-xl transition-all duration-300">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
+
         <div
-          className="h-24 w-full transition-all duration-300"
+          className="h-28 w-full transition-all duration-300 relative"
           style={{ background: profileColor }}
-        ></div>
+        >
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/20"></div>
+        </div>
         <div className="px-5 pb-5 relative">
           <div className="flex justify-between items-end -mt-10 mb-4">
             <div className="flex items-end gap-3">
@@ -519,23 +644,24 @@ function AccountSettings({ onClose }) {
               </div>
             </div>
           </div>
-          <div className="bg-[#2b2d31] rounded-lg p-4 space-y-4">
+          <div className="glass-strong rounded-xl p-5 space-y-4 border border-white/10 relative z-10">
             <div className="flex justify-between items-center group">
               <div>
-                <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1 flex items-center gap-1">
-                  <User size={12} /> Görünen Ad
+                <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1.5 flex items-center gap-1.5">
+                  <User size={12} className="text-indigo-400" /> Görünen Ad
                 </label>
-                <div className="text-[#dbdee1] text-sm">
+                <div className="text-white text-sm font-medium">
                   {user?.displayName || "Belirtilmemiş"}
                 </div>
               </div>
             </div>
+            <div className="h-px bg-white/10"></div>
             <div className="flex justify-between items-center group">
               <div>
-                <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1 flex items-center gap-1">
-                  <Mail size={12} /> E-Posta
+                <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1.5 flex items-center gap-1.5">
+                  <Mail size={12} className="text-indigo-400" /> E-Posta
                 </label>
-                <div className="text-[#dbdee1] text-sm">
+                <div className="text-white text-sm font-medium">
                   {user?.email || (
                     <span className="text-[#949ba4] italic">Anonim Hesap</span>
                   )}
@@ -545,7 +671,7 @@ function AccountSettings({ onClose }) {
           </div>
         </div>
       </div>
-      
+
       {/* Admin DevTools Button */}
       {isAdmin && window.netrex && (
         <div className="mb-8">
@@ -554,7 +680,8 @@ function AccountSettings({ onClose }) {
           </h4>
           <button
             onClick={handleOpenDevTools}
-            className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+            onMouseDown={(e) => e.preventDefault()}
+            className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl focus:outline-none"
           >
             <Monitor size={16} />
             Developer Tools'u Aç
@@ -564,8 +691,8 @@ function AccountSettings({ onClose }) {
           </p>
         </div>
       )}
-      
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="mb-8">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
           <Palette size={14} /> Profil Teması
@@ -580,7 +707,8 @@ function AccountSettings({ onClose }) {
                 setProfileColor(parsed.solidColor);
               }
             }}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+            onMouseDown={(e) => e.preventDefault()}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 focus:outline-none ${
               colorMode === "solid"
                 ? "bg-[#404249] text-white shadow"
                 : "text-[#949ba4] hover:text-[#dbdee1]"
@@ -600,7 +728,8 @@ function AccountSettings({ onClose }) {
                 );
               }
             }}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+            onMouseDown={(e) => e.preventDefault()}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 focus:outline-none ${
               colorMode === "gradient"
                 ? "bg-[#404249] text-white shadow"
                 : "text-[#949ba4] hover:text-[#dbdee1]"
@@ -627,7 +756,8 @@ function AccountSettings({ onClose }) {
                 <button
                   key={color}
                   onClick={() => setProfileColor(color)}
-                  className={`w-10 h-10 rounded-full transition-all duration-200 relative ${
+                  onMouseDown={(e) => e.preventDefault()}
+                  className={`w-10 h-10 rounded-full transition-all duration-200 relative focus:outline-none ${
                     profileColor === color
                       ? "ring-2 ring-white ring-offset-2 ring-offset-[#313338] scale-110"
                       : "hover:scale-110"
@@ -706,7 +836,8 @@ function AccountSettings({ onClose }) {
                   <button
                     key={i}
                     onClick={() => setProfileColor(grad)}
-                    className={`w-12 h-12 rounded-lg transition-all duration-200 relative shadow-sm ${
+                    onMouseDown={(e) => e.preventDefault()}
+                    className={`w-12 h-12 rounded-lg transition-all duration-200 relative shadow-sm focus:outline-none ${
                       profileColor === grad
                         ? "ring-2 ring-white ring-offset-2 ring-offset-[#1e1f22]"
                         : "hover:scale-105"
@@ -729,24 +860,29 @@ function AccountSettings({ onClose }) {
           </div>
         )}
       </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="flex flex-col gap-2">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2">
           Hesap İşlemleri
         </h4>
         <button
           onClick={handleLogout}
-          className="flex items-center justify-between p-4 rounded bg-[#2b2d31] hover:bg-[#35373c] border border-[#da373c] group transition cursor-pointer text-left w-full"
+          onMouseDown={(e) => e.preventDefault()}
+          className="flex items-center justify-between p-4 rounded-xl glass-strong border border-red-500/30 hover:bg-gradient-to-r hover:from-red-500/10 hover:to-red-600/10 hover:border-red-500/40 group transition-all duration-300 cursor-pointer text-left w-full relative overflow-hidden focus:outline-none"
         >
-          <div className="flex flex-col">
-            <span className="font-bold text-white group-hover:text-red-400 transition-colors">
+          <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <div className="flex flex-col relative z-10">
+            <span className="font-bold text-white group-hover:text-red-300 transition-colors">
               Çıkış Yap
             </span>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-[#949ba4] group-hover:text-[#b5bac1] transition-colors">
               Oturumunu kapat ve giriş ekranına dön.
             </span>
           </div>
-          <LogOut size={20} className="text-[#da373c]" />
+          <LogOut
+            size={20}
+            className="text-red-400 relative z-10 group-hover:scale-110 transition-transform duration-300"
+          />
         </button>
       </div>
     </div>
@@ -813,14 +949,19 @@ function KeybindSettings() {
   }, [recording]);
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Tuş Atamaları</h3>
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Tuş Atamaları</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
       {error && (
-        <div className="bg-[#f04747]/10 text-[#f04747] p-3 rounded mb-4 flex items-center gap-2 text-sm border border-[#f04747]/30">
-          <Info size={16} /> {error}
+        <div className="bg-gradient-to-r from-red-500/15 to-red-600/15 text-red-300 p-4 rounded-xl mb-4 flex items-center gap-2 text-sm border border-red-500/30 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent"></div>
+          <Info size={16} className="relative z-10 text-red-400" />
+          <span className="relative z-10 font-medium">{error}</span>
         </div>
       )}
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden">
-        <div className="flex bg-[#2b2d31] p-3 border-b border-[#1f2023] text-xs font-bold text-[#949ba4] uppercase">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden shadow-soft-lg">
+        <div className="flex bg-gradient-to-r from-[#25272a] to-[#2b2d31] p-4 border-b border-white/10 text-xs font-bold text-[#949ba4] uppercase">
           <div className="flex-1">Eylem</div>
           <div className="w-40 text-center">Tuş Kombinasyonu</div>
         </div>
@@ -919,16 +1060,21 @@ function KeybindRow({
   onRemove,
 }) {
   return (
-    <div className="flex items-center justify-between p-4 hover:bg-[#35373c] transition-colors group">
-      <div className="pr-4">
-        <div className="font-medium text-[#dbdee1] mb-0.5">{label}</div>
-        <div className="text-xs text-[#949ba4]">{description}</div>
+    <div className="flex items-center justify-between p-4 hover:bg-white/5 transition-all duration-300 group/item border-b border-white/5 last:border-b-0">
+      <div className="pr-4 flex-1">
+        <div className="font-medium text-white mb-0.5 group-hover/item:text-[#dbdee1] transition-colors">
+          {label}
+      </div>
+        <div className="text-xs text-[#949ba4] group-hover/item:text-[#b5bac1] transition-colors">
+          {description}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         {shortcut && !isRecording && (
           <button
             onClick={onRemove}
-            className="p-1.5 rounded text-[#949ba4] hover:text-[#f04747] hover:bg-[#f04747]/10 transition-colors"
+            onMouseDown={(e) => e.preventDefault()}
+            className="p-1.5 rounded text-[#949ba4] hover:text-[#f04747] hover:bg-[#f04747]/10 transition-colors focus:outline-none"
             title="Tuş atamasını kaldır"
           >
             <X size={16} />
@@ -936,7 +1082,8 @@ function KeybindRow({
         )}
       <button
         onClick={onClick}
-        className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden ${
+          onMouseDown={(e) => e.preventDefault()}
+          className={`w-40 py-2 rounded border text-sm font-mono transition-all relative overflow-hidden focus:outline-none ${
           isRecording
             ? "bg-[#313338] border-[#f04747] text-[#f04747] shadow-[0_0_10px_rgba(240,71,71,0.2)]"
             : "bg-[#1e1f22] border-[#1e1f22] text-[#dbdee1] group-hover:border-[#4e5058] group-hover:bg-[#1e1f22]"
@@ -1097,7 +1244,10 @@ function VoiceSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Ses ve Görüntü</h3>
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Ses ve Görüntü</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
 
       {/* KAMERA AYARLARI */}
       <div className="mb-6">
@@ -1116,9 +1266,12 @@ function VoiceSettings() {
           </span>
         </div>
 
-        <div className="bg-[#2b2d31] p-4 rounded-lg border border-[#1f2023]">
+        <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+          {/* Hover glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
           {/* YENİ: KAMERA AÇ/KAPA TOGGLE */}
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#1f2023]">
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/10 relative z-10">
             <div>
               <div className="font-bold text-sm text-white">
                 Kamerayı Etkinleştir
@@ -1148,7 +1301,7 @@ function VoiceSettings() {
                       if (room?.localParticipant)
                         room.switchActiveDevice("videoinput", e.target.value);
                     }}
-                    className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer pl-9"
+                    className="w-full bg-[#1e1f22] border border-white/10 text-white p-2.5 rounded-lg hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer pl-9 transition-all duration-300 relative z-10"
                   >
                     {videoInputs.length > 0 ? (
                       videoInputs.map((d) => (
@@ -1166,7 +1319,7 @@ function VoiceSettings() {
                 </div>
               </div>
 
-              <div className="relative w-full aspect-video bg-[#111214] rounded-lg overflow-hidden border border-[#1e1f22] flex items-center justify-center">
+              <div className="relative w-full aspect-video bg-[#0a0a0c] rounded-xl overflow-hidden border-2 border-white/10 shadow-lg flex items-center justify-center relative z-10">
                 {videoInputs.length > 0 ? (
                   <video
                     ref={videoRef}
@@ -1189,7 +1342,7 @@ function VoiceSettings() {
               </div>
 
               {/* Ayna Efekti */}
-              <div className="mt-4 pt-4 border-t border-[#1f2023]">
+              <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
                 <ToggleSwitch
                   label="Ayna Efekti"
                   description="Kamera görüntüsünü yatay olarak çevir (kendini aynada görür gibi)."
@@ -1212,7 +1365,7 @@ function VoiceSettings() {
         </div>
       </div>
 
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
 
       {/* SES AYARLARI (AYNI) */}
       <div className="space-y-6">
@@ -1228,7 +1381,7 @@ function VoiceSettings() {
                 if (room?.localParticipant)
                   room.switchActiveDevice("audioinput", e.target.value);
               }}
-              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
+              className="w-full bg-[#1e1f22] border border-white/10 text-white p-2.5 rounded-lg hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer transition-all duration-300"
             >
               <option value="default">Varsayılan</option>
               {audioInputs.map((d) => (
@@ -1254,7 +1407,7 @@ function VoiceSettings() {
                 if (room)
                   room.switchActiveDevice("audiooutput", e.target.value);
               }}
-              className="w-full bg-[#1e1f22] border border-[#1e1f22] text-[#dbdee1] p-2.5 rounded hover:border-[#000] focus:border-[#000] outline-none appearance-none cursor-pointer"
+              className="w-full bg-[#1e1f22] border border-white/10 text-white p-2.5 rounded-lg hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer transition-all duration-300"
             >
               <option value="default">Varsayılan</option>
               {audioOutputs.map((d) => (
@@ -1271,7 +1424,7 @@ function VoiceSettings() {
       </div>
 
       {/* ... (Diğer ses ayarları aynı kalacak) ... */}
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <label className="text-xs font-bold text-[#b5bac1] uppercase flex items-center gap-2">
@@ -1316,7 +1469,7 @@ function VoiceSettings() {
           Giriş, çıkış, mute ve diğer bildirim seslerinin yüksekliği.
         </p>
       </div>
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="mb-6">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Giriş Hassasiyeti (Noise Gate)
@@ -1325,8 +1478,8 @@ function VoiceSettings() {
           Mikrofonunuz ne kadar ses algıladığında devreye girsin? Sarı bölge
           gürültüdür, yeşil bölge konuşmadır.
         </p>
-        <div className="bg-[#1e1f22] p-4 rounded-lg border border-[#2b2d31]">
-          <div className="h-3 w-full bg-[#313338] rounded-full overflow-hidden relative mb-4">
+        <div className="glass-strong p-5 rounded-xl border border-white/20 relative z-10">
+          <div className="h-3 w-full bg-[#313338] rounded-full overflow-hidden relative mb-4 shadow-inner">
             <div
               className="absolute inset-0 w-full h-full"
               style={{
@@ -1368,7 +1521,7 @@ function VoiceSettings() {
       </div>
 
       {/* GÜRÜLTÜ AZALTMA MODU (Discord benzeri) */}
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="space-y-4">
         <div className="mb-2">
           <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-1">
@@ -1472,7 +1625,7 @@ function VoiceSettings() {
         </div>
       </div>
 
-      <div className="h-[1px] bg-[#3f4147] my-6"></div>
+      <div className="h-px bg-white/10 my-6"></div>
       <div className="space-y-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2">
           Gelişmiş Ses İşleme
@@ -1483,14 +1636,14 @@ function VoiceSettings() {
           checked={settings.echoCancellation}
           onChange={settings.toggleEchoCancellation}
         />
-        <div className="h-[1px] bg-[#2b2d31]"></div>
+        <div className="h-px bg-white/10"></div>
         <ToggleSwitch
           label="Gürültü Bastırma (Noise Suppression)"
           description="Klavye sesi, fan sesi gibi arka plan gürültülerini filtreler."
           checked={settings.noiseSuppression}
           onChange={settings.toggleNoiseSuppression}
         />
-        <div className="h-[1px] bg-[#2b2d31]"></div>
+        <div className="h-px bg-white/10"></div>
         <ToggleSwitch
           label="Otomatik Kazanç Kontrolü"
           description="Ses seviyeni otomatik olarak dengeler (Bağırdığında kısar, fısıldadığında açar)."
@@ -1519,51 +1672,66 @@ function NotificationSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Bildirim Ayarları</h3>
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Bildirim Ayarları</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
 
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
           Genel Bildirimler
         </h4>
-        <ToggleSwitch
-          label="Masaüstü Bildirimleri"
-          description="Yeni mesajlar ve diğer olaylar için masaüstü bildirimleri göster."
-          checked={desktopNotifications}
-          onChange={() => setDesktopNotifications(!desktopNotifications)}
-        />
-        <div className="h-[1px] bg-[#1f2023] my-3"></div>
-        <ToggleSwitch
-          label="Bildirim Sesi"
-          description="Bildirimler geldiğinde ses çal."
-          checked={notificationSound}
-          onChange={() => setNotificationSound(!notificationSound)}
-        />
+        <div className="relative z-10 space-y-3">
+          <ToggleSwitch
+            label="Masaüstü Bildirimleri"
+            description="Yeni mesajlar ve diğer olaylar için masaüstü bildirimleri göster."
+            checked={desktopNotifications}
+            onChange={() => setDesktopNotifications(!desktopNotifications)}
+          />
+          <div className="h-px bg-white/10"></div>
+          <ToggleSwitch
+            label="Bildirim Sesi"
+            description="Bildirimler geldiğinde ses çal."
+            checked={notificationSound}
+            onChange={() => setNotificationSound(!notificationSound)}
+          />
+        </div>
       </div>
 
-      <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4">
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden group/card">
+        {/* Hover glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
           Bildirim Olayları
         </h4>
-        <ToggleSwitch
-          label="Yeni Mesaj Bildirimi"
-          description="Yeni mesaj geldiğinde bildirim göster."
-          checked={notifyOnMessage}
-          onChange={() => setNotifyOnMessage(!notifyOnMessage)}
-        />
-        <div className="h-[1px] bg-[#1f2023] my-3"></div>
-        <ToggleSwitch
-          label="Katılım Bildirimi"
-          description="Birisi odaya katıldığında bildirim göster."
-          checked={notifyOnJoin}
-          onChange={() => setNotifyOnJoin(!notifyOnJoin)}
-        />
-        <div className="h-[1px] bg-[#1f2023] my-3"></div>
-        <ToggleSwitch
-          label="Ayrılış Bildirimi"
-          description="Birisi odadan ayrıldığında bildirim göster."
-          checked={notifyOnLeave}
-          onChange={() => setNotifyOnLeave(!notifyOnLeave)}
-        />
+        <div className="relative z-10 space-y-3">
+          <ToggleSwitch
+            label="Yeni Mesaj Bildirimi"
+            description="Yeni mesaj geldiğinde bildirim göster."
+            checked={notifyOnMessage}
+            onChange={() => setNotifyOnMessage(!notifyOnMessage)}
+          />
+          <div className="h-px bg-white/10"></div>
+          <ToggleSwitch
+            label="Katılım Bildirimi"
+            description="Birisi odaya katıldığında bildirim göster."
+            checked={notifyOnJoin}
+            onChange={() => setNotifyOnJoin(!notifyOnJoin)}
+          />
+          <div className="h-px bg-white/10"></div>
+          <ToggleSwitch
+            label="Ayrılış Bildirimi"
+            description="Birisi odadan ayrıldığında bildirim göster."
+            checked={notifyOnLeave}
+            onChange={() => setNotifyOnLeave(!notifyOnLeave)}
+          />
+        </div>
       </div>
     </div>
   );
@@ -1597,7 +1765,10 @@ function AppearanceSettings({ onSave }) {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <h3 className="text-xl font-bold text-white mb-6">Görünüm Ayarları</h3>
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Görünüm Ayarları</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
 
       <div className="bg-[#2b2d31] rounded-lg border border-[#1f2023] overflow-hidden p-4 mb-4">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4">
@@ -1611,7 +1782,7 @@ function AppearanceSettings({ onSave }) {
           <select
             value={uiScale}
             onChange={(e) => setUIScale(Number(e.target.value))}
-            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+            className="w-full bg-[#1e1f22] border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-300 relative z-10"
           >
             {scaleOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -1624,7 +1795,7 @@ function AppearanceSettings({ onSave }) {
           </p>
         </div>
 
-        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+        <div className="h-px bg-white/10 my-3 relative z-10"></div>
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-[#dbdee1] mb-2">
@@ -1633,7 +1804,7 @@ function AppearanceSettings({ onSave }) {
           <select
             value={fontSize}
             onChange={(e) => setFontSize(e.target.value)}
-            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+            className="w-full bg-[#1e1f22] border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-300 relative z-10"
           >
             {fontSizeOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -1644,7 +1815,7 @@ function AppearanceSettings({ onSave }) {
           <p className="text-xs text-[#949ba4] mt-1">Metin boyutunu ayarlar.</p>
         </div>
 
-        <div className="h-[1px] bg-[#1f2023] my-3"></div>
+        <div className="h-px bg-white/10 my-3 relative z-10"></div>
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-[#dbdee1] mb-2">
@@ -1653,7 +1824,7 @@ function AppearanceSettings({ onSave }) {
           <select
             value={fontFamily}
             onChange={(e) => setFontFamily(e.target.value)}
-            className="w-full bg-[#1e1f22] border border-[#2b2d31] rounded px-3 py-2 text-[#dbdee1] focus:outline-none focus:border-[#5865f2]"
+            className="w-full bg-[#1e1f22] border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-300 relative z-10"
           >
             {fontOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>

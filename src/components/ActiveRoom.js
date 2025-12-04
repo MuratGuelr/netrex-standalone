@@ -52,7 +52,7 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useVoiceProcessor } from "@/src/hooks/useVoiceProcessor";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useChatStore } from "@/src/store/chatStore";
-import { toastOnce } from "@/src/utils/toast";
+import { toastOnce, chatToast, systemToast } from "@/src/utils/toast";
 import { useAuthStore } from "@/src/store/authStore";
 import { db } from "@/src/lib/firebase";
 import {
@@ -69,6 +69,181 @@ const styleInjection = `
   .speaking-avatar { animation: pulse-ring 2s infinite; }
   .volume-slider { -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; outline: none; }
   .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; cursor: pointer; }
+  
+  /* Bottom Controls Animations */
+  @keyframes ripple {
+    0% {
+      transform: scale(0);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+  @keyframes pulse-border {
+    0%, 100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.02);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes camera-active {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px 5px rgba(255, 255, 255, 0.2);
+    }
+  }
+  @keyframes screen-share-active {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px 5px rgba(34, 197, 94, 0.3);
+    }
+  }
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.1);
+    }
+  }
+  .animate-ripple {
+    animation: ripple 0.6s ease-out;
+  }
+  .animate-pulse-border {
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+  .animate-shimmer {
+    animation: shimmer 3s linear infinite;
+  }
+  .animate-camera-active {
+    animation: camera-active 2s ease-in-out infinite;
+  }
+  .animate-screen-share-active {
+    animation: screen-share-active 2s ease-in-out infinite;
+  }
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+  
+  /* User Card Animations */
+  @keyframes user-card-active {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.01);
+    }
+  }
+  @keyframes pulse-border-video {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes avatar-pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+  }
+  @keyframes pulse-glow-slow {
+    0%, 100% {
+      opacity: 0.1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.2;
+      transform: scale(1.02);
+    }
+  }
+  .animate-user-card-active {
+    animation: user-card-active 3s ease-in-out infinite;
+  }
+  .animate-pulse-border-video {
+    animation: pulse-border-video 2s ease-in-out infinite;
+  }
+  .animate-avatar-pulse {
+    animation: avatar-pulse 2s ease-in-out infinite;
+  }
+  .animate-pulse-glow-slow {
+    animation: pulse-glow-slow 3s ease-in-out infinite;
+  }
+  
+  /* Speaking Background Animations */
+  @keyframes speaking-glow {
+    0%, 100% {
+      opacity: 0.6;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+  }
+  @keyframes speaking-pulse-ring {
+    0% {
+      opacity: 0.4;
+      transform: scale(0.95);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 0.4;
+      transform: scale(0.95);
+    }
+  }
+  @keyframes speaking-corner-glow {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    25% {
+      opacity: 0.6;
+      transform: scale(1.1);
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(1.05);
+    }
+    75% {
+      opacity: 0.7;
+      transform: scale(1.15);
+    }
+  }
+  .animate-speaking-glow {
+    animation: speaking-glow 2s ease-in-out infinite;
+  }
+  .animate-speaking-pulse-ring {
+    animation: speaking-pulse-ring 3s ease-in-out infinite;
+  }
+  .animate-speaking-corner-glow {
+    animation: speaking-corner-glow 4s ease-in-out infinite;
+  }
 `;
 
 // --- MIKROFON YÖNETİCİSİ ---
@@ -104,11 +279,11 @@ function MicrophoneManager() {
             : undefined;
 
         return (
-          <AudioTrack
-            key={trackRef.publication.trackSid}
-            trackRef={trackRef}
+        <AudioTrack
+          key={trackRef.publication.trackSid}
+          trackRef={trackRef}
             {...(isRemote && { volume })} // Sadece remote track'lere volume prop'u ekle
-          />
+        />
         );
       })}
     </>
@@ -116,9 +291,9 @@ function MicrophoneManager() {
 }
 
 // --- GLOBAL CHAT & EVENTS ---
-function GlobalChatListener({ showChatPanel }) {
+function GlobalChatListener({ showChatPanel, setShowChatPanel }) {
   const room = useRoomContext();
-  const { incrementUnread, currentChannel } = useChatStore();
+  const { incrementUnread, currentChannel, textChannels, loadChannelMessages } = useChatStore();
   const { user } = useAuthStore();
   const { playSound } = useSoundEffects();
   const { desktopNotifications, notifyOnMessage } = useSettingsStore();
@@ -133,36 +308,44 @@ function GlobalChatListener({ showChatPanel }) {
         if (data.type === "chat" && data.message.userId !== user?.uid) {
           const message = data.message;
           const channelId = data.channelId;
+          // Mesajın geldiği kanalın adını bul
+          const messageChannel = textChannels.find(ch => ch.id === channelId);
+          const channelName = messageChannel?.name || "sohbet";
 
-          // Toast bildirim göster (uygulama içindeyse)
+          // Toast bildirim göster (uygulama içindeyse VE sohbet paneli kapalıysa)
           if (
             typeof document !== "undefined" &&
             !document.hidden &&
-            document.hasFocus()
+            document.hasFocus() &&
+            !showChatPanel // Sohbet paneli açıksa toast gösterme
           ) {
-            const channelName = currentChannel?.name || "sohbet";
-            const messageText = message.text
-              ? message.text.length > 50
-                ? message.text.slice(0, 50) + "..."
-                : message.text
-              : "Yeni mesaj";
-            toastOnce(
-              `${message.username || "Bir kullanıcı"}: ${messageText}`,
-              "info",
-              { description: `#${channelName}` }
-            );
+            chatToast({
+              username: message.username || "Bir kullanıcı",
+              message: message.text,
+              channelName: channelName,
+              avatarColor: message.profileColor,
+              onClick: () => {
+                // Tıklanınca sohbet panelini aç ve mesajın geldiği kanala git
+                if (setShowChatPanel) {
+                  setShowChatPanel(true);
+                }
+                // Mesajın geldiği kanala geç
+                if (channelId && channelId !== currentChannel?.id) {
+                  loadChannelMessages(channelId);
+                }
+              },
+            });
           }
 
           // Masaüstü bildirim göster (ayarlardan açtıysa)
           if (desktopNotifications && notifyOnMessage) {
             if (typeof window !== "undefined" && "Notification" in window) {
               if (Notification.permission === "granted") {
-                // Eğer pencere aktifse masaüstü bildirim gösterme (toast yeterli)
-                if (
-                  typeof document !== "undefined" &&
-                  (document.hidden || !document.hasFocus())
-                ) {
-                  const channelName = currentChannel?.name || "sohbet";
+                // Pencere arka plandaysa VEYA sohbet paneli kapalıysa masaüstü bildirim göster
+                const isAppInBackground = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
+                const shouldNotify = isAppInBackground || !showChatPanel;
+                
+                if (shouldNotify) {
                   const body = message.text
                     ? message.text.length > 120
                       ? message.text.slice(0, 120) + "..."
@@ -171,9 +354,7 @@ function GlobalChatListener({ showChatPanel }) {
 
                   try {
                     const notification = new Notification(
-                      `${
-                        message.username || "Bir kullanıcı"
-                      } - #${channelName}`,
+                      `${message.username || "Bir kullanıcı"} - #${channelName}`,
                       {
                         body: body,
                         icon: "/favicon.ico",
@@ -183,10 +364,20 @@ function GlobalChatListener({ showChatPanel }) {
                       }
                     );
 
-                    // Bildirime tıklanınca pencereyi focus et
+                    // Bildirime tıklanınca pencereyi focus et ve sohbeti aç
                     notification.onclick = () => {
-                      if (window) {
+                      if (window.netrex?.focusWindow) {
+                        window.netrex.focusWindow();
+                      } else {
                         window.focus();
+                      }
+                      // Sohbet panelini aç
+                      if (setShowChatPanel) {
+                        setShowChatPanel(true);
+                      }
+                      // Mesajın geldiği kanala geç
+                      if (channelId && channelId !== currentChannel?.id) {
+                        loadChannelMessages(channelId);
                       }
                       notification.close();
                     };
@@ -222,9 +413,12 @@ function GlobalChatListener({ showChatPanel }) {
     incrementUnread,
     user,
     showChatPanel,
+    setShowChatPanel,
     playSound,
     desktopNotifications,
     notifyOnMessage,
+    textChannels,
+    loadChannelMessages,
   ]);
   return null;
 }
@@ -502,48 +696,62 @@ function ConnectionStatusIndicator() {
   }
 
   return (
-    <div className="flex items-center gap-2 cursor-help group relative">
-      {/* Bağlantı Kalitesi Çubukları */}
-      <div className="flex items-end gap-[2px] h-3">
-        {[1, 2, 3, 4].map((bar) => (
-          <div
-            key={bar}
-            className={`w-[3px] rounded-sm transition-colors ${
-              bar <= qualityInfo.bars ? "bg-current" : "bg-[#3f4147]"
-            }`}
-            style={{
-              height: `${bar * 3}px`,
-              color: qualityInfo.color,
-            }}
-          />
-        ))}
+    <div className="flex items-center gap-3 cursor-help group relative">
+      {/* Bağlantı durumu container */}
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 group-hover:border-white/10 transition-all duration-300">
+        {/* Bağlantı Kalitesi Çubukları */}
+        <div className="flex items-end gap-[2px] h-3">
+          {[1, 2, 3, 4].map((bar) => (
+            <div
+              key={bar}
+              className={`w-[3px] rounded-sm transition-all duration-300 ${
+                bar <= qualityInfo.bars ? "" : "bg-[#2b2d31]"
+              }`}
+              style={{
+                height: `${bar * 3}px`,
+                backgroundColor: bar <= qualityInfo.bars ? qualityInfo.color : undefined,
+                boxShadow: bar <= qualityInfo.bars ? `0 0 4px ${qualityInfo.color}50` : undefined,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Kalite Metni */}
+        <span
+          className="text-[11px] font-semibold tracking-wide"
+          style={{ color: qualityInfo.color }}
+        >
+          {qualityInfo.label}
+        </span>
       </div>
 
-      {/* Kalite Metni */}
-      <span
-        className="text-xs font-medium"
-        style={{ color: qualityInfo.color }}
-      >
-        {qualityInfo.label}
-      </span>
-
       {/* Tooltip */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#111214] border border-[#1e1f22] rounded-lg shadow-xl text-xs text-[#dbdee1] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-[#949ba4]">Kalite:</span>
-            <span style={{ color: qualityInfo.color }}>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-4 py-2.5 bg-[#0d0e10] border border-white/10 rounded-xl shadow-2xl text-xs text-[#dbdee1] opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 whitespace-nowrap z-50 backdrop-blur-xl">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-6">
+            <span className="text-[#949ba4] font-medium">Bağlantı Kalitesi</span>
+            <span className="font-bold" style={{ color: qualityInfo.color }}>
               {qualityInfo.label}
             </span>
           </div>
         </div>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[#111214] border-r border-b border-[#1e1f22] rotate-45"></div>
+        {/* Arrow */}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">
+          <div className="w-2 h-2 bg-[#0d0e10] border-r border-b border-white/10 rotate-45"></div>
+        </div>
       </div>
     </div>
   );
 }
 
-function RoomEventsHandler({ onConnected, onDisconnected, onError, roomName }) {
+function RoomEventsHandler({
+  onConnected,
+  onDisconnected,
+  onError,
+  roomName,
+  userId,
+  username,
+}) {
   const room = useRoomContext();
   const { playSound } = useSoundEffects();
   const {
@@ -589,7 +797,11 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError, roomName }) {
 
         // Bildirime tıklanınca pencereyi focus et
         notification.onclick = () => {
-          window.focus();
+          if (window.netrex?.focusWindow) {
+            window.netrex.focusWindow();
+          } else {
+            window.focus();
+          }
           notification.close();
         };
 
@@ -787,6 +999,98 @@ function RoomEventsHandler({ onConnected, onDisconnected, onError, roomName }) {
     showNotification,
     user,
   ]);
+
+  // Uygulama kapatıldığında cleanup (beforeunload event + Electron IPC)
+  useEffect(() => {
+    const cleanup = async () => {
+      // LiveKit room'u disconnect et
+      if (room && room.state !== ConnectionState.Disconnected) {
+        try {
+          await room.disconnect();
+          console.log("✅ LiveKit room disconnect edildi (app close)");
+        } catch (error) {
+          console.error("❌ LiveKit disconnect hatası:", error);
+        }
+      }
+
+      // Firebase'den kullanıcıyı çıkar (keepalive ile gönder - async işlemler tamamlanabilir)
+      if (userId && roomName && username) {
+        try {
+          const presenceRef = doc(db, "room_presence", roomName);
+          // beforeunload'da async işlemler tamamlanmayabilir, bu yüzden fetch ile keepalive kullan
+          const userData = { userId, username };
+          // Firestore REST API ile cleanup (daha güvenilir)
+          await updateDoc(presenceRef, {
+            users: arrayRemove(userData),
+          });
+          console.log("✅ Firestore presence temizlendi (app close)");
+        } catch (error) {
+          // Document yoksa veya zaten silinmişse sessizce devam et
+          if (error.code !== "not-found") {
+            console.error("❌ Firestore cleanup hatası:", error);
+          }
+        }
+      }
+    };
+
+    const handleBeforeUnload = async (e) => {
+      // Cleanup'ı yap ve tamamlandığında main process'e bildir
+      try {
+        await cleanup();
+        // Electron context'inde isek cleanup tamamlandı mesajı gönder
+        if (
+          typeof window !== "undefined" &&
+          window.netrex?.notifyCleanupComplete
+        ) {
+          window.netrex.notifyCleanupComplete();
+          console.log(
+            "✅ Cleanup tamamlandı (beforeunload), main process'e bildirildi"
+          );
+        }
+      } catch (error) {
+        console.error("Cleanup hatası:", error);
+        // Hata olsa bile main process'e bildir (eğer Electron context'inde isek)
+        if (
+          typeof window !== "undefined" &&
+          window.netrex?.notifyCleanupComplete
+        ) {
+          window.netrex.notifyCleanupComplete();
+        }
+      }
+    };
+
+    // Electron IPC event listener
+    let electronCleanupHandler = null;
+    if (typeof window !== "undefined" && window.netrex?.onAppWillQuit) {
+      electronCleanupHandler = async () => {
+        try {
+          await cleanup();
+          // Cleanup tamamlandı, main process'e bildir
+          if (window.netrex?.notifyCleanupComplete) {
+            window.netrex.notifyCleanupComplete();
+            console.log("✅ Cleanup tamamlandı, main process'e bildirildi");
+          }
+        } catch (error) {
+          console.error("Electron cleanup hatası:", error);
+          // Hata olsa bile main process'e bildir (uygulama kapanmalı)
+          if (window.netrex?.notifyCleanupComplete) {
+            window.netrex.notifyCleanupComplete();
+          }
+        }
+      };
+      window.netrex.onAppWillQuit(electronCleanupHandler);
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (electronCleanupHandler && window.netrex?.removeListener) {
+        window.netrex.removeListener("app-will-quit");
+      }
+    };
+  }, [room, roomName, userId, username]);
+
   return null;
 }
 function DeafenManager({ isDeafened }) {
@@ -896,11 +1200,11 @@ function useAudioActivity(participant) {
           }
 
           try {
-            analyser.getByteFrequencyData(data);
-            let sum = 0;
-            for (let i = 0; i < data.length; i++) sum += data[i];
-            setIsActive(sum / data.length > 5);
-            raf = requestAnimationFrame(loop);
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i];
+          setIsActive(sum / data.length > 5);
+          raf = requestAnimationFrame(loop);
           } catch (e) {
             // Analyser hatası - cleanup yap
             cleanup();
@@ -1022,7 +1326,7 @@ export default function ActiveRoom({
   const [hideIncomingVideo, setHideIncomingVideo] = useState(false);
 
   const [showVoicePanel, setShowVoicePanel] = useState(true);
-  const [showChatPanel, setShowChatPanel] = useState(false);
+  const { showChatPanel, setShowChatPanel } = useChatStore();
   const [chatPosition, setChatPosition] = useState("right");
   const [chatWidth, setChatWidth] = useState(400); // Chat genişliği (pixel)
   const [contextMenu, setContextMenu] = useState(null);
@@ -1037,9 +1341,7 @@ export default function ActiveRoom({
     useSettingsStore();
   const { playSound } = useSoundEffects();
 
-  useEffect(() => {
-    if (currentTextChannel) setShowChatPanel(true);
-  }, [currentTextChannel]);
+  // Not: Metin kanalına tıklama artık RoomList'te handle ediliyor (toggle mantığı ile)
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
     window.addEventListener("mousedown", closeMenu);
@@ -1166,7 +1468,7 @@ export default function ActiveRoom({
     console.log("LiveKit bağlantısı koptu:", reason);
     // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
     if (hasConnectedOnce) {
-      setIsReconnecting(true);
+    setIsReconnecting(true);
     }
 
     // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
@@ -1240,7 +1542,7 @@ export default function ActiveRoom({
         reconnect: true,
       }}
     >
-      <GlobalChatListener showChatPanel={showChatPanel} />
+      <GlobalChatListener showChatPanel={showChatPanel} setShowChatPanel={setShowChatPanel} />
       <VoiceProcessorHandler />
       <SettingsUpdater />
       <RoomEventsHandler
@@ -1248,6 +1550,8 @@ export default function ActiveRoom({
         onDisconnected={handleDisconnect}
         onError={handleError}
         roomName={roomName}
+        userId={userId}
+        username={username}
       />
       <MicrophoneManager />
 
@@ -1341,95 +1645,124 @@ export default function ActiveRoom({
         onClose={() => setShowSettings(false)}
       />
 
-      <div className="h-14 bg-gradient-to-r from-[#2b2d31] via-[#313338] to-[#2b2d31] flex items-center px-6 justify-between shrink-0 shadow-soft border-b border-[#26272d]/50 z-20 select-none backdrop-blur-sm">
-        <div className="flex items-center gap-4 overflow-hidden">
-          <div className="flex items-center gap-2 min-w-0">
-            <Volume2 size={24} className="text-[#80848e] flex-shrink-0" />
-            <span className="text-white font-bold text-base tracking-tight truncate">
+      {/* ÜST BAR - Modern Profesyonel Tasarım */}
+      <div className="h-14 relative flex items-center px-5 justify-between shrink-0 z-20 select-none overflow-hidden">
+        {/* Arka plan katmanları */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1a1b1e] via-[#1e1f22] to-[#1a1b1e]"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent"></div>
+        
+        {/* Alt border glow */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#2b2d31] to-transparent"></div>
+        
+        {/* Sol taraf - Kanal bilgisi */}
+        <div className="flex items-center gap-4 overflow-hidden relative z-10">
+          <div className="flex items-center gap-3 min-w-0 group">
+            {/* Kanal icon container */}
+            <div className="relative">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2b2d31] to-[#25272a] flex items-center justify-center border border-white/5 shadow-lg group-hover:border-indigo-500/30 transition-all duration-300 group-hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                <Volume2 size={18} className="text-[#949ba4] group-hover:text-indigo-400 transition-colors duration-300" />
+              </div>
+              {/* Online indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#1a1b1e] rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 bg-[#23a559] rounded-full shadow-[0_0_6px_rgba(35,165,89,0.6)] animate-pulse"></div>
+              </div>
+            </div>
+            
+            {/* Kanal adı */}
+            <div className="flex flex-col min-w-0">
+              <span className="text-white font-bold text-[15px] tracking-tight truncate group-hover:text-[#dbdee1] transition-colors duration-300">
               {roomName}
             </span>
+              <span className="text-[10px] text-[#949ba4] font-medium tracking-wide">Ses Kanalı</span>
           </div>
-          <div className="w-[1px] h-6 bg-[#3f4147] mx-1 hidden sm:block"></div>
+            </div>
+          
+          {/* Ayırıcı */}
+          <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1 hidden sm:block"></div>
+          
+          {/* Bağlantı durumu */}
           <ConnectionStatusIndicator />
-        </div>
-        <div className="flex items-center gap-3 md:gap-5">
-          <div className="flex items-center gap-2">
+          </div>
+        
+        {/* Sağ taraf - Kontrol butonları */}
+        <div className="flex items-center gap-0.5 relative z-10 bg-[#111214]/80 rounded-md p-0.5">
+          {/* Kullanıcılar butonu */}
             <button
               onClick={() => setShowVoicePanel(!showVoicePanel)}
-              className={`p-1.5 rounded transition-all ${
+            className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
                 showVoicePanel
-                  ? "text-[#dbdee1]"
-                  : "text-[#b5bac1] hover:text-[#dbdee1]"
+                ? "bg-white/10 text-white"
+                : "text-[#949ba4] hover:text-white hover:bg-white/5"
               }`}
             >
-              <Users
-                size={22}
-                className={showVoicePanel ? "fill-[#dbdee1]" : ""}
-              />
+            <Users size={14} />
+            <span className="hidden sm:inline">Kişiler</span>
             </button>
+          
+          {/* Chat butonu */}
             {currentTextChannel && (
               <button
                 onClick={() => setShowChatPanel(!showChatPanel)}
-                className={`p-1.5 rounded transition-all ${
+              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
                   showChatPanel
-                    ? "text-[#dbdee1]"
-                    : "text-[#b5bac1] hover:text-[#dbdee1]"
+                  ? "bg-white/10 text-white"
+                  : "text-[#949ba4] hover:text-white hover:bg-white/5"
                 }`}
               >
-                <MessageSquare
-                  size={22}
-                  className={showChatPanel ? "fill-[#dbdee1]" : ""}
-                />
+              <MessageSquare size={14} />
+              <span className="hidden sm:inline">Sohbet</span>
               </button>
             )}
+          
+          {/* Chat pozisyon değiştirme */}
             {showVoicePanel && showChatPanel && currentTextChannel && (
               <button
                 onClick={() =>
                   setChatPosition(chatPosition === "right" ? "left" : "right")
                 }
-                className="text-[#b5bac1] hover:text-[#dbdee1] p-1 ml-1"
+              className="p-1 rounded text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
               >
                 {chatPosition === "right" ? (
-                  <ChevronLeft size={18} />
+                <ChevronLeft size={14} />
                 ) : (
-                  <ChevronRight size={18} />
+                <ChevronRight size={14} />
                 )}
               </button>
             )}
-          </div>
         </div>
       </div>
 
       <ScreenShareManager
         setActiveStreamId={setActiveStreamId}
         renderStageManager={(stopScreenShare) => (
-          <StageManager
-            showVoicePanel={showVoicePanel}
-            showChatPanel={showChatPanel}
-            currentTextChannel={currentTextChannel}
-            chatPosition={chatPosition}
+      <StageManager
+        showVoicePanel={showVoicePanel}
+        showChatPanel={showChatPanel}
+        currentTextChannel={currentTextChannel}
+        chatPosition={chatPosition}
             chatWidth={chatWidth}
             setChatWidth={setChatWidth}
-            username={username}
-            userId={userId}
-            onUserContextMenu={handleUserContextMenu}
-            activeStreamId={activeStreamId}
-            setActiveStreamId={setActiveStreamId}
-            hideIncomingVideo={hideIncomingVideo}
+        username={username}
+        userId={userId}
+        onUserContextMenu={handleUserContextMenu}
+        activeStreamId={activeStreamId}
+        setActiveStreamId={setActiveStreamId}
+        hideIncomingVideo={hideIncomingVideo}
             stopScreenShare={stopScreenShare}
-          />
+      />
         )}
         renderBottomControls={(stopScreenShare) => (
-          <BottomControls
-            username={username}
-            onLeave={handleManualLeave}
-            onOpenSettings={() => setShowSettings(true)}
-            isDeafened={isDeafened}
-            setIsDeafened={setIsDeafened}
-            playSound={playSound}
-            setActiveStreamId={setActiveStreamId}
-            isCameraOn={isCameraOn}
-            setIsCameraOn={setIsCameraOn}
+      <BottomControls
+        username={username}
+        onLeave={handleManualLeave}
+        onOpenSettings={() => setShowSettings(true)}
+        isDeafened={isDeafened}
+        setIsDeafened={setIsDeafened}
+        playSound={playSound}
+        setActiveStreamId={setActiveStreamId}
+        isCameraOn={isCameraOn}
+        setIsCameraOn={setIsCameraOn}
             stopScreenShare={stopScreenShare}
           />
         )}
@@ -1657,11 +1990,20 @@ function StageManager({
         ) {
           const participantName = track.participant.identity || "Birisi";
           if (Notification.permission === "granted") {
-            new Notification("Yayın Başladı", {
+            const notification = new Notification("Yayın Başladı", {
               body: `${participantName} ekran paylaşımı başlattı`,
               icon: "/favicon.ico",
               tag: `screen-share-${track.participant.sid}`,
             });
+            
+            notification.onclick = () => {
+              if (window.netrex?.focusWindow) {
+                window.netrex.focusWindow();
+              } else {
+                window.focus();
+              }
+              notification.close();
+            };
           }
         }
       });
@@ -1837,19 +2179,19 @@ function StageManager({
           )}
           <div
             className={`overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
-              chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
-            }`}
+            chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
+          }`}
             style={{
               width: `${chatWidth}px`,
               flexShrink: 0,
             }}
-          >
-            <ChatView
-              channelId={currentTextChannel}
-              username={username}
-              userId={userId}
-            />
-          </div>
+        >
+          <ChatView
+            channelId={currentTextChannel}
+            username={username}
+            userId={userId}
+          />
+        </div>
         </>
       )}
       {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
@@ -2023,15 +2365,15 @@ function ScreenShareStage({
         clearTimeout(cursorTimeoutRef.current);
       }
 
-      // 1.5 saniye hareketsizlikten sonra overlay'i gizle
+      // 0.8 saniye hareketsizlikten sonra overlay'i gizle (daha hızlı kapanma)
       mouseMoveTimeoutRef.current = setTimeout(() => {
         setShowOverlay(false);
-      }, 1500);
+      }, 200);
 
       // 2 saniye hareketsizlikten sonra cursor'u gizle
       cursorTimeoutRef.current = setTimeout(() => {
         setShowCursor(false);
-      }, 2000);
+      }, 800);
     };
 
     const handleMouseEnter = () => {
@@ -2072,7 +2414,7 @@ function ScreenShareStage({
         {/* Modern Glassmorphism Overlay - Mouse movement ile kontrol ediliyor */}
         {/* Overlay arka planı - görünür değilken pointer-events-none */}
         <div
-          className={`absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/60 transition-all duration-500 ${
+          className={`absolute inset-0 bg-gradient-to-t from-black/40 via-black/20 to-black/30 transition-all duration-500 ${
             showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         ></div>
@@ -2091,28 +2433,28 @@ function ScreenShareStage({
               </div>
             </div>
             <span className="text-white font-bold drop-shadow-lg text-base tracking-tight">
-              {isLocalSharing
-                ? "Senin Yayının"
-                : `${participant?.identity} yayını`}
-            </span>
-          </div>
+                {isLocalSharing
+                  ? "Senin Yayının"
+                  : `${participant?.identity} yayını`}
+              </span>
+            </div>
           <div className="flex gap-2 pointer-events-auto">
-            {isLocalSharing && (
-              <button
-                onClick={onHideLocal}
+              {isLocalSharing && (
+                <button
+                  onClick={onHideLocal}
                 className={`glass-strong hover:glass border border-white/10 hover:border-white/20 text-gray-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow group/btn ${
                   showOverlay ? "opacity-100" : "opacity-0"
                 }`}
-                title="Önizlemeyi Gizle"
-              >
+                  title="Önizlemeyi Gizle"
+                >
                 <EyeOff
                   size={20}
                   className="group-hover/btn:scale-110 transition-transform"
                 />
-              </button>
-            )}
+                </button>
+              )}
             {/* İzlemeyi Durdur butonu - Her zaman görünür ve tıklanabilir */}
-            <button
+              <button
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -2125,15 +2467,15 @@ function ScreenShareStage({
                 }
               }}
               className="glass-strong hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-gray-300 hover:text-red-400 p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow-red group/btn z-[100]"
-              title="İzlemeyi Durdur"
-            >
+                title="İzlemeyi Durdur"
+              >
               <Minimize
                 size={20}
                 className="group-hover/btn:scale-110 transition-transform"
               />
-            </button>
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* Overlay içeriği - Bottom controls */}
         <div
@@ -2152,7 +2494,7 @@ function ScreenShareStage({
                     className="text-indigo-400 group-hover/viewers:text-indigo-300 transition-colors"
                   />
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[#1e1f22] animate-pulse"></div>
-                </div>
+            </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-[#949ba4] font-medium leading-tight">
                     Canlı İzleyici
@@ -2166,46 +2508,46 @@ function ScreenShareStage({
               {/* Kontrol Butonları - Premium Tasarım */}
               <div className="flex items-center gap-3">
                 {/* Ses Kısma Butonu - Yayın yapıldığında da görünür, tam ekran butonunun solunda */}
-                {!isLocalSharing && (
+              {!isLocalSharing && (
                   <div className="flex items-center gap-3 group/vol">
-                    {isAudioDisabled ? (
-                      <div
+                  {isAudioDisabled ? (
+                    <div
                         className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20"
-                        title="Ses döngüsünü önlemek için ses kapatıldı."
-                      >
+                      title="Ses döngüsünü önlemek için ses kapatıldı."
+                    >
                         <AlertTriangle size={18} />
                         <span className="hidden group-hover/vol:inline whitespace-nowrap">
-                          Ses Kapalı
-                        </span>
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={toggleMuteStream}
+                        Ses Kapalı
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={toggleMuteStream}
                           className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 group/btn ${
                             volume === 0
                               ? "text-red-400 hover:text-red-300 hover:bg-red-500/20 hover:border-red-500/30"
                               : "text-white hover:text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30"
                           } border border-white/10 hover:border-current hover:shadow-glow backdrop-blur-sm`}
-                          title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
-                        >
-                          {volume === 0 ? (
+                        title={volume === 0 ? "Sesi Aç" : "Sesi Kapat"}
+                      >
+                        {volume === 0 ? (
                             <VolumeX
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                          ) : volume < 50 ? (
+                        ) : volume < 50 ? (
                             <Volume1
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                          ) : (
+                        ) : (
                             <Volume2
                               size={20}
                               className="group-hover/btn:scale-110 transition-transform"
                             />
-                          )}
-                        </button>
+                        )}
+                      </button>
                         <div className="w-0 group-hover/vol:w-36 overflow-hidden transition-all duration-300 flex items-center">
                           <div className="relative w-32 h-7 flex items-center">
                             {/* Progress Bar Background */}
@@ -2218,11 +2560,11 @@ function ScreenShareStage({
                             </div>
 
                             {/* Slider Input */}
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={volume}
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={volume}
                               onChange={(e) =>
                                 setVolume(Number(e.target.value))
                               }
@@ -2243,15 +2585,15 @@ function ScreenShareStage({
                               }}
                             ></div>
                           </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
                 {/* Ayırıcı - Sadece ses kısma butonu görünürken */}
-                {!isLocalSharing && !isAudioDisabled && (
+              {!isLocalSharing && !isAudioDisabled && (
                   <div className="w-[1px] h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
-                )}
+              )}
                 {/* Tam Ekran Butonu - Her zaman görünür (yayın yapıldığında da) */}
                 <button
                   onClick={toggleFullscreen}
@@ -2302,19 +2644,26 @@ function ParticipantList({
   if (count === 0) return null;
   if (compact) {
     return (
-      <div className="flex items-center gap-3 h-full px-2">
+      <div
+        className="flex items-center gap-3 h-full px-2"
+        style={{ overflow: "visible" }}
+      >
         {participants.map((p) => (
-          <div key={p.sid} className="min-w-[140px] h-full">
-            <UserCard
-              participant={p}
-              totalCount={count}
-              onContextMenu={(e) => onUserContextMenu(e, p)}
-              compact={true}
-              hideIncomingVideo={hideIncomingVideo}
+          <div
+            key={p.sid}
+            className="min-w-[140px] h-full"
+            style={{ overflow: "visible", padding: "2px" }}
+          >
+        <UserCard
+          participant={p}
+          totalCount={count}
+          onContextMenu={(e) => onUserContextMenu(e, p)}
+          compact={true}
+          hideIncomingVideo={hideIncomingVideo}
               setActiveStreamId={setActiveStreamId}
               activeStreamId={activeStreamId}
-            />
-          </div>
+        />
+      </div>
         ))}
       </div>
     );
@@ -2331,9 +2680,14 @@ function ParticipantList({
   return (
     <div
       className={`grid ${gridClass} items-center justify-center content-center w-full p-4`}
+      style={{ overflow: "visible" }} // Glow efektlerinin kesilmemesi için
     >
       {participants.map((p) => (
-        <div key={p.sid} className="w-full h-full aspect-[16/9] min-h-[180px]">
+        <div
+          key={p.sid}
+          className="w-full h-full aspect-[16/9] min-h-[180px]"
+          style={{ overflow: "visible", padding: "4px" }}
+        >
           <UserCard
             participant={p}
             totalCount={count}
@@ -2426,7 +2780,7 @@ function ScreenSharePreviewComponent({ trackRef }) {
   }, [currentTrackSid, trackPublicationSid]);
 
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl">
+    <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl pointer-events-none">
       {!hasCapturedRef.current && (
         <>
           <video
@@ -2575,65 +2929,223 @@ function UserCard({
   return (
     <div
       onContextMenu={onContextMenu}
-      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-300 overflow-hidden group cursor-context-menu hover-lift ${
+      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-500 group cursor-context-menu ${
         isSpeaking
-          ? "speaking-card border-2 shadow-glow glass-strong"
-          : "glass border-2 border-white/10 hover:border-white/20 hover:shadow-soft"
+          ? "speaking-card border-2 shadow-glow glass-strong animate-user-card-active"
+          : isMuted || isDeafened
+          ? "glass border-2 border-red-500/40 hover:border-red-500/50 hover:shadow-soft-lg hover:scale-[1.02]"
+          : "glass border-2 border-white/10 hover:border-white/30 hover:shadow-soft-lg hover:scale-[1.02]"
       }`}
       style={{
-        borderColor: isSpeaking ? getBorderColor(userColor) : undefined,
+        borderColor: isSpeaking
+          ? getBorderColor(userColor)
+          : isMuted || isDeafened
+          ? "rgba(239, 68, 68, 0.4)"
+          : undefined,
         boxShadow: isSpeaking
           ? userColor.includes("gradient")
-            ? `0 0 30px ${getBorderColor(
+            ? `0 0 40px ${getBorderColor(
                 userColor
-              )}50, 0 4px 20px rgba(0,0,0,0.3)`
-            : `0 0 30px ${userColor}50, 0 4px 20px rgba(0,0,0,0.3)`
+              )}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${getBorderColor(
+                userColor
+              )}20`
+            : `0 0 40px ${userColor}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${userColor}20`
+          : isMuted || isDeafened
+          ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
           : undefined,
+        background: isSpeaking
+          ? userColor.includes("gradient")
+            ? `linear-gradient(135deg, ${getBorderColor(
+                userColor
+              )}08 0%, transparent 50%)`
+            : `${userColor}08`
+          : undefined,
+        overflow: "visible", // Glow efektlerinin kesilmemesi için
       }}
     >
+      {/* Animated background glow for speaking - Container dışına taşmaması için */}
+      {isSpeaking && (
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse-glow-slow"
+          style={{
+            background: userColor.includes("gradient")
+              ? `radial-gradient(circle at center, ${getBorderColor(
+                  userColor
+                )}20 0%, transparent 70%)`
+              : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
+            transform: "scale(0.95)", // Container içinde kalması için
+          }}
+        />
+      )}
       <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
         {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
         {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
-        {shouldShowVideo &&
-        videoTrack &&
-        (!hasScreenShare || isCurrentlyWatching || !activeStreamId) ? (
-          <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg">
-            <VideoTrack
-              trackRef={videoTrack}
-              className="w-full h-full object-cover"
+        {/* Eğer kullanıcı kendi screen share'ini açtıysa, kendi kameranın gösterilmesi gerekiyor */}
+        {/* Screen share varsa bile kamera gösterilmeli (screen share preview arka planda) */}
+        {/* Kameraya tıklandığında yayına katıl (eğer screen share varsa ve izlenmiyorsa) */}
+        {shouldShowVideo && videoTrack ? (
+          <div
+            className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg z-20 group/camera"
+            onClick={(e) => {
+              // Eğer screen share varsa ve izlenmiyorsa, kameraya tıklandığında yayına katıl
+              if (
+                hasScreenShare &&
+                screenShareTrack &&
+                !isCurrentlyWatching &&
+                setActiveStreamId &&
+                participant.identity
+              ) {
+                e.stopPropagation();
+                setActiveStreamId(participant.identity);
+              }
+            }}
+            style={{
+              cursor:
+                hasScreenShare && screenShareTrack && !isCurrentlyWatching
+                  ? "pointer"
+                  : "default",
+            }}
+          >
+          <VideoTrack
+            trackRef={videoTrack}
+              className="w-full h-full object-cover transition-all duration-500 relative z-0"
               style={{
                 filter: isSpeaking
-                  ? "brightness(1.08) contrast(1.12) saturate(1.15)"
-                  : "brightness(1) contrast(1.05) saturate(1.05)",
-                transform: `${isSpeaking ? "scale(1.03)" : "scale(1)"} ${
+                  ? "brightness(1.1) contrast(1.15) saturate(1.2) hue-rotate(5deg)"
+                  : "brightness(1) contrast(1.08) saturate(1.1)",
+                transform: `${isSpeaking ? "scale(1.05)" : "scale(1)"} ${
                   participant.isLocal && cameraMirrorEffect ? "scaleX(-1)" : ""
                 }`,
-                transition: "all 0.3s ease",
+                transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
               }}
             />
-            {/* Speaking durumunda border glow efekti */}
+
+            {/* Speaking durumunda animasyonlu arka plan glow - Resimdeki gibi - Container içinde kalacak şekilde */}
             {isSpeaking && (
-              <div
-                className="absolute inset-0 rounded-2xl pointer-events-none"
-                style={{
-                  boxShadow: `inset 0 0 0 3px ${getBorderColor(userColor)}`,
-                  background: `linear-gradient(135deg, ${getBorderColor(
-                    userColor
-                  )}20 0%, transparent 60%)`,
-                }}
-              />
+              <>
+                {/* Ana glow layer - Radial gradient - Container içinde, padding ile */}
+                <div
+                  className="absolute rounded-2xl pointer-events-none animate-speaking-glow overflow-hidden"
+                  style={{
+                    top: "4px",
+                    left: "4px",
+                    right: "4px",
+                    bottom: "4px",
+                    background: `radial-gradient(circle at center, ${getBorderColor(
+                      userColor
+                    )}40 0%, ${getBorderColor(
+                      userColor
+                    )}20 30%, ${getBorderColor(
+                      userColor
+                    )}10 50%, transparent 80%)`,
+                    zIndex: 1,
+                  }}
+                />
+
+                {/* Pulsing ring effect - Container içinde, padding ile */}
+                <div
+                  className="absolute rounded-2xl pointer-events-none animate-speaking-pulse-ring overflow-hidden"
+                  style={{
+                    top: "6px",
+                    left: "6px",
+                    right: "6px",
+                    bottom: "6px",
+                    background: `radial-gradient(circle at center, ${getBorderColor(
+                      userColor
+                    )}30 0%, transparent 60%)`,
+                    zIndex: 2,
+                  }}
+                />
+
+                {/* Border glow - Container içinde */}
+                <div
+                  className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse-border-video overflow-hidden"
+                  style={{
+                    boxShadow: `inset 0 0 0 3px ${getBorderColor(
+                      userColor
+                    )}80, inset 0 0 20px ${getBorderColor(userColor)}30`,
+                    background: `linear-gradient(135deg, ${getBorderColor(
+                      userColor
+                    )}25 0%, transparent 60%)`,
+                    zIndex: 3,
+                  }}
+                />
+
+                {/* Corner glow accents - Container içinde, padding ile */}
+                <div
+                  className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
+                  style={{
+                    top: "4px",
+                    left: "4px",
+                    width: "40%",
+                    height: "40%",
+                    background: `radial-gradient(circle at top left, ${getBorderColor(
+                      userColor
+                    )}35 0%, transparent 60%)`,
+                    zIndex: 2,
+                  }}
+                />
+                <div
+                  className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
+                  style={{
+                    bottom: "4px",
+                    right: "4px",
+                    width: "40%",
+                    height: "40%",
+                    background: `radial-gradient(circle at bottom right, ${getBorderColor(
+                      userColor
+                    )}35 0%, transparent 60%)`,
+                    zIndex: 2,
+                    animationDelay: "0.5s",
+                  }}
+                />
+              </>
             )}
-            {/* Alt kısımda hafif gradient overlay (isim için kontrast) */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent pointer-events-none" />
+
+            {/* Enhanced gradient overlay - Speaking durumunda daha az koyu */}
+            <div
+              className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
+                isSpeaking ? "opacity-40" : "opacity-100"
+              }`}
+              style={{
+                background:
+                  "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)",
+                zIndex: 4,
+              }}
+            />
+            <div
+              className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
+                isSpeaking ? "opacity-30" : "opacity-100"
+              }`}
+              style={{
+                background:
+                  "linear-gradient(to bottom, transparent 0%, transparent 50%, rgba(0,0,0,0.4) 100%)",
+                zIndex: 4,
+              }}
+            />
+
+            {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
+            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+              <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center pointer-events-none backdrop-blur-sm">
+                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
+                    <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
+                  </div>
+                  <span className="drop-shadow-lg">Yayına Katıl</span>
+                  <Tv size={16} className="drop-shadow-lg" />
+                </div>
+              </div>
+            )}
           </div>
-        ) : !hasScreenShare || isCurrentlyWatching || !activeStreamId ? (
+        ) : (
           <div
-            className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold shadow-soft-lg z-10 relative transition-all duration-300 group-hover:scale-110 ${
+            className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold shadow-soft-lg z-10 relative transition-all duration-500 overflow-hidden group/avatar ${
               isSpeaking
-                ? "speaking-avatar ring-4 ring-offset-4 ring-offset-transparent"
+                ? "speaking-avatar ring-4 ring-offset-4 ring-offset-transparent animate-avatar-pulse"
                 : isMuted || isDeafened
                 ? "bg-gray-600/80 ring-4 ring-red-500/40 grayscale opacity-70"
-                : "hover:shadow-glow"
+                : "hover:shadow-glow hover:scale-110"
             }`}
             style={{
               background:
@@ -2647,73 +3159,94 @@ function UserCard({
                 : undefined,
               boxShadow: isSpeaking
                 ? userColor.includes("gradient")
-                  ? `0 0 30px ${getBorderColor(
+                  ? `0 0 40px ${getBorderColor(
                       userColor
-                    )}60, 0 8px 25px rgba(0,0,0,0.4)`
-                  : `0 0 30px ${userColor}60, 0 8px 25px rgba(0,0,0,0.4)`
+                    )}70, 0 12px 35px rgba(0,0,0,0.5), inset 0 0 20px ${getBorderColor(
+                      userColor
+                    )}20`
+                  : `0 0 40px ${userColor}70, 0 12px 35px rgba(0,0,0,0.5), inset 0 0 20px ${userColor}20`
                 : undefined,
             }}
           >
-            {identity?.charAt(0).toUpperCase()}
-          </div>
-        ) : null}
+            {/* Avatar gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20 pointer-events-none rounded-2xl"></div>
 
-        {/* Mikrofon durumu badge'i - Sağ alt köşede */}
-        {(isDeafened || isMuted || (isSpeaking && !shouldShowVideo)) && (
-          <div
-            className={`absolute ${
-              shouldShowVideo ? "bottom-0 right-2" : "bottom-0 right-2"
-            } z-20 ${
-              compact ? "w-5 h-5" : totalCount <= 2 ? "w-7 h-7" : "w-6 h-6"
-            }`}
-          >
-            {isDeafened ? (
-              <div className="w-full h-full glass-strong rounded-lg flex items-center justify-center border border-red-500/50 shadow-glow-red">
-                <VolumeX
-                  size={compact ? 10 : totalCount <= 2 ? 16 : 12}
-                  className="text-red-400"
+            {/* Animated shimmer effect */}
+            {!isMuted && !isDeafened && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/avatar:translate-x-full transition-transform duration-1000 pointer-events-none rounded-2xl"></div>
+            )}
+
+            {/* Letter */}
+            <span className="relative z-10 drop-shadow-lg">
+              {identity?.charAt(0).toUpperCase()}
+            </span>
+
+            {/* Speaking pulse rings */}
+            {isSpeaking && (
+              <>
+                <div
+                  className="absolute inset-0 rounded-2xl animate-ping"
+                  style={{
+                    border: `2px solid ${getBorderColor(userColor)}`,
+                    opacity: 0.3,
+                  }}
                 />
-              </div>
-            ) : isMuted ? (
-              <div className="w-full h-full glass-strong rounded-lg flex items-center justify-center border border-red-500/50 shadow-glow-red">
-                <MicOff
-                  size={compact ? 10 : totalCount <= 2 ? 16 : 12}
-                  className="text-red-400"
-                />
-              </div>
-            ) : isSpeaking && !shouldShowVideo ? (
               <div
-                className="w-full h-full glass-strong rounded-lg flex items-center justify-center border shadow-glow animate-pulse-glow"
-                style={{
-                  borderColor: getBorderColor(userColor),
-                  boxShadow: `0 0 12px ${getBorderColor(userColor)}50`,
-                }}
-              >
-                <Mic
-                  size={compact ? 10 : totalCount <= 2 ? 16 : 12}
-                  className="text-white fill-white"
-                  style={{ color: getBorderColor(userColor) }}
+                  className="absolute inset-0 rounded-2xl animate-ping"
+                  style={{
+                    border: `2px solid ${getBorderColor(userColor)}`,
+                    opacity: 0.2,
+                    animationDelay: "0.5s",
+                  }}
                 />
+              </>
+            )}
               </div>
-            ) : null}
-          </div>
         )}
 
-        {/* İsim - Alt kısımda */}
+        {/* İsim - Alt kısımda - Enhanced with status indicator */}
         <div
-          className={`absolute bottom-0 left-2 z-10 max-w-[80%] ${
+          className={`absolute z-10 max-w-[80%] transition-all duration-300 group-hover:scale-105 ${
             shouldShowVideo
-              ? "glass-light px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/10 shadow-soft"
-              : "glass-light px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/10 shadow-soft"
+              ? "-bottom-1 left-1 glass-strong px-3 py-1.5 rounded-xl backdrop-blur-xl border border-white/20 shadow-soft-lg"
+              : "bottom-2 left-3 glass-strong px-4 py-2 rounded-xl backdrop-blur-xl border border-white/20 shadow-soft-lg"
           }`}
+          style={{
+            background: shouldShowVideo
+              ? "linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 100%)"
+              : "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%)",
+          }}
         >
+          <div className="flex items-center gap-2">
+            {/* Status indicator - Minimal */}
+            {(isDeafened || isMuted) && (
+              <div className="relative shrink-0">
+                {isDeafened ? (
+                  <VolumeX size={12} className="text-red-400" />
+                ) : (
+                  <MicOff size={12} className="text-red-400" />
+                )}
+                <div className="absolute inset-0 bg-red-500/20 rounded-full blur-sm animate-pulse"></div>
+              </div>
+            )}
+            {isSpeaking && !isMuted && !isDeafened && (
+              <div className="relative shrink-0">
+                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                <div className="absolute inset-0 bg-green-500/30 rounded-full blur-sm animate-ping"></div>
+              </div>
+            )}
           <span
-            className={`font-medium text-white tracking-normal truncate block drop-shadow-lg ${
-              compact ? "text-[10px] leading-tight" : "text-sm"
+              className={`font-semibold text-white tracking-normal truncate block drop-shadow-2xl ${
+                compact ? "text-[10px] leading-tight" : "text-sm"
             }`}
+              style={{
+                textShadow:
+                  "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
+              }}
           >
             {identity}
           </span>
+        </div>
         </div>
 
         {/* Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame (sadece izlenmiyorsa) */}
@@ -2736,7 +3269,7 @@ function UserCard({
 
         {/* Üstte "yayın yapıyor" badge'i - Screen share varsa ama izlenmiyorsa */}
         {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <div className="absolute top-0.5 left-0.5 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
+          <div className="absolute top-3 left-3 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
             <span className="font-medium text-white text-xs drop-shadow-lg flex items-center gap-1.5">
               <div className="relative">
                 <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
@@ -2746,44 +3279,76 @@ function UserCard({
             </span>
           </div>
         )}
-
-        {/* Ortada "Yayına Katıl" Butonu - Screen share varsa ama izlenmiyorsa göster */}
-        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (setActiveStreamId && participant.identity) {
-                setActiveStreamId(participant.identity);
-              }
-            }}
-            className="absolute inset-0 z-20 flex items-center justify-center group/join"
-          >
-            <div className="glass-strong hover:glass border border-white/30 hover:border-white/50 bg-gradient-to-r from-indigo-500/90 to-purple-500/90 hover:from-indigo-500 hover:to-purple-500 px-2 py-1 rounded-lg backdrop-blur-md transition-all duration-200 hover:scale-105 hover:shadow-glow flex items-center gap-2 font-semibold text-white text-xs shadow-soft">
-              <div className="relative">
-                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
-                <div className="relative w-2 h-2 bg-red-500 rounded-full"></div>
-              </div>
-              <span className="drop-shadow-lg">Yayına Katıl</span>
-              <Tv
-                size={14}
-                className="group-hover/join:scale-110 transition-transform"
-              />
-            </div>
-          </button>
-        )}
       </div>
       {!shouldShowVideo && isSpeaking && (
+        <>
+          {/* Ana glow layer - Container içinde, padding ile */}
         <div
-          className="absolute inset-0 pointer-events-none rounded-2xl animate-pulse-glow"
-          style={{
-            background: userColor.includes("gradient")
-              ? `linear-gradient(135deg, ${getBorderColor(
-                  userColor
-                )}15 0%, transparent 70%)`
-              : userColor,
-            opacity: 0.12,
-          }}
-        ></div>
+            className="absolute pointer-events-none rounded-2xl animate-speaking-glow overflow-hidden"
+            style={{
+              top: "4px",
+              left: "4px",
+              right: "4px",
+              bottom: "4px",
+              background: userColor.includes("gradient")
+                ? `radial-gradient(circle at center, ${getBorderColor(
+                    userColor
+                  )}40 0%, ${getBorderColor(userColor)}25 30%, ${getBorderColor(
+                    userColor
+                  )}15 50%, transparent 80%)`
+                : `radial-gradient(circle at center, ${userColor}40 0%, ${userColor}25 30%, ${userColor}15 50%, transparent 80%)`,
+              zIndex: 0,
+            }}
+          />
+          {/* Pulsing ring effect - Container içinde, padding ile */}
+          <div
+            className="absolute pointer-events-none rounded-2xl animate-speaking-pulse-ring overflow-hidden"
+            style={{
+              top: "6px",
+              left: "6px",
+              right: "6px",
+              bottom: "6px",
+              background: userColor.includes("gradient")
+                ? `radial-gradient(circle at center, ${getBorderColor(
+                    userColor
+                  )}30 0%, transparent 60%)`
+                : `radial-gradient(circle at center, ${userColor}30 0%, transparent 60%)`,
+              zIndex: 0,
+            }}
+          />
+          {/* Corner accents - Container içinde, padding ile */}
+          <div
+            className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
+            style={{
+              top: "4px",
+              left: "4px",
+              width: "40%",
+              height: "40%",
+              background: userColor.includes("gradient")
+                ? `radial-gradient(circle at top left, ${getBorderColor(
+                    userColor
+                  )}35 0%, transparent 60%)`
+                : `radial-gradient(circle at top left, ${userColor}35 0%, transparent 60%)`,
+              zIndex: 0,
+            }}
+          />
+          <div
+            className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
+            style={{
+              bottom: "4px",
+              right: "4px",
+              width: "40%",
+              height: "40%",
+              background: userColor.includes("gradient")
+                ? `radial-gradient(circle at bottom right, ${getBorderColor(
+                    userColor
+                  )}35 0%, transparent 60%)`
+                : `radial-gradient(circle at bottom right, ${userColor}35 0%, transparent 60%)`,
+              zIndex: 0,
+              animationDelay: "0.5s",
+            }}
+          />
+        </>
       )}
     </div>
   );
@@ -2807,6 +3372,9 @@ function BottomControls({
   const [isMuted, setMuted] = useState(false);
   const { profileColor, enableCamera, videoId } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
+  const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
+  const screenShareMenuRef = useRef(null);
+  const screenShareButtonRef = useRef(null);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const stateRef = useRef({
     isMuted,
@@ -2852,12 +3420,12 @@ function BottomControls({
       return;
     }
 
-    const newMetadata = JSON.stringify({
-      isDeafened,
-      isMuted,
-      profileColor,
+        const newMetadata = JSON.stringify({
+          isDeafened,
+          isMuted,
+          profileColor,
       isCameraOn,
-    });
+        });
 
     // Aynı metadata ise güncelleme yapma
     if (lastMetadataRef.current === newMetadata) {
@@ -3046,14 +3614,14 @@ function BottomControls({
     setIsCameraOn(newState);
 
     try {
-      if (newState) {
+    if (newState) {
         // ÜCRETSİZ PLAN İÇİN DENGELİ (KALİTE + TASARRUF) AYARLAR
         const videoConstraints = {
           resolution: { width: 480, height: 360 }, // Dengeli çözünürlük (küçük UI'da yeterli netlik)
           frameRate: 18, // Biraz daha akıcı görünüm (15fps'den iyi)
           maxBitrate: 120000, // 120kbps (tasarruf + okunabilirlik dengesi)
           simulcast: false, // Simulcast bandwidth artırır, kapalı
-          deviceId: videoId !== "default" ? videoId : undefined,
+        deviceId: videoId !== "default" ? videoId : undefined,
         };
 
         // Önce eski video track'i kaldır (eğer varsa)
@@ -3219,7 +3787,7 @@ function BottomControls({
                 }
                 publication = retryPublication;
                 retryStream.getAudioTracks().forEach((track) => track.stop());
-              } else {
+    } else {
                 throw new Error("Retry başarısız");
               }
             }
@@ -3391,6 +3959,38 @@ function BottomControls({
     audioMode,
   }) => {
     try {
+      // Eğer zaten bir ekran paylaşımı varsa, önce onu durdur
+      if (localParticipant?.isScreenShareEnabled) {
+        const tracks = localParticipant.getTrackPublications();
+        const existingScreenShareTracks = tracks.filter(
+          (trackPub) =>
+            trackPub.source === Track.Source.ScreenShare ||
+            trackPub.source === Track.Source.ScreenShareAudio
+        );
+
+        if (existingScreenShareTracks.length > 0) {
+          // Mevcut ekran paylaşımını durdur
+          for (const trackPub of existingScreenShareTracks) {
+            try {
+              const track = trackPub.track;
+              if (track) {
+                if (track.mediaStreamTrack) {
+                  track.mediaStreamTrack.stop();
+                }
+                track.stop();
+                await localParticipant.unpublishTrack(track).catch(() => {});
+              } else {
+                await localParticipant.unpublishTrack(trackPub).catch(() => {});
+              }
+            } catch (error) {
+              console.warn("Mevcut ekran paylaşımı durdurulurken hata:", error);
+            }
+          }
+          // Kısa bir bekleme (track'lerin tamamen temizlenmesi için)
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
       const { width, height } =
         resolution === 1080
           ? { width: 1920, height: 1080 }
@@ -3427,15 +4027,15 @@ function BottomControls({
       if (window.netrex && sourceId) {
         // Electron: getUserMedia ile chromeMediaSource kullan
         // Sadece mandatory kullan, diğer constraint'leri sonra applyConstraints ile uygula
-        const constraints = {
+      const constraints = {
           audio: audioConstraints || false,
-          video: {
-            mandatory: {
-              chromeMediaSource: "desktop",
-              chromeMediaSourceId: sourceId,
-            },
+        video: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: sourceId,
           },
-        };
+        },
+      };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         // Track'i aldıktan sonra resolution ve frame rate ayarlarını uygula
@@ -3529,6 +4129,23 @@ function BottomControls({
     };
   }, [toggleMute, toggleDeaf, toggleCamera]);
 
+  // Ekran paylaşımı menüsü için dışarı tıklama kontrolü
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        showScreenShareMenu &&
+        screenShareMenuRef.current &&
+        screenShareButtonRef.current &&
+        !screenShareMenuRef.current.contains(e.target) &&
+        !screenShareButtonRef.current.contains(e.target)
+      ) {
+        setShowScreenShareMenu(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [showScreenShareMenu]);
+
   return (
     <>
       <ScreenShareModal
@@ -3536,13 +4153,9 @@ function BottomControls({
         onClose={() => setShowScreenShareModal(false)}
         onStart={startScreenShare}
       />
-      <div className="h-[90px] bg-gradient-to-t from-[#0a0a0c] via-[#151518] to-[#1a1b1e] flex items-center justify-center shrink-0 select-none border-t border-white/5 shadow-soft-lg backdrop-blur-xl relative overflow-hidden">
-        {/* Arka plan dekoratif efektler */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent"></div>
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
+      <div className="h-[80px] bg-[#1a1b1e] flex items-center justify-center shrink-0 select-none border-t border-white/10 relative overflow-visible">
         {/* Orta: Tüm Kontrol Butonları */}
-        <div className="flex items-center gap-4 px-8 relative z-10">
+        <div className="flex items-center gap-3 px-6 relative z-10">
           <ControlButton
             isActive={!isMuted}
             activeIcon={<Mic size={20} />}
@@ -3563,12 +4176,12 @@ function BottomControls({
           <button
             onClick={toggleCamera}
             disabled={!enableCamera}
-            className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+            className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
               !enableCamera
-                ? "opacity-50 cursor-not-allowed glass-strong border border-red-500/20 text-red-400"
+                ? "opacity-50 cursor-not-allowed bg-[#2b2d31] border border-red-500/30 text-red-400"
                 : isCameraOn
-                ? "bg-gradient-to-br from-white via-gray-50 to-gray-100 text-gray-900 hover:from-white hover:via-white hover:to-gray-50 shadow-lg hover:shadow-xl scale-105 border border-white/20"
-                : "glass-strong border border-white/10 text-[#b5bac1] hover:border-white/20 hover:bg-white/5 hover:text-white hover:scale-105 hover:shadow-soft"
+                ? "bg-white text-gray-900 hover:bg-gray-50 active:scale-95"
+                : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
             }`}
             title={
               !enableCamera
@@ -3578,47 +4191,100 @@ function BottomControls({
                 : "Kamerayı Aç"
             }
           >
-            <div className="relative z-10 transition-transform duration-200 group-hover:scale-110">
-              {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+            <div className="relative z-10">
+            {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
             </div>
-            {isCameraOn && (
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/40 via-transparent to-transparent pointer-events-none"></div>
-            )}
           </button>
+          <div className="relative" ref={screenShareButtonRef}>
           <button
-            onClick={
-              isScreenSharing
-                ? stopScreenShare
-                : () => setShowScreenShareModal(true)
+              onClick={() => {
+                if (isScreenSharing) {
+                  setShowScreenShareMenu(!showScreenShareMenu);
+                } else {
+                  setShowScreenShareModal(true);
             }
-            className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+              }}
+              className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
               isScreenSharing
-                ? "gradient-success text-white hover:shadow-glow-green shadow-lg scale-105 border border-green-500/30"
-                : "glass-strong border border-white/10 text-[#b5bac1] hover:border-white/20 hover:bg-white/5 hover:text-white hover:scale-105 hover:shadow-soft"
+                  ? "bg-green-500 text-white hover:bg-green-600 active:scale-95"
+                  : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
             }`}
-            title={isScreenSharing ? "Paylaşımı Durdur" : "Ekran Paylaş"}
+              title={
+                isScreenSharing ? "Ekran Paylaşımı Seçenekleri" : "Ekran Paylaş"
+              }
           >
-            <div className="relative z-10 transition-transform duration-200 group-hover:scale-110">
-              {isScreenSharing ? (
-                <MonitorOff size={20} />
-              ) : (
-                <Monitor size={20} />
-              )}
-            </div>
-            {isScreenSharing && (
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/25 via-transparent to-transparent pointer-events-none"></div>
-            )}
+              <div className="relative z-10">
+                {isScreenSharing ? (
+                  <MonitorOff size={20} />
+                ) : (
+                  <Monitor size={20} />
+                )}
+              </div>
           </button>
-          <div className="w-px h-12 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1"></div>
+
+            {/* Ekran Paylaşımı Menüsü */}
+            {showScreenShareMenu && isScreenSharing && (
+              <div
+                ref={screenShareMenuRef}
+                className="absolute bottom-full left-0 mb-2 glass-strong border border-white/20 rounded-xl shadow-2xl z-[99999] w-56 animate-scaleIn origin-bottom-left backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/95 to-[#1e1f22]/95 overflow-hidden"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                {/* Top glow */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+
+                <div className="p-2">
+                  <button
+                    onClick={() => {
+                      setShowScreenShareMenu(false);
+                      setShowScreenShareModal(true);
+                    }}
+                    className="w-full px-4 py-3 rounded-lg text-left text-sm font-medium text-white hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/20 transition-all duration-300 flex items-center gap-3 group/item relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300"></div>
+                    <Monitor
+                      size={18}
+                      className="text-indigo-400 relative z-10 group-hover/item:scale-110 transition-transform duration-300"
+                    />
+                    <span className="relative z-10">Ekranı Değiştir</span>
+                    <ChevronRight
+                      size={16}
+                      className="ml-auto text-[#949ba4] group-hover/item:text-white group-hover/item:translate-x-1 transition-all duration-300 relative z-10"
+                    />
+                  </button>
+
+                  <div className="h-px bg-white/10 my-1"></div>
+
+                  <button
+                    onClick={() => {
+                      setShowScreenShareMenu(false);
+                      stopScreenShare();
+                    }}
+                    className="w-full px-4 py-3 rounded-lg text-left text-sm font-medium text-red-300 hover:bg-gradient-to-r hover:from-red-500/20 hover:to-red-600/20 transition-all duration-300 flex items-center gap-3 group/item relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300"></div>
+                    <MonitorOff
+                      size={18}
+                      className="text-red-400 relative z-10 group-hover/item:scale-110 transition-transform duration-300"
+                    />
+                    <span className="relative z-10">Paylaşımı Durdur</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="w-px h-10 bg-white/10 mx-2"></div>
           <button
             onClick={onLeave}
-            className="w-12 h-12 flex items-center justify-center rounded-xl glass-strong border border-red-500/20 text-red-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-all duration-300 hover:scale-105 hover:shadow-glow-red group"
+            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#390101] border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/40 transition-all duration-200 active:scale-95"
             title="Bağlantıyı Kes"
           >
-            <PhoneOff
-              size={20}
-              className="transition-transform duration-200 group-hover:scale-110"
-            />
+            <PhoneOff size={20} />
           </button>
         </div>
       </div>
@@ -3635,31 +4301,36 @@ function ControlButton({
   danger,
   disabled,
 }) {
+  const handleClick = (e) => {
+    if (disabled) return;
+    onClick();
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       title={tooltip}
       disabled={disabled}
-      className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
         disabled
-          ? "opacity-50 cursor-not-allowed text-red-400 glass-strong border border-red-500/20"
+          ? "opacity-50 cursor-not-allowed bg-[#2b2d31] border border-red-500/30 text-red-400"
           : danger
-          ? "glass-strong border border-red-500/20 text-red-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 hover:scale-105 hover:shadow-glow-red"
+          ? "bg-[#2b2d31] border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40 active:scale-95"
           : isActive
-          ? "glass-strong border border-white/10 text-white hover:border-white/20 hover:bg-white/5 hover:scale-105 hover:shadow-soft"
-          : "glass-strong border border-white/10 text-[#b5bac1] hover:border-white/20 hover:bg-white/5 hover:text-white hover:scale-105 hover:shadow-soft"
+          ? "bg-[#2b2d31] border border-white/10 text-white hover:bg-[#36373a] hover:border-white/20 active:scale-95"
+          : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
       }`}
     >
-      <div className="relative z-10 transition-transform duration-200 group-hover:scale-110">
-        {isActive ? activeIcon : inactiveIcon}
+      {/* Icon Container */}
+      <div className="relative z-10">
+      {isActive ? activeIcon : inactiveIcon}
       </div>
+
+      {/* Disabled Overlay */}
       {disabled && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-full h-[2px] bg-red-400 rotate-45 rounded-full opacity-60"></div>
         </div>
-      )}
-      {danger && !disabled && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-500/20 via-transparen7t to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
       )}
     </button>
   );

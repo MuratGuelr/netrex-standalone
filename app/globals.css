@@ -189,6 +189,26 @@ html {
   }
 }
 
+@keyframes pulse-border {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out;
 }
@@ -199,6 +219,14 @@ html {
 
 .animate-scaleIn {
   animation: scaleIn 0.2s ease-out;
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
 }
 
 /* Hover lift effect */
@@ -236,10 +264,62 @@ html {
   height: 300px;
 }
 
-/* Toast bildirimleri için genişlik sınırı */
+/* Toast bildirimleri için stiller */
 [data-sonner-toast] {
-  max-width: 400px !important;
-  width: auto !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+[data-sonner-toast][data-styled="true"] {
+  --normal-bg: #1e1f22 !important;
+  --normal-border: #2b2d31 !important;
+  --normal-text: #dbdee1 !important;
+  background: linear-gradient(135deg, #1e1f22 0%, #25272a 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #949ba4 !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #dbdee1 !important;
+}
+
+/* Toast success */
+[data-sonner-toast][data-type="success"] {
+  border-left: 3px solid #23a559 !important;
+}
+
+/* Toast error */
+[data-sonner-toast][data-type="error"] {
+  border-left: 3px solid #ef4444 !important;
+}
+
+/* Toast info */
+[data-sonner-toast][data-type="info"] {
+  border-left: 3px solid #6366f1 !important;
+}
+
+/* Toast warning */
+[data-sonner-toast][data-type="warning"] {
+  border-left: 3px solid #f59e0b !important;
+}
+
+/* Custom toast (chat mesajları için) */
+[data-sonner-toast][data-type="custom"] {
+  padding: 0 !important;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

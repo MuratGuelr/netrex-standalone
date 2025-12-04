@@ -95,7 +95,7 @@ export default function ChatView({ channelId, username, userId }) {
         ? incomingMessage.text.slice(0, 120)
         : "Yeni mesaj";
       try {
-        new Notification(
+        const notification = new Notification(
           `${incomingMessage.username || "Bir kullanıcı"} - #${channelName}`,
           {
             body: body,
@@ -105,6 +105,16 @@ export default function ChatView({ channelId, username, userId }) {
             silent: true,
           }
         );
+        
+        // Bildirime tıklanınca pencereyi focus et
+        notification.onclick = () => {
+          if (window.netrex?.focusWindow) {
+            window.netrex.focusWindow();
+          } else {
+            window.focus();
+          }
+          notification.close();
+        };
       } catch (error) {
         console.error("Notification error:", error);
       }
@@ -131,17 +141,7 @@ export default function ChatView({ channelId, username, userId }) {
             const message = data.message;
             addIncomingMessage(message);
             
-            // Toast bildirim göster (uygulama içindeyse)
-            if (typeof document !== "undefined" && !document.hidden && document.hasFocus()) {
-              const messageText = message.text 
-                ? (message.text.length > 50 ? message.text.slice(0, 50) + "..." : message.text)
-                : "Yeni mesaj";
-              toast.info(
-                `${message.username || "Bir kullanıcı"}: ${messageText}`,
-                { description: `#${currentChannelName}` }
-              );
-            }
-            
+            // Toast bildirimi GlobalChatListener tarafından gösteriliyor
             // Masaüstü bildirim göster (ayarlardan açtıysa ve pencere aktif değilse)
             showDesktopNotification(message);
           }
@@ -152,7 +152,7 @@ export default function ChatView({ channelId, username, userId }) {
         }
       }
     },
-    [channelId, userId, addIncomingMessage, showDesktopNotification, currentChannelName]
+    [channelId, userId, addIncomingMessage, showDesktopNotification]
   );
 
   useEffect(() => {
@@ -731,47 +731,60 @@ export default function ChatView({ channelId, username, userId }) {
 
       {/* LINK GÜVENLİK MODALI */}
       {linkModal.isOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="glass-strong w-full max-w-md rounded-2xl shadow-soft-lg border border-white/10 overflow-hidden animate-scaleIn">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                <div className="p-2 bg-yellow-500/10 rounded-full">
-                  <AlertTriangle className="text-yellow-500" size={24} />
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          {/* Animated background gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-transparent pointer-events-none"></div>
+          
+          <div className="glass-strong w-full max-w-md rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95 relative">
+            {/* Top glow effect */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent z-10"></div>
+            
+            <div className="p-8 relative z-10">
+              <div className="flex items-center gap-4 mb-5">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center border border-amber-500/30 shadow-soft">
+                  <AlertTriangle className="text-amber-300" size={24} />
                 </div>
-                Dikkat et!
-              </h3>
-              <p className="text-[#b5bac1] text-sm mb-4 leading-relaxed">
+                <h3 className="text-2xl font-bold text-white tracking-tight">
+                  Dikkat et!
+                </h3>
+              </div>
+              <p className="text-[#b5bac1] text-sm mb-5 leading-relaxed">
                 Netrex'ten ayrılıyorsun. Lütfen tıkladığın bağlantının güvenli
                 olduğundan emin ol.
               </p>
               <div className="mb-2 text-xs font-bold text-[#949ba4] uppercase tracking-wide">
                 Gidilen Bağlantı
               </div>
-              <div className="bg-[#1e1f22] p-3 rounded border border-[#2b2d31] mb-6 shadow-inner">
+              <div className="bg-[#1e1f22] p-4 rounded-xl border border-white/10 mb-2 shadow-soft">
                 <a
                   href={linkModal.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[#00a8fc] hover:underline text-sm break-all font-mono"
+                  className="text-blue-400 hover:underline text-sm break-all font-mono"
                   onClick={(e) => e.preventDefault()}
                 >
                   {linkModal.url}
                 </a>
               </div>
-              <div className="flex justify-end gap-3 bg-[#2b2d31] -m-6 p-4 mt-2">
-                <button
-                  onClick={() => setLinkModal({ isOpen: false, url: "" })}
-                  className="px-5 py-2.5 rounded text-sm font-medium text-white hover:underline transition-all"
-                >
-                  Vazgeç
-                </button>
-            <button
-                onClick={confirmOpenLink}
-                className="px-6 py-2.5 rounded-xl gradient-primary hover:shadow-glow text-white text-sm font-medium transition-all duration-200 hover-lift btn-modern"
+            </div>
+            
+            <div className="flex justify-end gap-3 bg-gradient-to-t from-[#1e1f22] via-[#25272a] to-transparent p-6 border-t border-white/10 rounded-b-3xl backdrop-blur-xl relative">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+              <button
+                onClick={() => setLinkModal({ isOpen: false, url: "" })}
+                onMouseDown={(e) => e.preventDefault()}
+                className="px-6 py-3 text-sm font-semibold text-[#b5bac1] hover:text-white transition-all duration-300 rounded-xl hover:bg-white/5 focus:outline-none"
               >
-                Siteye Git
+                Vazgeç
               </button>
-              </div>
+              <button
+                onClick={confirmOpenLink}
+                onMouseDown={(e) => e.preventDefault()}
+                className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 relative overflow-hidden group/save focus:outline-none"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
+                <span className="relative z-10">Siteye Git</span>
+              </button>
             </div>
           </div>
         </div>

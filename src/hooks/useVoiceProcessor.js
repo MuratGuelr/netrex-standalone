@@ -652,7 +652,7 @@ export function useVoiceProcessor() {
   useEffect(() => {
     // Room bağlantısı tamamlanmadan önce başlatma
     if (!localParticipant || !room) return;
-    
+
     isCleaningUpRef.current = false;
     let originalStreamTrack = null;
     let trackPublishedHandler = null;

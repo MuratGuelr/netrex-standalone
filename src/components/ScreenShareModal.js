@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Monitor,
   X,
@@ -18,6 +18,10 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
   const [activeTab, setActiveTab] = useState("apps"); // 'apps' | 'screens'
   const [sources, setSources] = useState([]);
   const [selectedSourceId, setSelectedSourceId] = useState(null);
+  const appsTabRef = useRef(null);
+  const screensTabRef = useRef(null);
+  const [tabWidths, setTabWidths] = useState({ apps: 0, screens: 0 });
+  const [tabPositions, setTabPositions] = useState({ apps: 0, screens: 0 });
 
   // Varsayılan Ayarlar (Optimize edilmiş - daha düşük kaynak kullanımı)
   const [resolution, setResolution] = useState(720); // 720p varsayılan (480p'ye düşürülebilir)
@@ -33,8 +37,8 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       setStep(1);
       setSources([]);
       setSelectedSourceId(null);
-      // Varsayılan olarak ses açık başlasın
-      setWithAudio(true);
+      // Varsayılan olarak ses kapalı başlasın (otomatik açılmasın)
+      setWithAudio(false);
       setAudioMode("system");
 
       window.netrex.getDesktopSources().then((srcs) => {
@@ -44,6 +48,41 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       });
     }
   }, [isOpen]);
+
+  // Tab genişliklerini ve pozisyonlarını ölç
+  useEffect(() => {
+    const measureTabs = () => {
+      if (appsTabRef.current && screensTabRef.current) {
+        const appsRect = appsTabRef.current.getBoundingClientRect();
+        const screensRect = screensTabRef.current.getBoundingClientRect();
+        const containerRect =
+          appsTabRef.current.parentElement?.getBoundingClientRect();
+
+        if (containerRect) {
+          setTabWidths({
+            apps: appsRect.width,
+            screens: screensRect.width,
+          });
+          setTabPositions({
+            apps: appsRect.left - containerRect.left,
+            screens: screensRect.left - containerRect.left,
+          });
+        }
+      }
+    };
+
+    // İlk ölçüm
+    measureTabs();
+
+    // Window resize ve tab değişikliklerinde yeniden ölç
+    window.addEventListener("resize", measureTabs);
+    const timeoutId = setTimeout(measureTabs, 100); // DOM güncellemeleri için kısa bir gecikme
+
+    return () => {
+      window.removeEventListener("resize", measureTabs);
+      clearTimeout(timeoutId);
+    };
+  }, [activeTab, sources, step]);
 
   const categorizedSources = useMemo(() => {
     return {
@@ -86,15 +125,24 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       : categorizedSources.apps;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
-      <div className="glass-strong w-full max-w-4xl h-[600px] rounded-2xl shadow-soft-lg border border-white/10 overflow-hidden flex flex-col relative animate-scaleIn">
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
+      {/* Animated background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+
+      <div className="glass-strong w-full max-w-4xl h-[650px] rounded-3xl shadow-2xl border border-white/20 overflow-hidden flex flex-col relative animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95">
+        {/* Top glow effect */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+
         {/* --- HEADER --- */}
-        <div className="p-6 pb-3 shrink-0 flex justify-between items-start border-b border-white/5">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-1.5 tracking-tight">
-              {step === 1 ? "Ekran Paylaşımı" : "Yayın Kalitesi"}
+        <div className="p-6 pb-4 shrink-0 flex justify-between items-start border-b border-white/10 relative bg-gradient-to-r from-[#25272a]/50 to-transparent">
+          <div className="relative z-10">
+            <h2 className="text-2xl font-bold text-white mb-1.5 tracking-tight relative">
+              <span className="relative z-10">
+                {step === 1 ? "Ekran Paylaşımı" : "Yayın Kalitesi"}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
             </h2>
-            <p className="text-[#b5bac1] text-sm">
+            <p className="text-[#b5bac1] text-sm group-hover:text-[#dbdee1] transition-colors">
               {step === 1
                 ? "Arkadaşlarına ne göstermek istersin?"
                 : "Yayının ne kadar net ve akıcı olacağını seç."}
@@ -102,9 +150,13 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           </div>
           <button
             onClick={onClose}
-            className="text-[#b5bac1] hover:text-red-400 glass border border-white/10 p-2.5 rounded-xl hover:bg-red-500/20 hover:border-red-500/30 transition-all duration-200 hover:scale-110"
+            className="text-[#b5bac1] hover:text-red-400 glass-strong border border-white/10 p-2.5 rounded-xl hover:bg-gradient-to-br hover:from-red-500/20 hover:to-red-600/20 hover:border-red-500/30 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative z-10 group/close"
           >
-            <X size={20} />
+            <X
+              size={20}
+              className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300"></div>
           </button>
         </div>
 
@@ -113,91 +165,187 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           {/* STEP 1: KAYNAK SEÇİMİ */}
           {step === 1 && (
             <>
-              <div className="px-6 border-b border-white/5 flex gap-8 mt-3">
+              <div className="px-6 border-b border-white/10 flex gap-8 mt-4 relative">
+                {/* Animated background for active tab - Dynamic width */}
+                <div
+                  className="absolute bottom-0 h-[3px] bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full shadow-[0_0_15px_rgba(99,102,241,0.5)] transition-all duration-300"
+                  style={{
+                    left:
+                      activeTab === "apps"
+                        ? `${tabPositions.apps}px`
+                        : `${tabPositions.screens}px`,
+                    width:
+                      activeTab === "apps"
+                        ? `${tabWidths.apps}px`
+                        : `${tabWidths.screens}px`,
+                  }}
+                />
+
                 <button
+                  ref={appsTabRef}
                   onClick={() => setActiveTab("apps")}
-                  className={`pb-3 text-sm font-bold transition-all duration-200 relative flex items-center gap-2 ${
+                  className={`pb-3 text-sm font-bold transition-all duration-300 relative flex items-center gap-2 group/tab ${
                     activeTab === "apps"
                       ? "text-white"
-                      : "text-[#949ba4] hover:text-[#dbdee1]"
+                      : "text-[#949ba4] hover:text-white"
                   }`}
                 >
-                  <AppWindow size={18} /> Uygulamalar
-                  <span className="glass-light text-[10px] px-2 py-0.5 rounded-full text-[#b5bac1]">
+                  <AppWindow
+                    size={18}
+                    className={`transition-all duration-300 ${
+                      activeTab === "apps"
+                        ? "text-indigo-400 scale-110"
+                        : "group-hover/tab:scale-110"
+                    }`}
+                  />
+                  <span>Uygulamalar</span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full transition-all duration-300 ${
+                      activeTab === "apps"
+                        ? "glass-strong border border-indigo-500/30 text-indigo-300 bg-indigo-500/10"
+                        : "glass-light text-[#b5bac1]"
+                    }`}
+                  >
                     {categorizedSources.apps.length}
                   </span>
-                  {activeTab === "apps" && (
-                    <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-full shadow-glow"></div>
-                  )}
                 </button>
                 <button
+                  ref={screensTabRef}
                   onClick={() => setActiveTab("screens")}
-                  className={`pb-3 text-sm font-bold transition-all duration-200 relative flex items-center gap-2 ${
+                  className={`pb-3 text-sm font-bold transition-all duration-300 relative flex items-center gap-2 group/tab ${
                     activeTab === "screens"
                       ? "text-white"
-                      : "text-[#949ba4] hover:text-[#dbdee1]"
+                      : "text-[#949ba4] hover:text-white"
                   }`}
                 >
-                  <Monitor size={18} /> Ekranlar
-                  <span className="glass-light text-[10px] px-2 py-0.5 rounded-full text-[#b5bac1]">
+                  <Monitor
+                    size={18}
+                    className={`transition-all duration-300 ${
+                      activeTab === "screens"
+                        ? "text-indigo-400 scale-110"
+                        : "group-hover/tab:scale-110"
+                    }`}
+                  />
+                  <span>Ekranlar</span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full transition-all duration-300 ${
+                      activeTab === "screens"
+                        ? "glass-strong border border-indigo-500/30 text-indigo-300 bg-indigo-500/10"
+                        : "glass-light text-[#b5bac1]"
+                    }`}
+                  >
                     {categorizedSources.screens.length}
                   </span>
-                  {activeTab === "screens" && (
-                    <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-full shadow-glow"></div>
-                  )}
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gradient-to-b from-[#25272a] to-[#2b2d31]">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gradient-to-b from-[#25272a] to-[#2b2d31] relative">
+                {/* Animated background particles */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
+                  <div
+                    className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl animate-pulse-slow"
+                    style={{ animationDelay: "1s" }}
+                  ></div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
                   {currentList.map((source) => (
                     <div
                       key={source.id}
                       onClick={() => setSelectedSourceId(source.id)}
                       className={`
-                        group relative cursor-pointer rounded-2xl overflow-hidden border-2 transition-all duration-300 flex flex-col glass hover-lift
+                        group relative cursor-pointer rounded-2xl overflow-hidden border-2 transition-all duration-500 flex flex-col glass-strong hover:scale-[1.03] relative
                         ${
                           selectedSourceId === source.id
-                            ? "border-indigo-500/50 ring-2 ring-indigo-500/30 shadow-glow scale-105"
-                            : "border-white/10 hover:border-white/20 hover:shadow-soft"
+                            ? "border-indigo-500/60 ring-4 ring-indigo-500/20 shadow-[0_0_30px_rgba(99,102,241,0.4)] scale-105 bg-gradient-to-br from-indigo-500/10 to-purple-500/10"
+                            : "border-white/10 hover:border-indigo-500/30 hover:shadow-soft-lg hover:bg-white/5"
                         }
                       `}
                     >
-                      <div className="w-full aspect-video bg-[#111214] flex items-center justify-center p-2 relative overflow-hidden rounded-t-2xl">
+                      {/* Hover glow effect */}
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl ${
+                          selectedSourceId === source.id ? "opacity-100" : ""
+                        }`}
+                      ></div>
+
+                      <div className="w-full aspect-video bg-[#0a0a0c] flex items-center justify-center p-2 relative overflow-hidden rounded-t-2xl border-b border-white/5">
                         <img
                           src={source.thumbnail}
                           alt={source.name}
-                          className="w-full h-full object-contain shadow-sm group-hover:scale-105 transition-transform duration-300"
+                          className={`w-full h-full object-contain shadow-lg transition-all duration-500 ${
+                            selectedSourceId === source.id
+                              ? "scale-110 brightness-110"
+                              : "group-hover:scale-105"
+                          }`}
                         />
                         {selectedSourceId === source.id && (
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-transparent flex items-center justify-center backdrop-blur-[2px]">
-                            <div className="w-12 h-12 gradient-primary rounded-full flex items-center justify-center shadow-glow animate-scaleIn">
-                              <Check
-                                size={24}
-                                className="text-white"
-                                strokeWidth={3}
-                              />
+                          <>
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/30 via-purple-500/20 to-transparent flex items-center justify-center backdrop-blur-sm">
+                              <div className="w-14 h-14 gradient-primary rounded-full flex items-center justify-center shadow-[0_0_25px_rgba(99,102,241,0.6)] animate-scaleIn relative">
+                                <Check
+                                  size={28}
+                                  className="text-white relative z-10"
+                                  strokeWidth={3}
+                                />
+                                <div className="absolute inset-0 bg-white/20 rounded-full animate-ping"></div>
+                              </div>
                             </div>
-                          </div>
+                            {/* Pulse ring */}
+                            <div className="absolute inset-0 border-2 border-indigo-500/40 rounded-t-2xl animate-pulse-border"></div>
+                          </>
                         )}
                       </div>
-                      <div className="p-3 border-t border-white/5 flex items-center gap-3 glass-light group-hover:bg-white/5 transition-all duration-200">
+                      <div
+                        className={`p-3 border-t border-white/5 flex items-center gap-3 transition-all duration-300 relative z-10 ${
+                          selectedSourceId === source.id
+                            ? "bg-gradient-to-r from-indigo-500/10 to-purple-500/10"
+                            : "glass-light group-hover:bg-white/10"
+                        }`}
+                      >
                         {source.appIcon && activeTab === "apps" ? (
                           <img
                             src={source.appIcon}
-                            className="w-5 h-5 rounded"
+                            className="w-5 h-5 rounded shadow-sm"
                             alt=""
                           />
                         ) : (
-                          <div className="w-5 h-5 rounded glass-light flex items-center justify-center">
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center transition-all duration-300 ${
+                              selectedSourceId === source.id
+                                ? "glass-strong border border-indigo-500/30 bg-indigo-500/10"
+                                : "glass-light"
+                            }`}
+                          >
                             {activeTab === "screens" ? (
-                              <Layers size={12} className="text-[#dbdee1]" />
+                              <Layers
+                                size={12}
+                                className={
+                                  selectedSourceId === source.id
+                                    ? "text-indigo-300"
+                                    : "text-[#dbdee1]"
+                                }
+                              />
                             ) : (
-                              <AppWindow size={12} className="text-[#dbdee1]" />
+                              <AppWindow
+                                size={12}
+                                className={
+                                  selectedSourceId === source.id
+                                    ? "text-indigo-300"
+                                    : "text-[#dbdee1]"
+                                }
+                              />
                             )}
                           </div>
                         )}
-                        <span className="text-xs font-semibold text-[#dbdee1] truncate flex-1 leading-tight">
+                        <span
+                          className={`text-xs font-semibold truncate flex-1 leading-tight transition-colors duration-300 ${
+                            selectedSourceId === source.id
+                              ? "text-white"
+                              : "text-[#dbdee1] group-hover:text-white"
+                          }`}
+                        >
                           {source.name}
                         </span>
                       </div>
@@ -207,7 +355,10 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 {currentList.length === 0 && (
                   <div className="h-full flex flex-col items-center justify-center text-[#949ba4] opacity-50 pb-20">
                     <div className="p-6 glass-strong rounded-2xl mb-4">
-                      <Layers size={48} className="stroke-1 text-indigo-400/50" />
+                      <Layers
+                        size={48}
+                        className="stroke-1 text-indigo-400/50"
+                      />
                     </div>
                     <p className="text-lg font-medium">
                       Hiçbir kaynak bulunamadı.
@@ -221,28 +372,34 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           {/* STEP 2: KALİTE VE SES AYARLARI */}
           {step === 2 && (
             <div className="flex-1 bg-gradient-to-b from-[#25272a] to-[#2b2d31] p-8 flex flex-col gap-6 overflow-y-auto">
-              {/* Preview */}
-              <div className="glass-strong p-5 rounded-2xl border border-white/10 flex items-center gap-4 shadow-soft hover-lift">
-                <div className="h-20 aspect-video bg-black rounded-xl overflow-hidden border border-white/10 shadow-soft">
+              {/* Preview - Enhanced - Larger */}
+              <div className="glass-strong p-6 rounded-2xl border border-white/20 flex items-center gap-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.01] relative overflow-hidden group/preview">
+                {/* Hover glow */}
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent opacity-0 group-hover/preview:opacity-100 transition-opacity duration-300"></div>
+
+                <div className="h-32 w-56 bg-black rounded-xl overflow-hidden border-2 border-white/10 shadow-lg relative group/thumb shrink-0">
                   <img
                     src={selectedSourceData?.thumbnail}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain transition-transform duration-300 group-hover/thumb:scale-110"
                     alt=""
                   />
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent opacity-0 group-hover/thumb:opacity-100 transition-opacity duration-300"></div>
                 </div>
-                <div className="flex-1">
-                  <div className="text-[10px] font-bold text-[#949ba4] uppercase mb-1 tracking-wider">
+                <div className="flex-1 relative z-10 min-w-0">
+                  <div className="text-[11px] font-bold text-[#949ba4] uppercase mb-2 tracking-wider flex items-center gap-2">
+                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
                     SEÇİLEN KAYNAK
                   </div>
-                  <div className="text-white font-bold text-base truncate w-64">
+                  <div className="text-white font-bold text-lg truncate group-hover/preview:text-indigo-200 transition-colors duration-300">
                     {selectedSourceData?.name}
                   </div>
                 </div>
                 <button
                   onClick={() => setStep(1)}
-                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 px-5 py-2.5 glass-light hover:bg-indigo-500/20 rounded-xl transition-all duration-200 hover:scale-105"
+                  className="text-sm font-medium text-indigo-400 hover:text-white px-6 py-3 glass-strong border border-indigo-500/30 hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/20 hover:border-indigo-500/50 rounded-xl transition-all duration-300 hover:scale-110 hover:shadow-soft relative group/change z-10 shrink-0"
                 >
-                  Değiştir
+                  <span className="relative z-10">Değiştir</span>
+                  <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/change:opacity-100 transition-opacity duration-300"></div>
                 </button>
               </div>
 
@@ -257,15 +414,24 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                       <button
                         key={res}
                         onClick={() => setResolution(res)}
-                        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 group hover-lift ${
+                        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 group relative overflow-hidden ${
                           resolution === res
-                            ? "gradient-primary border-indigo-400/80 shadow-glow scale-105"
-                            : "glass border-white/20 hover:border-indigo-500/40 hover:bg-indigo-500/10 hover:shadow-soft"
+                            ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
+                            : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
                         }`}
                       >
-                        <div className="flex flex-col items-start">
+                        {/* Hover glow */}
+                        <div
+                          className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
+                            resolution === res
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100"
+                          }`}
+                        ></div>
+
+                        <div className="flex flex-col items-start relative z-10">
                           <span
-                            className={`font-bold text-lg ${
+                            className={`font-bold text-lg transition-colors duration-300 ${
                               resolution === res
                                 ? "text-white"
                                 : "text-[#dbdee1] group-hover:text-white"
@@ -275,8 +441,9 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                           </span>
                         </div>
                         {resolution === res && (
-                          <div className="w-4 h-4 bg-white rounded-full shadow-glow flex items-center justify-center">
-                            <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                          <div className="w-5 h-5 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] flex items-center justify-center relative z-10 animate-scaleIn">
+                            <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <div className="absolute inset-0 bg-indigo-500/30 rounded-full animate-ping"></div>
                           </div>
                         )}
                       </button>
@@ -287,7 +454,8 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 {/* FPS */}
                 <div className="flex-1">
                   <label className="text-xs font-bold text-white uppercase mb-4 flex items-center gap-2 tracking-wider">
-                    <Zap size={16} className="text-indigo-400" /> Kare Hızı (FPS)
+                    <Zap size={16} className="text-indigo-400" /> Kare Hızı
+                    (FPS)
                   </label>
                   <div className="space-y-3">
                     {[5, 15, 30].map((f) => {
@@ -297,17 +465,28 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                           key={f}
                           onClick={() => setFps(f)}
                           disabled={isDisabled}
-                          className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 hover-lift ${
+                          className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 relative overflow-hidden ${
                             isDisabled
-                              ? "opacity-30 cursor-not-allowed glass border-white/5 grayscale"
+                              ? "opacity-30 cursor-not-allowed glass-strong border-white/5 grayscale"
                               : fps === f
-                              ? "gradient-primary border-indigo-400/80 shadow-glow scale-105"
-                              : "glass border-white/20 hover:border-indigo-500/40 hover:bg-indigo-500/10 hover:shadow-soft"
+                              ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
+                              : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
                           }`}
                         >
-                          <div className="flex flex-col items-start">
+                          {/* Hover glow */}
+                          {!isDisabled && (
+                            <div
+                              className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
+                                fps === f
+                                  ? "opacity-100"
+                                  : "opacity-0 group-hover:opacity-100"
+                              }`}
+                            ></div>
+                          )}
+
+                          <div className="flex flex-col items-start relative z-10">
                             <span
-                              className={`font-bold text-lg ${
+                              className={`font-bold text-lg transition-colors duration-300 ${
                                 fps === f && !isDisabled
                                   ? "text-white"
                                   : isDisabled
@@ -319,8 +498,9 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                             </span>
                           </div>
                           {!isDisabled && fps === f && (
-                            <div className="w-4 h-4 bg-white rounded-full shadow-glow flex items-center justify-center">
-                              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                            <div className="w-5 h-5 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] flex items-center justify-center relative z-10 animate-scaleIn">
+                              <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                              <div className="absolute inset-0 bg-indigo-500/30 rounded-full animate-ping"></div>
                             </div>
                           )}
                         </button>
@@ -330,73 +510,116 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 </div>
               </div>
 
-              {/* YENİ: SES AYARLARI */}
+              {/* YENİ: SES AYARLARI - Enhanced */}
               {selectedSourceData && (
                 <div className="space-y-3">
-                  {/* Ses Paylaşım Toggle */}
-                  <div className="glass-strong p-5 rounded-2xl border border-white/10 flex items-center justify-between shadow-soft hover-lift">
-                    <div className="flex items-center gap-4">
+                  {/* Ses Paylaşım Toggle - Premium Design */}
+                  <div className="glass-strong p-5 rounded-2xl border border-white/20 flex items-center justify-between shadow-soft-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.01] relative overflow-hidden group/audio">
+                    {/* Hover glow */}
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-r transition-opacity duration-300 ${
+                        withAudio
+                          ? "from-green-500/10 via-green-500/5 to-transparent opacity-100"
+                          : "from-red-500/10 via-red-500/5 to-transparent opacity-0 group-hover/audio:opacity-100"
+                      }`}
+                    ></div>
+
+                    <div className="flex items-center gap-4 relative z-10">
                       <div
-                        className={`p-3 rounded-xl transition-all duration-200 ${
+                        className={`p-3 rounded-xl transition-all duration-500 relative ${
                           withAudio
-                            ? "bg-green-500/20 text-green-400 shadow-glow-green"
-                            : "bg-red-500/20 text-red-400"
+                            ? "bg-gradient-to-br from-green-500/30 to-green-600/30 text-green-300 shadow-[0_0_20px_rgba(34,197,94,0.4)] border border-green-400/40"
+                            : "bg-gradient-to-br from-red-500/20 to-red-600/20 text-red-300 border border-red-400/30"
                         }`}
                       >
                         {withAudio ? (
-                          <Volume2 size={20} />
+                          <Volume2 size={20} className="relative z-10" />
                         ) : (
-                          <VolumeX size={20} />
+                          <VolumeX size={20} className="relative z-10" />
+                        )}
+                        {withAudio && (
+                          <div className="absolute inset-0 bg-green-500/20 rounded-xl animate-pulse"></div>
                         )}
                       </div>
                       <div>
-                        <div className="text-white font-bold text-sm mb-1">
+                        <div className="text-white font-bold text-sm mb-1 transition-colors duration-300 group-hover/audio:text-[#dbdee1]">
                           {selectedSourceData.id.startsWith("screen")
                             ? "Sistem Sesini Paylaş"
                             : "Uygulama Sesini Paylaş"}
                         </div>
-                        <div className="text-[#949ba4] text-xs">
+                        <div className="text-[#949ba4] text-xs group-hover/audio:text-[#b5bac1] transition-colors duration-300">
                           {selectedSourceData.id.startsWith("screen")
-                            ? "Bilgisayar sesini yayına ekle (Netrex sesleri hariç)."
-                            : "Sadece bu uygulamanın sesini yayına ekle."}
+                            ? "Tüm bilgisayar seslerini yayına ekle."
+                            : "Bilgisayar sesini yayına ekle."}
                         </div>
                       </div>
                     </div>
-                    {/* Toggle Switch */}
+                    {/* Toggle Switch - Enhanced */}
                     <button
                       onClick={() => setWithAudio(!withAudio)}
-                      className={`w-14 h-7 rounded-full relative transition-all duration-300 ease-in-out border-2 ${
-                        withAudio 
-                          ? "bg-gradient-to-r from-green-500 to-green-600 border-green-400/50 shadow-glow-green" 
-                          : "bg-[#404249] border-white/10"
+                      className={`w-14 h-8 rounded-full transition-all duration-500 ease-in-out border-2 relative z-10 ${
+                        withAudio
+                          ? "bg-gradient-to-r from-green-500 to-green-600 border-green-400/50 shadow-[0_0_20px_rgba(34,197,94,0.5)]"
+                          : "bg-[#404249] border-white/10 hover:border-red-500/30"
                       }`}
                     >
                       <div
-                        className={`absolute top-[2px] left-[2px] w-6 h-6 bg-white rounded-full shadow-lg transition-all duration-300 ease-in-out ${
+                        className={`absolute top-[2px] left-[2px] w-6 h-6 bg-white rounded-full shadow-lg transition-all duration-500 ease-in-out flex items-center justify-center ${
                           withAudio ? "translate-x-[26px]" : "translate-x-0"
                         }`}
-                      ></div>
+                      >
+                        {withAudio && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        )}
+                      </div>
+                      {/* Glow effect */}
+                      {withAudio && (
+                        <div className="absolute inset-0 bg-green-500/20 rounded-full blur-sm animate-pulse"></div>
+                      )}
                     </button>
                   </div>
 
-                  {/* Bilgi Notu */}
+                  {/* Bilgi Notu - Enhanced */}
                   {withAudio && selectedSourceData.id.startsWith("screen") && (
-                    <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded text-[11px] text-blue-200 flex items-start gap-2">
-                      <Volume2 size={14} className="shrink-0 mt-0.5" />
-                      <span>
-                        Sistem sesi paylaşılırken Netrex'ten gelen sesler
-                        (insanların konuşması) otomatik olarak filtrelenir.
+                    <div className="p-3 bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-xl text-[11px] text-amber-200 flex items-start gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent"></div>
+                      <Volume2
+                        size={14}
+                        className="shrink-0 mt-0.5 relative z-10 text-amber-300"
+                      />
+                      <span className="relative z-10">
+                        <strong>Dikkat:</strong> Sistem sesi paylaşılırken Netrex'ten gelen sesler de dahil olur. 
+                        Yankı önlemek için <strong>kulaklık kullanmanızı</strong> öneririz.
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Uygulama sesi uyarısı */}
+                  {withAudio && !selectedSourceData.id.startsWith("screen") && (
+                    <div className="p-3 bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-xl text-[11px] text-amber-200 flex items-start gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent"></div>
+                      <Volume2
+                        size={14}
+                        className="shrink-0 mt-0.5 relative z-10 text-amber-300"
+                      />
+                      <span className="relative z-10">
+                        <strong>Dikkat:</strong> Windows sınırlaması nedeniyle uygulama paylaşımında da tüm sistem sesi alınır. 
+                        Yankı önlemek için <strong>kulaklık kullanmanızı</strong> öneririz.
                       </span>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Uyarı */}
+              {/* Uyarı - Enhanced */}
               {resolution === 1080 && (
-                <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded text-[11px] text-yellow-200 flex items-center gap-2">
-                  <Zap size={14} className="shrink-0" />
-                  <span>
+                <div className="p-3 bg-gradient-to-r from-yellow-500/15 to-orange-500/15 border border-yellow-500/30 rounded-xl text-[11px] text-yellow-200 flex items-center gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent"></div>
+                  <Zap
+                    size={14}
+                    className="shrink-0 relative z-10 text-yellow-300"
+                  />
+                  <span className="relative z-10">
                     Ücretsiz plan limitleri: 1080p için FPS 5 ile sınırlıdır.
                   </span>
                 </div>
@@ -406,42 +629,60 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
         </div>
 
         {/* --- FOOTER --- */}
-        <div className="bg-gradient-to-t from-[#1e1f22] to-transparent p-6 flex justify-between items-center shrink-0 border-t border-white/5 backdrop-blur-sm">
-          <div className="flex items-center gap-2 text-xs text-[#949ba4]">
+        <div className="bg-gradient-to-t from-[#1e1f22] via-[#25272a] to-transparent p-6 flex justify-between items-center shrink-0 border-t border-white/10 backdrop-blur-xl relative">
+          {/* Top glow */}
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+
+          <div className="flex items-center gap-2 text-xs relative z-10">
             {step === 2 && withAudio ? (
-              <span className="flex items-center gap-2 text-green-400 glass-light border border-green-500/30 px-3 py-1.5 rounded-xl font-medium shadow-soft">
-                <Volume2 size={14} /> Ses Açık
+              <span className="flex items-center gap-2 text-green-300 glass-strong border border-green-500/40 px-3 py-1.5 rounded-xl font-medium shadow-[0_0_15px_rgba(34,197,94,0.3)] bg-gradient-to-r from-green-500/20 to-green-600/20 animate-fadeIn">
+                <Volume2 size={14} className="animate-pulse" /> Ses Açık
               </span>
             ) : step === 2 ? (
-              <span className="flex items-center gap-2 text-red-400 glass-light border border-red-500/30 px-3 py-1.5 rounded-xl font-medium shadow-soft">
+              <span className="flex items-center gap-2 text-red-300 glass-strong border border-red-500/40 px-3 py-1.5 rounded-xl font-medium shadow-soft bg-gradient-to-r from-red-500/20 to-red-600/20 animate-fadeIn">
                 <VolumeX size={14} /> Ses Kapalı
               </span>
             ) : (
-              <span className="flex items-center gap-2 glass-light px-3 py-1.5 rounded-xl">
-                <Settings2 size={14} /> Ayarlar yapılandırılıyor...
+              <span className="flex items-center gap-2 glass-strong border border-white/10 px-3 py-1.5 rounded-xl">
+                <Settings2 size={14} className="animate-spin-slow" /> Ayarlar
+                yapılandırılıyor...
               </span>
             )}
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 relative z-10">
             {step === 1 ? (
               <button
                 onClick={selectedSourceId ? () => setStep(2) : null}
                 disabled={!selectedSourceId}
-                className={`px-8 py-3 rounded-xl text-sm font-bold transition-all duration-200 flex items-center gap-2 btn-modern ${
+                className={`px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 relative overflow-hidden group ${
                   selectedSourceId
-                    ? "gradient-primary hover:shadow-glow text-white shadow-soft-lg hover-lift"
-                    : "glass text-[#949ba4] cursor-not-allowed opacity-50"
+                    ? "gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white shadow-soft-lg hover:scale-110"
+                    : "glass-strong text-[#949ba4] cursor-not-allowed opacity-50"
                 }`}
               >
-                Ayarlara Git <ChevronRight size={16} />
+                {selectedSourceId && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                )}
+                <span className="relative z-10">Ayarlara Git</span>
+                <ChevronRight
+                  size={16}
+                  className={`relative z-10 transition-transform duration-300 ${
+                    selectedSourceId ? "group-hover:translate-x-1" : ""
+                  }`}
+                />
               </button>
             ) : (
               <button
                 onClick={handleStart}
-                className="px-8 py-3 gradient-success hover:shadow-glow-green text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-soft-lg hover-lift flex items-center gap-2 btn-modern"
+                className="px-8 py-3 gradient-success hover:shadow-[0_0_25px_rgba(34,197,94,0.5)] text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-soft-lg hover:scale-110 flex items-center gap-2 relative overflow-hidden group/start"
               >
-                <Rocket size={16} /> Yayına Başla
+                <div className="absolute inset-0 bg-gradient-to-r from-green-500/20 to-green-600/20 opacity-0 group-hover/start:opacity-100 transition-opacity duration-300"></div>
+                <Rocket
+                  size={16}
+                  className="relative z-10 group-hover/start:rotate-12 transition-transform duration-300"
+                />
+                <span className="relative z-10">Yayına Başla</span>
               </button>
             )}
           </div>

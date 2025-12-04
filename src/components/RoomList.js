@@ -28,6 +28,7 @@ import {
 import { useChatStore } from "@/src/store/chatStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { toast } from "sonner";
+import { systemToast } from "@/src/utils/toast";
 import {
   CHANNEL_NAME_MAX_LENGTH,
   CHANNEL_NAME_MIN_LENGTH,
@@ -67,6 +68,11 @@ export default function RoomList({
     deleteTextChannel,
     unreadCounts, // YENİ: Okunmamış mesaj sayıları
     startTextChannelListener,
+    currentChannel,
+    showChatPanel,
+    toggleChatPanel,
+    setShowChatPanel,
+    loadChannelMessages,
   } = useChatStore();
 
   const { profileColor, userStatus, setUserStatus } = useSettingsStore();
@@ -182,51 +188,59 @@ export default function RoomList({
         
         // Yeni kullanıcıları tespit et
         const newUsers = currentUsers.filter(
-          (user) => !prevUsers.some((prevUser) => prevUser.userId === user.userId)
+          (u) => !prevUsers.some((prevUser) => prevUser.userId === u.userId)
         );
         
-        // Bildirim göster (eğer kullanıcı o odada değilse ve ayarlar açıksa)
-        if (newUsers.length > 0 && desktopNotifications && notifyOnJoin) {
-          // Kullanıcı o odada değilse ve pencere aktif değilse bildirim göster
-          if (currentRoom !== roomName) {
-            if (typeof window !== "undefined" && "Notification" in window) {
-              if (Notification.permission === "granted") {
-                // Eğer pencere aktifse bildirim gösterme
-                if (typeof document !== "undefined" && (document.hidden || !document.hasFocus())) {
-                  newUsers.forEach((newUser) => {
-                    // Kendi kullanıcımız değilse bildirim göster
-                    if (newUser.userId !== user?.uid) {
-                      try {
-                        const notification = new Notification(
-                          "Kullanıcı Online Oldu",
-                          {
-                            body: `${newUser.username || "Bir kullanıcı"} "${roomName}" odasına katıldı`,
-                            icon: "/favicon.ico",
-                            badge: "/favicon.ico",
-                            tag: `join-${roomName}-${newUser.userId}-${Date.now()}`,
-                            silent: false,
-                          }
-                        );
-                        
-                        // Bildirime tıklanınca pencereyi focus et
-                        notification.onclick = () => {
-                          if (window) {
-                            window.focus();
-                          }
-                          notification.close();
-                        };
-                        
-                        // 5 saniye sonra otomatik kapat
-                        setTimeout(() => notification.close(), 5000);
-                      } catch (error) {
-                        console.error("Masaüstü bildirim hatası:", error);
+        // Bildirim göster (ayarlar açıksa)
+        if (newUsers.length > 0 && notifyOnJoin) {
+          newUsers.forEach((newUser) => {
+            // Kendi kullanıcımız değilse bildirim göster
+            if (newUser.userId !== user?.uid) {
+              const username = newUser.username || "Bir kullanıcı";
+              const isAppActive = typeof document !== "undefined" && !document.hidden && document.hasFocus();
+              const isInSameRoom = currentRoom === roomName;
+              
+              // Toast bildirimi (uygulama aktifken ve aynı odada değilsek)
+              if (isAppActive && !isInSameRoom) {
+                systemToast({
+                  title: `${username} online oldu`,
+                  message: `"${roomName}" odasına katıldı`,
+                  type: "join",
+                });
+              }
+              
+              // Masaüstü bildirimi (uygulama arka plandayken veya minimizedken)
+              if (!isAppActive && desktopNotifications) {
+                if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                  try {
+                    const notification = new Notification(
+                      `${username} online oldu`,
+                      {
+                        body: `"${roomName}" odasına katıldı`,
+                        icon: "/favicon.ico",
+                        badge: "/favicon.ico",
+                        tag: `join-${roomName}-${newUser.userId}-${Date.now()}`,
+                        silent: false,
                       }
-                    }
-                  });
+                    );
+                    
+                    notification.onclick = () => {
+                      if (window.netrex?.focusWindow) {
+                        window.netrex.focusWindow();
+                      } else {
+                        window.focus();
+                      }
+                      notification.close();
+                    };
+                    
+                    setTimeout(() => notification.close(), 5000);
+                  } catch (error) {
+                    console.error("Masaüstü bildirim hatası:", error);
+                  }
                 }
               }
             }
-          }
+          });
         }
         
         // State'i güncelle
@@ -382,7 +396,17 @@ export default function RoomList({
       successMessage: `"${room.name}" ses kanalı silindi.`,
       errorMessage: "Ses kanalı silinemedi.",
       action: async () => {
-        await deleteDoc(doc(db, "rooms", room.id));
+        try {
+          // Eğer kullanıcı bu kanalda ise önce çıkar
+          if (currentRoom === room.name) {
+            onJoin(null);
+          }
+          await deleteDoc(doc(db, "rooms", room.id));
+          console.log("✅ Ses kanalı Firebase'den silindi:", room.id);
+        } catch (error) {
+          console.error("❌ Ses kanalı silme hatası:", error);
+          throw error; // ConfirmDialog'a hata fırlat ki kullanıcıya göstersin
+        }
       },
     });
   };
@@ -390,24 +414,36 @@ export default function RoomList({
   const showCreateButton = isAdmin;
 
   return (
-    <div className="w-60 bg-gradient-to-b from-[#25272a] to-[#2b2d31] h-full flex flex-col flex-shrink-0 select-none border-r border-[#1f2023]/50 shadow-soft backdrop-blur-sm">
+    <div className="w-60 bg-[#1e1f22] h-full flex flex-col flex-shrink-0 select-none border-r border-[#141517]">
+      
       {/* 1. ÜST BAŞLIK */}
-      <div className="h-14 border-b border-[#1f2023]/50 flex items-center justify-between px-4 shadow-soft hover:bg-[#35373c]/50 transition-all duration-300 cursor-pointer group hover-lift">
-        <h1 className="font-bold text-white text-[15px] truncate tracking-tight">
-          Netrex Client
-        </h1>
-        <div className="flex items-center gap-2">
+      <div className="h-14 relative flex items-center justify-between px-4 z-10">
+        {/* Alt border */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-[#1a1b1e]"></div>
+        
+        {/* Logo ve başlık */}
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
+            <span className="text-white font-bold text-sm">N</span>
+          </div>
+          <div className="flex flex-col">
+            <h1 className="font-semibold text-white text-[14px] tracking-tight leading-none">Netrex</h1>
+            <span className="text-[10px] text-[#5c6370] font-medium mt-0.5">Client</span>
+          </div>
+        </div>
+        
+        {/* Sağ butonlar */}
+        <div className="flex items-center gap-1 relative z-10">
           <button
-            onClick={() => setShowShortcutModal(true)}
-            className="text-[#949ba4] hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-[#3a3b40]/80 hover:scale-110"
+            onClick={(e) => { e.stopPropagation(); setShowShortcutModal(true); }}
+            className="w-8 h-8 rounded-md flex items-center justify-center text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
             title="Klavye kısayolları (Ctrl + /)"
           >
             <HelpCircle size={16} />
           </button>
           {showCreateButton && (
-            <div className="relative">
-              <Shield size={14} className="text-[#23a559] drop-shadow-[0_0_4px_rgba(35,165,89,0.5)]" title="Yönetici" />
-              <div className="absolute inset-0 bg-[#23a559]/20 rounded-full blur-sm animate-pulse-slow"></div>
+            <div className="w-8 h-8 flex items-center justify-center">
+              <Shield size={14} className="text-[#23a559]" title="Yönetici" />
             </div>
           )}
         </div>
@@ -425,21 +461,21 @@ export default function RoomList({
       )}
 
       {/* 2. KANALLAR LİSTESİ */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-6 pt-2">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-4 pt-3 relative z-10">
         {/* --- SES KANALLARI --- */}
         <div>
-          <div className="flex items-center justify-between px-2 mb-2 group text-[#949ba4] hover:text-[#dbdee1] transition-all duration-200">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
-              <ChevronDown size={12} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
-              <span className="ml-0.5">Ses Kanalları</span>
+          <div className="flex items-center justify-between px-1.5 mb-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#5c6370]">
+              <ChevronDown size={10} strokeWidth={2.5} />
+              <span>Ses Kanalları</span>
             </div>
             {showCreateButton && (
               <button
                 onClick={createRoom}
-                className="hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-[#3a3b40]/60 hover:scale-110 hover:shadow-soft"
+                className="w-5 h-5 flex items-center justify-center rounded text-[#5c6370] hover:text-[#949ba4] transition-colors duration-200"
                 title="Ses Kanalı Oluştur"
               >
-                <Plus size={14} strokeWidth={3} />
+                <Plus size={14} strokeWidth={2} />
               </button>
             )}
           </div>
@@ -467,61 +503,75 @@ export default function RoomList({
                 };
 
                 return (
-                  <div key={room.id} className="mb-1">
+                  <div key={room.id} className="mb-0.5">
                     {/* Kanal Başlığı */}
                     <div
                       onClick={() => onJoin(room.name)}
                       onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
                       onMouseLeave={() => setHoveredChannel(null)}
-                      className="group flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-[#35373c]/80 hover:text-[#dbdee1] text-[#949ba4] cursor-pointer transition-all duration-200 active:bg-[#3f4147]"
+                      className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors duration-200 relative ${
+                        currentRoom === room.name
+                          ? "bg-white/[0.08] text-white"
+                          : "text-[#8b8f96] hover:text-[#dbdee1] hover:bg-white/[0.04]"
+                      }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {/* Active indicator */}
+                      {currentRoom === room.name && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-r-full"></div>
+                      )}
+                      
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 relative z-10">
                         <Volume2
-                          size={16}
-                          className="text-[#80848e] group-hover:text-[#dbdee1] shrink-0"
+                          size={18}
+                          className={`shrink-0 transition-colors duration-200 ${
+                            currentRoom === room.name
+                              ? "text-white"
+                              : "text-[#5c6370] group-hover:text-[#949ba4]"
+                          }`}
                         />
-                        <span className="font-medium truncate text-[14px] group-hover:text-white transition-colors">
+                        <span className={`truncate text-[14px] ${
+                          currentRoom === room.name ? "font-semibold" : "font-medium"
+                        }`}>
                           {room.name}
                         </span>
                       </div>
 
-                      {showCreateButton &&
-                        hoveredChannel === `voice-${room.id}` && (
-                          <button
-                            onClick={(e) => handleDeleteRoom(e, room)}
-                            className="text-[#949ba4] hover:text-[#dbdee1] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            title="Odayı Sil"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        )}
+                      {showCreateButton && (
+                        <button
+                          onClick={(e) => handleDeleteRoom(e, room)}
+                          className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0 hover:bg-red-500/10"
+                          title="Odayı Sil"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                     
-                    {/* Discord benzeri kullanıcı listesi - Kanalın altında indent edilmiş */}
+                    {/* Kullanıcı listesi - Kanalın altında */}
                     {userCount > 0 && (
-                      <div className="ml-6 space-y-0.5 mb-1">
-                        {activeUsers.slice(0, 3).map((activeUser, idx) => (
+                      <div className="ml-7 mt-0.5 space-y-px mb-1">
+                        {activeUsers.slice(0, 4).map((activeUser, idx) => (
                           <div
                             key={activeUser.userId || idx}
-                            className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-[#35373c]/60 transition-colors group/user"
+                            className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-white/[0.03] transition-colors duration-200 group/user"
                           >
                             {/* Küçük Avatar */}
                             <div
-                              className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-semibold overflow-hidden shadow-sm shrink-0"
+                              className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[9px] font-bold shrink-0"
                               style={{ background: getAvatarColor(activeUser.userId) }}
                             >
                               {activeUser.username?.charAt(0).toUpperCase() || "?"}
                             </div>
                             {/* Kullanıcı Adı */}
-                            <span className="text-[12px] text-[#949ba4] group-hover/user:text-[#dbdee1] truncate transition-colors">
+                            <span className="text-[12px] text-[#5c6370] group-hover/user:text-[#949ba4] truncate">
                               {activeUser.username || "Bilinmeyen"}
                             </span>
                           </div>
                         ))}
                         {/* Fazla kullanıcı varsa "+X" göster */}
-                        {userCount > 3 && (
-                          <div className="px-1.5 py-0.5 text-[11px] text-[#80848e] font-medium">
-                            +{userCount - 3} kişi daha
+                        {userCount > 4 && (
+                          <div className="px-2 py-1 text-[11px] text-[#5c6370] font-medium">
+                            +{userCount - 4} kişi daha
                           </div>
                         )}
                       </div>
@@ -535,81 +585,89 @@ export default function RoomList({
 
         {/* --- METİN KANALLARI --- */}
         <div>
-          <div className="flex items-center justify-between px-1 mb-1 group text-[#949ba4] hover:text-[#dbdee1] transition-colors">
-            <div className="flex items-center gap-0.5 text-[11px] font-bold uppercase tracking-wide cursor-pointer hover:text-white">
-              <ChevronDown size={12} strokeWidth={3} />
-              <span className="ml-0.5">Metin Kanalları</span>
+          <div className="flex items-center justify-between px-1.5 mb-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#5c6370]">
+              <ChevronDown size={10} strokeWidth={2.5} />
+              <span>Metin Kanalları</span>
             </div>
             <button
               onClick={handleCreateTextChannel}
-              className="hover:text-white transition-colors p-0.5 rounded"
+              className="w-5 h-5 flex items-center justify-center rounded text-[#5c6370] hover:text-[#949ba4] transition-colors duration-200"
               title="Metin Kanalı Oluştur"
             >
-              <Plus size={14} strokeWidth={3} />
+              <Plus size={14} strokeWidth={2} />
             </button>
           </div>
 
-          <div className="space-y-[2px]">
+          <div className="space-y-0.5">
             {textChannels.length === 0 ? (
-              <div className="px-2 py-1 text-xs text-[#949ba4] italic">
+              <div className="px-2.5 py-2 text-xs text-[#5c6370] italic">
                 Kanal yok
               </div>
             ) : (
               textChannels.map((channel) => {
-                // YENİ: Okunmamış mesaj var mı?
+                // Okunmamış mesaj var mı?
                 const hasUnread = unreadCounts[channel.id] > 0;
+                // Şu an seçili kanal mı? (ve panel açık mı?)
+                const isSelected = currentChannel?.id === channel.id && showChatPanel;
 
                 return (
                   <div
                     key={channel.id}
-                    onClick={() => onJoinTextChannel(channel.id)}
+                    onClick={() => {
+                      // Aynı kanala tıklanırsa toggle yap
+                      if (currentChannel?.id === channel.id) {
+                        toggleChatPanel();
+                      } else {
+                        // Farklı kanala tıklanırsa paneli aç ve kanalı değiştir
+                        setShowChatPanel(true);
+                        // Önce store'u güncelle (hemen currentChannel güncellensin)
+                        loadChannelMessages(channel.id);
+                        // Sonra parent'a bildir
+                        onJoinTextChannel(channel.id);
+                      }
+                    }}
                     onMouseEnter={() => setHoveredChannel(`text-${channel.id}`)}
                     onMouseLeave={() => setHoveredChannel(null)}
-                    className={`
-                      group flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 active:bg-[#3f4147] hover-lift hover:shadow-soft
-                      ${
-                        hasUnread
-                          ? "glass-strong text-white shadow-glow"
-                          : "text-[#949ba4] hover:bg-[#35373c]/80 hover:text-[#dbdee1]"
-                      }
-                    `}
+                    className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors duration-200 relative ${
+                      isSelected
+                        ? "bg-white/[0.08] text-white border-l-2 border-white"
+                        : hasUnread
+                          ? "bg-indigo-500/10 text-white border-l-2 border-indigo-500"
+                          : "text-[#8b8f96] hover:text-[#dbdee1] hover:bg-white/[0.04]"
+                    }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {/* Okunmamış varsa ikon beyaz olsun */}
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <Hash
                         size={18}
-                        className={
-                          hasUnread
+                        className={`transition-colors duration-200 ${
+                          isSelected
                             ? "text-white"
-                            : "text-[#80848e] group-hover:text-[#dbdee1]"
-                        }
-                      />
-                      <span
-                        className={`truncate text-[15px] ${
-                          hasUnread ? "font-bold text-white" : "font-medium"
+                            : hasUnread
+                              ? "text-indigo-400"
+                              : "text-[#5c6370] group-hover:text-[#949ba4]"
                         }`}
-                      >
+                      />
+                      <span className={`truncate text-[14px] ${isSelected || hasUnread ? "font-semibold" : "font-medium"}`}>
                         {channel.name}
                       </span>
                     </div>
 
-                    {/* YENİ: Okunmamış Noktası */}
-                    {hasUnread && (
-                      <div className="w-2 h-2 bg-white rounded-full shadow-sm mr-1"></div>
+                    {/* Okunmamış Noktası */}
+                    {hasUnread && !isSelected && (
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full shadow-[0_0_6px_rgba(99,102,241,0.6)]"></div>
                     )}
 
                     {/* Silme Butonu */}
-                    {(channel.createdBy === user?.uid || isAdmin) &&
-                      hoveredChannel === `text-${channel.id}` &&
-                      !hasUnread && (
-                        <button
-                          onClick={(e) => handleDeleteChannel(e, channel)}
-                          className="text-[#949ba4] hover:text-[#dbdee1] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Kanalı Sil"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                    {(channel.createdBy === user?.uid || isAdmin) && !hasUnread && (
+                      <button
+                        onClick={(e) => handleDeleteChannel(e, channel)}
+                        className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-500/10"
+                        title="Kanalı Sil"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -619,29 +677,31 @@ export default function RoomList({
       </div>
 
       {/* 3. KULLANICI PANELİ */}
-      <div className="bg-[#232428] h-[52px] flex items-center px-2 justify-between shrink-0 border-t border-[#1e1f22] select-none relative" data-user-menu>
-        {/* Profil Kısmı - Tıklanabilir (Menü Açılır) */}
+      <div className="relative h-[52px] flex items-center px-2 justify-between shrink-0 select-none z-10 bg-[#1a1b1e]" data-user-menu>
+        {/* Üst border */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-[#141517]"></div>
+        
+        {/* Profil Kısmı */}
         <div
           onClick={() => setShowUserMenu(!showUserMenu)}
-          className="flex items-center gap-2.5 hover:bg-[#3f4147]/60 p-1.5 rounded-md cursor-pointer transition-all duration-200 min-w-0 overflow-hidden group flex-1"
+          className="flex items-center gap-2 p-1.5 rounded-md cursor-pointer min-w-0 overflow-hidden flex-1 hover:bg-white/5 transition-colors duration-200"
         >
           <div className="relative shrink-0">
+            {/* Avatar */}
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs overflow-hidden shadow-sm transition-transform group-hover:scale-105"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm overflow-hidden"
               style={{ background: profileColor }}
             >
               {user?.photoURL ? (
-                <img
-                  src={user.photoURL}
-                  alt="User"
-                  className="w-full h-full object-cover"
-                />
+                <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
               ) : (
-                user?.displayName?.charAt(0).toUpperCase() || "?"
+                <span>{user?.displayName?.charAt(0).toUpperCase() || "?"}</span>
               )}
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#232428] rounded-full flex items-center justify-center">
-              <div className={`w-2.5 h-2.5 rounded-full transition-colors ${
+            
+            {/* Status indicator */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#1a1b1e] rounded-full flex items-center justify-center">
+              <div className={`w-2.5 h-2.5 rounded-full ${
                 userStatus === "online" ? "bg-[#23a559]" :
                 userStatus === "offline" ? "bg-[#80848e]" :
                 "bg-[#5865f2]"
@@ -650,10 +710,10 @@ export default function RoomList({
           </div>
 
           <div className="flex flex-col overflow-hidden flex-1">
-            <div className="text-[13px] font-semibold text-white truncate leading-tight group-hover:text-[#dbdee1]">
+            <div className="text-[13px] font-semibold text-white truncate leading-tight">
               {user?.displayName || "Misafir"}
             </div>
-            <div className="text-[11px] text-[#b5bac1] truncate leading-tight flex items-center gap-1 group-hover:text-[#dbdee1]">
+            <div className="text-[11px] text-[#5c6370] truncate leading-tight">
               {userStatus === "online" && "Online"}
               {userStatus === "offline" && "Offline"}
               {userStatus === "invisible" && "Görünmez"}
@@ -661,88 +721,59 @@ export default function RoomList({
           </div>
         </div>
 
-        {/* Settings Butonu - Ayrı (Menü Açmaz) */}
-        <div className="flex items-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenSettings();
-            }}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#3f4147] text-[#b5bac1] hover:text-[#dbdee1] transition-all relative overflow-hidden"
-            title="Kullanıcı Ayarları"
-          >
-            <Settings
-              size={18}
-              className="transition-transform duration-500 hover:rotate-90"
-            />
-          </button>
-        </div>
+        {/* Settings Butonu */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenSettings();
+          }}
+          className="w-8 h-8 flex items-center justify-center rounded-md text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
+          title="Kullanıcı Ayarları"
+        >
+          <Settings size={18} />
+        </button>
 
         {/* Kullanıcı Durum Menüsü */}
         {showUserMenu && (
-          <div className="absolute bottom-[60px] left-2 right-2 glass-strong border border-white/10 rounded-xl shadow-soft-lg p-2 z-50 animate-scaleIn origin-bottom">
-            <div className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wider px-2 py-1.5 mb-1">
+          <div className="absolute bottom-[56px] left-2 right-2 bg-[#111214] border border-[#2b2d31] rounded-lg shadow-xl p-1.5 z-50 animate-scaleIn origin-bottom">
+            <div className="text-[10px] font-semibold text-[#5c6370] uppercase tracking-wider px-2 py-1.5 mb-0.5">
               Durum
             </div>
             
             {/* Online */}
             <button
-              onClick={() => {
-                setUserStatus("online");
-                setShowUserMenu(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                userStatus === "online"
-                  ? "bg-[#5865f2]/20 text-white border border-[#5865f2]/50"
-                  : "text-[#b5bac1] hover:bg-[#3f4147]/60 hover:text-white"
+              onClick={() => { setUserStatus("online"); setShowUserMenu(false); }}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 ${
+                userStatus === "online" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
               }`}
             >
-              <div className="relative">
-                <div className="absolute inset-0 bg-[#23a559] rounded-full blur-sm opacity-50"></div>
-                <Circle size={18} className="relative text-[#23a559]" />
-              </div>
-              <span className="font-semibold text-sm">Online</span>
-              {userStatus === "online" && (
-                <div className="ml-auto w-2 h-2 bg-[#5865f2] rounded-full"></div>
-              )}
+              <Circle size={16} className="text-[#23a559]" />
+              <span className="font-medium text-sm">Online</span>
+              {userStatus === "online" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
             </button>
 
             {/* Offline */}
             <button
-              onClick={() => {
-                setUserStatus("offline");
-                setShowUserMenu(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-1 ${
-                userStatus === "offline"
-                  ? "bg-[#5865f2]/20 text-white border border-[#5865f2]/50"
-                  : "text-[#b5bac1] hover:bg-[#3f4147]/60 hover:text-white"
+              onClick={() => { setUserStatus("offline"); setShowUserMenu(false); }}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 mt-0.5 ${
+                userStatus === "offline" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
               }`}
             >
-              <CircleOff size={18} className="text-[#80848e]" />
-              <span className="font-semibold text-sm">Offline</span>
-              {userStatus === "offline" && (
-                <div className="ml-auto w-2 h-2 bg-[#5865f2] rounded-full"></div>
-              )}
+              <CircleOff size={16} className="text-[#80848e]" />
+              <span className="font-medium text-sm">Offline</span>
+              {userStatus === "offline" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
             </button>
 
             {/* Görünmez */}
             <button
-              onClick={() => {
-                setUserStatus("invisible");
-                setShowUserMenu(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-1 ${
-                userStatus === "invisible"
-                  ? "bg-[#5865f2]/20 text-white border border-[#5865f2]/50"
-                  : "text-[#b5bac1] hover:bg-[#3f4147]/60 hover:text-white"
+              onClick={() => { setUserStatus("invisible"); setShowUserMenu(false); }}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 mt-0.5 ${
+                userStatus === "invisible" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
               }`}
             >
-              <EyeOff size={18} className="text-[#5865f2]" />
-              <span className="font-semibold text-sm">Görünmez</span>
-              {userStatus === "invisible" && (
-                <div className="ml-auto w-2 h-2 bg-[#5865f2] rounded-full"></div>
-              )}
+              <EyeOff size={16} className="text-[#5865f2]" />
+              <span className="font-medium text-sm">Görünmez</span>
+              {userStatus === "invisible" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
             </button>
           </div>
         )}
@@ -752,58 +783,103 @@ export default function RoomList({
       {showTextChannelModal &&
         typeof window !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm p-4">
-            <div className="bg-[#313338] w-full max-w-md p-6 rounded-md shadow-2xl border border-[#1e1f22] animate-in zoom-in-95 duration-200">
-              <h3 className="text-xl font-bold text-white mb-2">Kanal Oluştur</h3>
-              <p className="text-[#b5bac1] text-xs mb-6 uppercase font-bold">
-                Metin Kanalı
-              </p>
-              <form onSubmit={handleCreateTextChannelSubmit}>
-                <label className="text-[11px] font-bold text-[#b5bac1] uppercase mb-2 block">
-                  Kanal Adı
-                </label>
-                <div className="relative mb-6">
-                  <span className="absolute left-3 top-2.5 text-[#b5bac1] text-lg">
-                    #
-                  </span>
-                  <input
-                    type="text"
-                    value={newChannelName}
-                    onChange={(e) =>
-                      setNewChannelName(sanitizeChannelNameInput(e.target.value))
-                    }
-                    placeholder="yeni-kanal"
-                    className="w-full bg-[#1e1f22] text-[#dbdee1] p-2.5 pl-8 rounded border-none outline-none font-medium focus:ring-2 focus:ring-[#5865f2]"
-                    autoFocus
-                  />
+          <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-fadeIn p-4">
+            {/* Animated background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+            
+            <div className="glass-strong w-full max-w-md rounded-3xl shadow-2xl border border-white/20 animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95 relative overflow-hidden">
+              {/* Top glow effect */}
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
+              
+              {/* Background particles */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl animate-pulse-slow"></div>
+                <div className="absolute bottom-1/4 right-1/4 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
+              </div>
+
+              <div className="relative z-10 p-8">
+                {/* Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/30 shadow-soft">
+                      <Hash size={20} className="text-indigo-300" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white relative">
+                        <span className="relative z-10">Kanal Oluştur</span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                      </h3>
+                      <p className="text-xs text-[#949ba4] font-medium mt-0.5">
+                        Metin Kanalı
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                {channelError && (
-                  <p className="text-xs text-[#f87171] mb-2">{channelError}</p>
-                )}
-                <div className="flex gap-4 justify-end bg-[#2b2d31] -mx-6 -mb-6 p-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTextChannelModal(false);
-                      setNewChannelName("");
-                      setChannelError("");
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white hover:underline transition"
-                  >
-                    Vazgeç
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newChannelName.trim() || isCreatingTextChannel}
-                    className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isCreatingTextChannel && (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    )}
-                    {isCreatingTextChannel ? "Oluşturuluyor..." : "Kanal Oluştur"}
-                  </button>
-                </div>
-              </form>
+
+                <form onSubmit={handleCreateTextChannelSubmit}>
+                  <div className="glass-strong rounded-2xl p-6 border border-white/10 shadow-soft-lg mb-6 relative group/card hover:shadow-xl transition-all duration-300">
+                    {/* Hover glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none rounded-2xl"></div>
+                    
+                    <div className="relative z-10">
+                      <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-1.5 block">
+                        <Hash size={12} className="text-indigo-400" /> Kanal Adı
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#949ba4] text-lg font-medium">
+                          #
+                        </span>
+                        <input
+                          type="text"
+                          value={newChannelName}
+                          onChange={(e) =>
+                            setNewChannelName(sanitizeChannelNameInput(e.target.value))
+                          }
+                          placeholder="yeni-kanal"
+                          className="w-full bg-[#1e1f22] text-white p-3.5 pl-10 rounded-xl border border-white/10 outline-none font-medium transition-all duration-300 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 focus:bg-[#25272a] placeholder:text-[#4e5058]"
+                          autoFocus
+                        />
+                      </div>
+                      {channelError && (
+                        <div className="mt-3 bg-gradient-to-r from-red-500/15 to-red-600/15 text-red-300 p-3 rounded-xl flex items-center gap-2 text-sm border border-red-500/30 shadow-soft backdrop-blur-sm animate-fadeIn">
+                          <div className="w-1 h-1 bg-red-400 rounded-full"></div>
+                          <span className="font-medium">{channelError}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer buttons */}
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTextChannelModal(false);
+                        setNewChannelName("");
+                        setChannelError("");
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      className="px-6 py-3 text-sm font-semibold text-[#b5bac1] hover:text-white transition-all duration-300 rounded-xl hover:bg-white/5 focus:outline-none"
+                    >
+                      Vazgeç
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!newChannelName.trim() || isCreatingTextChannel}
+                      onMouseDown={(e) => e.preventDefault()}
+                      className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 relative overflow-hidden group/save disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
+                      <span className="relative z-10 flex items-center gap-2">
+                        {isCreatingTextChannel && (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        )}
+                        {isCreatingTextChannel ? "Oluşturuluyor..." : "Kanal Oluştur"}
+                      </span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>,
           document.body
@@ -812,54 +888,99 @@ export default function RoomList({
       {showVoiceRoomModal &&
         typeof window !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center backdrop-blur-sm p-4">
-            <div className="bg-[#313338] w-full max-w-md p-6 rounded-md shadow-2xl border border-[#1e1f22] animate-in zoom-in-95 duration-200">
-              <h3 className="text-xl font-bold text-white mb-2">Kanal Oluştur</h3>
-              <p className="text-[#b5bac1] text-xs mb-6 uppercase font-bold">
-                Ses Kanalı
-              </p>
-              <form onSubmit={handleCreateRoomSubmit}>
-                <label className="text-[11px] font-bold text-[#b5bac1] uppercase mb-2 block">
-                  Kanal Adı
-                </label>
-                <div className="relative mb-6">
-                  <span className="absolute left-3 top-2.5 text-[#b5bac1]">
-                    <Volume2 size={20} />
-                  </span>
-                  <input
-                    type="text"
-                    value={newRoomName}
-                    onChange={(e) => setNewRoomName(sanitizeRoomNameInput(e.target.value))}
-                    placeholder="Genel Sohbet"
-                    className="w-full bg-[#1e1f22] text-[#dbdee1] p-2.5 pl-10 rounded border-none outline-none font-medium focus:ring-2 focus:ring-[#5865f2]"
-                    autoFocus
-                  />
+          <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-fadeIn p-4">
+            {/* Animated background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+            
+            <div className="glass-strong w-full max-w-md rounded-3xl shadow-2xl border border-white/20 animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95 relative overflow-hidden">
+              {/* Top glow effect */}
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
+              
+              {/* Background particles */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl animate-pulse-slow"></div>
+                <div className="absolute bottom-1/4 right-1/4 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
+              </div>
+
+              <div className="relative z-10 p-8">
+                {/* Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/30 shadow-soft">
+                      <Volume2 size={20} className="text-indigo-300" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white relative">
+                        <span className="relative z-10">Kanal Oluştur</span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                      </h3>
+                      <p className="text-xs text-[#949ba4] font-medium mt-0.5">
+                        Ses Kanalı
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                {roomError && (
-                  <p className="text-xs text-[#f87171] -mt-4 mb-4">{roomError}</p>
-                )}
-                <div className="flex gap-4 justify-end bg-[#2b2d31] -mx-6 -mb-6 p-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowVoiceRoomModal(false);
-                      setNewRoomName("");
-                      setRoomError("");
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white hover:underline transition"
-                  >
-                    Vazgeç
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newRoomName.trim() || isCreating}
-                    className="px-6 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isCreating ? "Oluşturuluyor..." : "Kanal Oluştur"}
-                  </button>
-                </div>
-              </form>
+
+                <form onSubmit={handleCreateRoomSubmit}>
+                  <div className="glass-strong rounded-2xl p-6 border border-white/10 shadow-soft-lg mb-6 relative group/card hover:shadow-xl transition-all duration-300">
+                    {/* Hover glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none rounded-2xl"></div>
+                    
+                    <div className="relative z-10">
+                      <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-1.5 block">
+                        <Volume2 size={12} className="text-indigo-400" /> Kanal Adı
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#949ba4]">
+                          <Volume2 size={18} className="text-indigo-400/60" />
+                        </span>
+                        <input
+                          type="text"
+                          value={newRoomName}
+                          onChange={(e) => setNewRoomName(sanitizeRoomNameInput(e.target.value))}
+                          placeholder="Genel Sohbet"
+                          className="w-full bg-[#1e1f22] text-white p-3.5 pl-12 rounded-xl border border-white/10 outline-none font-medium transition-all duration-300 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 focus:bg-[#25272a] placeholder:text-[#4e5058]"
+                          autoFocus
+                        />
+                      </div>
+                      {roomError && (
+                        <div className="mt-3 bg-gradient-to-r from-red-500/15 to-red-600/15 text-red-300 p-3 rounded-xl flex items-center gap-2 text-sm border border-red-500/30 shadow-soft backdrop-blur-sm animate-fadeIn">
+                          <div className="w-1 h-1 bg-red-400 rounded-full"></div>
+                          <span className="font-medium">{roomError}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer buttons */}
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowVoiceRoomModal(false);
+                        setNewRoomName("");
+                        setRoomError("");
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      className="px-6 py-3 text-sm font-semibold text-[#b5bac1] hover:text-white transition-all duration-300 rounded-xl hover:bg-white/5 focus:outline-none"
+                    >
+                      Vazgeç
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!newRoomName.trim() || isCreating}
+                      onMouseDown={(e) => e.preventDefault()}
+                      className="px-8 py-3 gradient-primary hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white rounded-xl font-semibold transition-all duration-300 hover:scale-105 relative overflow-hidden group/save disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover/save:opacity-100 transition-opacity duration-300"></div>
+                      <span className="relative z-10 flex items-center gap-2">
+                        {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isCreating ? "Oluşturuluyor..." : "Kanal Oluştur"}
+                      </span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>,
           document.body

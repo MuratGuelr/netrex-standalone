@@ -70,6 +70,16 @@ contextBridge.exposeInMainWorld("netrex", {
   isAdmin: (userUid) => ipcRenderer.invoke("is-admin", userUid),
   setCurrentUserUid: (userUid) => ipcRenderer.invoke("set-current-user-uid", userUid),
 
+  // Pencereyi ön plana al (bildirim tıklaması için)
+  focusWindow: () => ipcRenderer.invoke("focus-window"),
+
   // Splash screen
   notifySplashComplete: () => ipcRenderer.invoke("splash-complete"),
+
+  // App lifecycle
+  onAppWillQuit: (callback) =>
+    ipcRenderer.on("app-will-quit", () => callback()),
+  
+  // Cleanup tamamlandı mesajı gönder
+  notifyCleanupComplete: () => ipcRenderer.send("cleanup-complete"),
 });
