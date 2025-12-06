@@ -24,6 +24,7 @@ import {
   MESSAGE_SPAM_COOLDOWN_MS,
   CHANNEL_CREATION_COOLDOWN_MS,
   MESSAGE_PAGE_SIZE,
+  MAX_STORED_MESSAGES,
   MESSAGE_SEQUENCE_THRESHOLD,
 } from "@/src/constants/appConfig";
 
@@ -359,9 +360,13 @@ export const useChatStore = create((set, get) => ({
         });
       }
 
-      set((state) => ({
-        messages: [...state.messages, message],
-      }));
+      set((state) => {
+        const newMessages = [...state.messages, message];
+        if (newMessages.length > MAX_STORED_MESSAGES) {
+           return { messages: newMessages.slice(-MAX_STORED_MESSAGES) };
+        }
+        return { messages: newMessages };
+      });
 
       const messageRef = doc(
         collection(db, "text_channels", channelId, "messages"),
@@ -387,7 +392,11 @@ export const useChatStore = create((set, get) => ({
     set((state) => {
       const exists = state.messages.some((m) => m.id === message.id);
       if (exists) return state;
-      return { messages: [...state.messages, message] };
+      const newMessages = [...state.messages, message];
+      if (newMessages.length > MAX_STORED_MESSAGES) {
+         return { messages: newMessages.slice(-MAX_STORED_MESSAGES) };
+      }
+      return { messages: newMessages };
     });
   },
 

@@ -9,67 +9,67 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 // ============================================
 
 const CONFIG = {
-  // Analiz Ayarları
-  FFT_SIZE: 2048, // Daha yüksek çözünürlük için artırıldı
+  // Analiz Ayarları - CPU OPTİMİZASYONU
+  FFT_SIZE: 1024, // 2048 -> 1024 (CPU kullanımını yarıya indirir)
   SAMPLE_RATE: 48000,
-  BUFFER_SIZE: 4096,
+  BUFFER_SIZE: 2048, // 4096 -> 2048
 
-  // KRISP BENZERİ TEPKİ AYARLARI (İlk kelimeyi kaçırmama + gürültü engelleme)
-  RELEASE_TIME: 250, // Konuşma bitince bekleme süresi (Standart mod için)
-  RELEASE_TIME_RNNOISE: 450, // RNNoise modu için daha uzun bekleme (sesleri erken kesmemek için)
-  ATTACK_TIME: 5, // Çok hızlı açılma - ilk kelimeyi kaçırmamak için
-  ATTACK_TIME_RNNOISE: 2, // RNNoise modu için çok daha hızlı açılma (ilk harfi kaçırmamak için)
-  MIN_VOICE_DURATION: 30, // Minimum ses süresi - daha kısa (ilk kelimeyi kaçırmamak için)
-  MIN_VOICE_DURATION_RNNOISE: 15, // RNNoise modu için çok daha kısa minimum süre (ilk harfi kaçırmamak için)
-  MAX_SHORT_NOISE_DURATION: 20, // 20ms'den kısa sesler gürültü olarak reddedilir
-  CHECK_INTERVAL: 5, // Çok hızlı kontrol (5ms = 200Hz) - daha hassas
+  // KRISP BENZERİ TEPKİ AYARLARI
+  RELEASE_TIME: 250,
+  RELEASE_TIME_RNNOISE: 450,
+  ATTACK_TIME: 5,
+  ATTACK_TIME_RNNOISE: 2, 
+  MIN_VOICE_DURATION: 30,
+  MIN_VOICE_DURATION_RNNOISE: 15,
+  MAX_SHORT_NOISE_DURATION: 20,
+  CHECK_INTERVAL: 100, // 50ms -> 100ms (CPU kullanımını yarıya indirir)
 
   // Smoothing (Dengeli)
-  RMS_SMOOTHING: 0.12, // Dengeli yumuşatma
-  SPECTRAL_SMOOTHING: 0.25, // Dengeli yumuşatma
-  THRESHOLD_SMOOTHING: 0.04, // Dengeli yumuşatma
+  RMS_SMOOTHING: 0.15, // Biraz daha yüksek (daha az işlem)
+  SPECTRAL_SMOOTHING: 0.3,
+  THRESHOLD_SMOOTHING: 0.05,
 
-  // KRISP BENZERİ EŞİK DEĞERLERİ (Gürültüyü agresif engelle ama konuşmayı hemen geçir)
-  MIN_RMS: 0.002, // Dengeli minimum (az konuşmaları filtrele ama ilk kelimeyi kaçırmasın)
-  MAX_RMS: 0.12, // Maksimum
+  // KRISP BENZERİ EŞİK DEĞERLERİ
+  MIN_RMS: 0.002,
+  MAX_RMS: 0.12,
 
-  // Gürültü Profili
-  NOISE_PROFILE_SAMPLES: 100, // Daha fazla örnek (daha iyi profil)
-  NOISE_UPDATE_INTERVAL: 3000, // Daha sık güncelleme
-  NOISE_PROFILE_THRESHOLD: 0.003, // Gürültü profili için maksimum RMS
+  // Gürültü Profili - Azaltılmış
+  NOISE_PROFILE_SAMPLES: 50, // 100 -> 50
+  NOISE_UPDATE_INTERVAL: 5000, // 3000 -> 5000
+  NOISE_PROFILE_THRESHOLD: 0.003,
 
-  // Ses Bandı (Dengeli - konuşma frekansları)
-  VOICE_LOW_FREQ: 100, // Konuşma başlangıcı (bass gürültüleri kısmen keser)
-  VOICE_HIGH_FREQ: 7000, // Konuşma üst sınırı (tiz gürültüleri kısmen keser)
+  // Ses Bandı
+  VOICE_LOW_FREQ: 100,
+  VOICE_HIGH_FREQ: 7000,
 
   // Rüzgar/Arka plan gürültü frekansları
   WIND_LOW_FREQ: 20,
-  WIND_HIGH_FREQ: 100, // Voice low freq ile örtüşmesin
+  WIND_HIGH_FREQ: 100,
 
-  // GELİŞMİŞ Darbe/klavye/mouse click tespiti (Krisp benzeri - Mekanik Klavye için İyileştirilmiş)
+  // Darbe tespiti - Basitleştirilmiş
   IMPACT_DETECTION_ENABLED: true,
-  IMPACT_HIGH_FREQ_START: 5000, // Klavye sesleri için yüksek frekans (önceki ayar)
-  IMPACT_HIGH_FREQ_END: 18000, // Daha yüksek frekansları yakala (önceki ayar)
-  IMPACT_TRANSIENT_RATIO: 2.2, // Biraz daha düşük eşik (mekanik klavye için)
-  IMPACT_MIN_RMS_FACTOR: 1.12, // Biraz daha düşük RMS eşiği (mekanik klavye için)
-  IMPACT_ZCR_THRESHOLD: 0.19, // Biraz daha düşük ZCR eşiği (mekanik klavye için)
-  IMPACT_HOLD_MS: 85, // Biraz daha uzun blokaj (mekanik klavye için)
-  IMPACT_WEAK_VOICE_RATIO: 0.45, // Voice bandı zayıf olmalı (mekanik klavye için biraz daha katı)
-  IMPACT_MIN_DURATION: 5, // Minimum süre (ms) - önceki ayar
+  IMPACT_HIGH_FREQ_START: 5000,
+  IMPACT_HIGH_FREQ_END: 16000, // 18000 -> 16000
+  IMPACT_TRANSIENT_RATIO: 2.2,
+  IMPACT_MIN_RMS_FACTOR: 1.12,
+  IMPACT_ZCR_THRESHOLD: 0.19,
+  IMPACT_HOLD_MS: 85,
+  IMPACT_WEAK_VOICE_RATIO: 0.45,
+  IMPACT_MIN_DURATION: 5,
 
-  // Zero-Crossing Rate (Krisp benzeri - insan sesi aralığı, daha geniş)
-  ZCR_THRESHOLD_MIN: 0.015, // İnsan sesi minimum (daha geniş - ilk kelimeyi kaçırmamak için)
-  ZCR_THRESHOLD_MAX: 0.16, // İnsan sesi maksimum (daha geniş aralık)
+  // Zero-Crossing Rate
+  ZCR_THRESHOLD_MIN: 0.015,
+  ZCR_THRESHOLD_MAX: 0.16,
 
-  // KRISP BENZERİ SPEKTRAL GATING AYARLARI (Agresif gürültü engelleme)
-  SPECTRAL_GATING_ENABLED: true,
-  SPECTRAL_SUBTRACTION_FACTOR: 2.0, // Arka plan gürültüsünü 2x çıkar (daha agresif)
-  MIN_SPECTRAL_RATIO: 1.3, // Ses/gürültü oranı (daha toleranslı - ilk kelimeyi kaçırmamak için)
+  // Spektral Gating - DEVRİŞİK BIRAKILDI (CPU yoğun)
+  SPECTRAL_GATING_ENABLED: false, // true -> false (büyük CPU tasarrufu)
+  SPECTRAL_SUBTRACTION_FACTOR: 2.0,
+  MIN_SPECTRAL_RATIO: 1.3,
 
-  // Voice Quality Scoring (Krisp benzeri - ilk kelimeyi kaçırmamak için)
-  MIN_VOICE_QUALITY: 0.35, // Minimum ses kalitesi skoru (daha düşük = daha toleranslı, ilk kelimeyi kaçırmasın)
+  // Voice Quality Scoring
+  MIN_VOICE_QUALITY: 0.35,
 
-  INIT_DELAY: 1500, // Daha uzun başlangıç (gürültü profilini öğrensin)
+  INIT_DELAY: 1500,
 };
 
 export function useVoiceProcessor() {
@@ -527,35 +527,25 @@ export function useVoiceProcessor() {
         adaptiveCheck,
       ].filter(Boolean);
 
-      // KRISP BENZERİ KONTROL (İlk kelimeyi kaçırmamak için optimize)
-      // RNNoise modunda daha toleranslı kontrol (sesleri erken kesmemek için)
+      // KRISP BENZERİ KONTROL
+      // RNNoise modunda da threshold'a saygı duymalı
       if (noiseSuppressionMode === "krisp") {
-        // RNNoise modunda: İlk algılamada çok daha toleranslı (ilk harfi kaçırmamak için)
-        // Eğer ses threshold'un 0.8x üstündeyse bile geç (çok düşük eşik)
-        if (cleanedRMS > threshold * 0.8) {
-          // ZCR veya spektral kontrol varsa hemen geç
-          if (zcrCheck || spectralCheck) {
-            return true; // İlk harfi kaçırmamak için çok agresif
-          }
-          // Sadece RMS bile yeterli (ilk algılamada)
+        // RMS threshold'u geçmezse direkt reddet
+        if (!rmsCheck) return false;
+        
+        // Güçlü ses varsa (threshold'un 1.2x üstünde) sadece RMS yeterli
+        if (cleanedRMS > threshold * 1.2) {
           return true;
         }
         
-        // RNNoise modunda: RMS geçmezse direkt reddet
-        if (!rmsCheck) return false;
-        
-        // RNNoise modunda: Güçlü ses varsa (threshold'un 1.0x üstünde) sadece RMS yeterli
-        if (cleanedRMS > threshold * 1.0) {
-          return true; // Güçlü sesler için hemen geç
-        }
-        
-        // RNNoise modunda: ZCR veya spektral kontrol geçerse yeterli
+        // ZCR veya spektral kontrol varsa geç
         if (zcrCheck || spectralCheck) {
-          return true; // İnsan sesi karakteristikleri varsa hemen geç
+          return true;
         }
         
-        // RNNoise modunda: En az 1 kontrol yeterli (RMS zaten geçti)
-        return true;
+        // Sadece RMS geçtiyse ve diğer kontroller başarısızsa, reddet
+        // Bu sayede %100'de gerçekten hiç ses geçmez
+        return false;
       }
       
       // Standart mod: Orijinal mantık
@@ -1025,7 +1015,8 @@ export function useVoiceProcessor() {
           if (
             isCleaningUpRef.current ||
             !analyserRef.current ||
-            !originalStreamTrack
+            !originalStreamTrack ||
+            originalStreamTrack.readyState === "ended"
           )
             return;
 
@@ -1075,8 +1066,9 @@ export function useVoiceProcessor() {
             CONFIG.IMPACT_HIGH_FREQ_END
           );
 
-          // 4. Temel Eşik Hesaplama
-          let threshold = calculateThreshold(voiceThreshold);
+          // 4. Temel Eşik Hesaplama - Store'dan güncel değeri al (closure sorunu önlenir)
+          const currentVoiceThreshold = useSettingsStore.getState().voiceThreshold;
+          let threshold = calculateThreshold(currentVoiceThreshold);
 
           // 5. Adaptif Eşik (eğer aktifse - sadece Standart modda)
           if (noiseSuppressionMode === "standard" && adaptiveThreshold && noiseProfiling) {
@@ -1242,7 +1234,7 @@ export function useVoiceProcessor() {
 
             // Ardışık sessizlik algılaması veya release time geçtiyse kapat
             if (
-              consecutiveSilenceDetectionsRef.current >= 8 ||
+              consecutiveSilenceDetectionsRef.current >= 3 ||
               timeSinceLastSpeak > releaseTime
             ) {
               firstVoiceDetectionTimeRef.current = 0;
@@ -1285,7 +1277,7 @@ export function useVoiceProcessor() {
             });
           }
           // RNNoise node kontrolü kaldırıldı - sonsuz döngüyü önlemek için
-        }, 5000); // Her 5 saniyede bir kontrol et (daha az agresif)
+        }, 15000); // Her 15 saniyede bir kontrol et (CPU tasarrufu)
       } catch (err) {
         console.error("Gelişmiş Voice Processor Hatası:", err);
         if (originalStreamTrack) {
@@ -1338,7 +1330,8 @@ export function useVoiceProcessor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     localParticipant,
-    voiceThreshold,
+    // voiceThreshold ÇIKARILDI: Her checkVolume döngüsünde zaten güncel değer okunuyor
+    // ve değiştiğinde RNNoise node'unun yeniden oluşturulmasına gerek yok (WASM crash'i önler)
     noiseSuppressionMode,
     advancedNoiseReduction,
     adaptiveThreshold,

@@ -245,7 +245,7 @@
 - Add loading states for async operations
 
 ### `src/components/ActiveRoom.js`
-- Line 79-87: Audio detection could be optimized (throttle/debounce)
+- [x] Line 79-87: Audio detection could be optimized (throttle/debounce)
 - Extract `ParticipantList` and `UserCard` to separate files
 - Add error boundaries around LiveKit components
 - **Optimize**: Sadece aktif konuşanları render et, diğerlerini lazy load
@@ -376,8 +376,8 @@
 ## 💰 Cost Optimization Checklist
 
 ### Firebase Firestore
-- [ ] Replace polling with `onSnapshot` listeners (CRITICAL)
-- [ ] Move messages to subcollections (reduce read/write costs)
+- [x] Replace polling with `onSnapshot` listeners (CRITICAL)
+- [x] Move messages to subcollections (reduce read/write costs)
 - [ ] Implement message pagination (load only last 50 messages)
 - [ ] Add message limits per channel (auto-delete old messages)
 - [ ] Use client-side search only (no Firestore queries)
@@ -404,15 +404,15 @@
 
 ## 📊 Performance Checklist
 
-- [ ] Implement code splitting
-- [ ] Add lazy loading for heavy components
+- [x] Implement code splitting
+- [x] Add lazy loading for heavy components
 - [ ] Implement virtual scrolling for long message lists
 - [ ] Add memoization where needed
 - [ ] Reduce bundle size
 - [ ] Optimize re-renders
 - [ ] Implement message pagination
 - [ ] Add connection quality indicators
-- [ ] Optimize audio processing (throttle/debounce)
+- [x] Optimize audio processing (throttle/debounce)
 
 ---
 

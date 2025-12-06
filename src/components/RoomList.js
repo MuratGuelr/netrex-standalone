@@ -624,20 +624,16 @@ export default function RoomList({
                       
                       // Aynı kanala tıklanırsa toggle yap
                       if (currentChannel?.id === channel.id) {
-                        // Panel açıksa kapat, kapalıysa aç
-                        if (showChatPanel) {
-                          setShowChatPanel(false);
-                        } else {
-                          setShowChatPanel(true);
-                        }
+                        // Açık/Kapanır yapı isteği üzerine toggle davranışı:
+                        setShowChatPanel(!showChatPanel);
                       } else {
                         // Farklı kanala tıklanırsa paneli aç ve kanalı değiştir
                         setShowChatPanel(true);
                         // Önce store'u güncelle (hemen currentChannel güncellensin)
                         try {
-                          await loadChannelMessages(channel.id);
-                          // Sonra parent'a bildir
+                          // UI'da anında geri bildirim için önce seç
                           onJoinTextChannel(channel.id);
+                          await loadChannelMessages(channel.id);
                         } catch (error) {
                           console.error("Kanal mesajları yüklenirken hata:", error);
                           toast.error("Kanal açılamadı. Lütfen tekrar deneyin.");

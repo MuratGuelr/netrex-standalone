@@ -1014,7 +1014,7 @@ app.on("before-quit", (event) => {
     
     // Cleanup tamamlandı mesajını bekle
     cleanupTimeout = setTimeout(() => {
-      // 5 saniye içinde cleanup tamamlanmazsa zorla kapat
+      // 3 saniye içinde cleanup tamamlanmazsa zorla kapat
       console.warn("⚠️ Cleanup timeout, zorla kapatılıyor...");
       if (cleanupCompleteHandler) {
         ipcMain.removeListener("cleanup-complete", cleanupCompleteHandler);
@@ -1024,7 +1024,7 @@ app.on("before-quit", (event) => {
       cleanupTimeout = null;
       uIOhook.stop();
       app.exit(0);
-    }, 5000);
+    }, 3000);
   } else {
     // Pencere yoksa direkt kapat
     isCleaningUp = false;

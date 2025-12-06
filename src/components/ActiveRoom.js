@@ -1074,18 +1074,54 @@ function RoomEventsHandler({
     let electronCleanupHandler = null;
     if (typeof window !== "undefined" && window.netrex?.onAppWillQuit) {
       electronCleanupHandler = async () => {
+        console.log("🛑 App closing cleanup started...");
         try {
-          await cleanup();
-          // Cleanup tamamlandı, main process'e bildir
-          if (window.netrex?.notifyCleanupComplete) {
-            window.netrex.notifyCleanupComplete();
-            console.log("✅ Cleanup tamamlandı, main process'e bildirildi");
-          }
+          // Parallelize cleanup tasks
+          const cleanupPromise = (async () => {
+            const tasks = [];
+            
+            // 1. LiveKit Disconnect
+            if (room && room.state !== ConnectionState.Disconnected) {
+              tasks.push(
+                room.disconnect()
+                  .then(() => console.log("✅ LiveKit room disconnect edildi (app close)"))
+                  .catch((err) => console.error("❌ LiveKit disconnect hatası:", err))
+              );
+            }
+
+            // 2. Firestore Cleanup
+            if (userId && roomName && username) {
+              const presenceRef = doc(db, "room_presence", roomName);
+              const userData = { userId, username };
+              tasks.push(
+                updateDoc(presenceRef, { users: arrayRemove(userData) })
+                  .then(() => console.log("✅ Firestore presence temizlendi (app close)"))
+                  .catch((err) => {
+                    if (err.code !== "not-found") {
+                      console.error("❌ Firestore cleanup hatası:", err);
+                    }
+                  })
+              );
+            }
+
+            if (tasks.length > 0) {
+              await Promise.allSettled(tasks);
+            }
+          })();
+
+          // Race with 2 second timeout
+          await Promise.race([
+            cleanupPromise,
+            new Promise((resolve) => setTimeout(resolve, 2000))
+          ]);
+          
         } catch (error) {
           console.error("Electron cleanup hatası:", error);
-          // Hata olsa bile main process'e bildir (uygulama kapanmalı)
+        } finally {
+          // Her durumda main process'e bildir
+          console.log("🏁 Cleanup finished (or timed out), notifying main process");
           if (window.netrex?.notifyCleanupComplete) {
-            window.netrex.notifyCleanupComplete();
+             window.netrex.notifyCleanupComplete();
           }
         }
       };
@@ -1134,7 +1170,7 @@ function useAudioActivity(participant) {
 
     const cleanup = () => {
       if (raf) {
-        cancelAnimationFrame(raf);
+        clearInterval(raf); // cancelAnimationFrame -> clearInterval
         raf = null;
       }
       if (ctx && ctx.state !== "closed") {
@@ -1191,7 +1227,8 @@ function useAudioActivity(participant) {
         src.connect(analyser);
         const data = new Uint8Array(analyser.frequencyBinCount);
 
-        const loop = () => {
+        // CPU OPTİMİZASYONU: requestAnimationFrame yerine setInterval (200ms)
+        const checkActivity = () => {
           // Track hala geçerli mi kontrol et
           if (
             !currentTrack ||
@@ -1214,15 +1251,19 @@ function useAudioActivity(participant) {
             analyser.getByteFrequencyData(data);
             let sum = 0;
             for (let i = 0; i < data.length; i++) sum += data[i];
-            setIsActive(sum / data.length > 5);
-            raf = requestAnimationFrame(loop);
+            // Eşik 5 -> 8 (daha hızlı kapanma), aralık 100ms -> 75ms (daha hızlı tepki)
+            setIsActive(sum / data.length > 8);
           } catch (e) {
             // Analyser hatası - cleanup yap
             cleanup();
             setIsActive(false);
           }
         };
-        loop();
+        
+        // İlk kontrol
+        checkActivity();
+        // 75ms aralıklarla kontrol (CPU ve tepki dengesi)
+        raf = setInterval(checkActivity, 75);
       } catch (e) {
         // Audio analiz hatası - sessizce yoksay (non-critical)
         cleanup();
@@ -3255,7 +3296,7 @@ function UserCard({
             {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
             {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
               <div
-                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50 rounded-2xl"
+                className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-end pb-4 cursor-pointer z-50 rounded-2xl"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (setActiveStreamId && participant.identity) {
@@ -3263,14 +3304,34 @@ function UserCard({
                   }
                 }}
               >
-                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/avatar:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
+                {/* Canlı yayın göstergesi - üstte */}
+                <div className="absolute top-3 left-3 flex items-center gap-2">
                   <div className="relative">
                     <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
                     <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
                   </div>
-                  <span className="drop-shadow-lg">Yayına Katıl</span>
-                  <Tv size={16} className="drop-shadow-lg" />
+                  <span className="text-xs font-bold text-white/90 uppercase tracking-wider">Canlı</span>
                 </div>
+                
+                {/* Katıl butonu - modern tasarım */}
+                <button 
+                  className="relative overflow-hidden px-5 py-2.5 rounded-xl font-semibold text-white text-sm shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95 group/btn"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(99,102,241,0.95) 0%, rgba(168,85,247,0.95) 100%)',
+                  }}
+                >
+                  {/* Shimmer efekti */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700"></div>
+                  
+                  {/* Border glow */}
+                  <div className="absolute inset-0 rounded-xl border border-white/30 group-hover/btn:border-white/50 transition-colors"></div>
+                  
+                  {/* İçerik */}
+                  <div className="relative flex items-center gap-2">
+                    <Tv size={16} className="drop-shadow-lg" />
+                    <span className="drop-shadow-lg">Yayına Katıl</span>
+                  </div>
+                </button>
               </div>
             )}
           </div>

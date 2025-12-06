@@ -1,14 +1,18 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/src/store/authStore";
 import RoomList from "@/src/components/RoomList";
-import ActiveRoom from "@/src/components/ActiveRoom";
-import SettingsModal from "@/src/components/SettingsModal";
-import UpdateNotification from "@/src/components/UpdateNotification"; // EKLENDİ
-import UpdateSplash from "@/src/components/UpdateSplash"; // EKLENDİ
-import InfoModal from "@/src/components/InfoModal";
 import { Radio, Mic, Headphones } from "lucide-react";
 import { toast } from "sonner";
+
+const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
+  loading: () => <div className="h-full w-full flex items-center justify-center bg-gray-900"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div></div>,
+});
+const SettingsModal = dynamic(() => import("@/src/components/SettingsModal"));
+const UpdateNotification = dynamic(() => import("@/src/components/UpdateNotification"));
+const UpdateSplash = dynamic(() => import("@/src/components/UpdateSplash"));
+const InfoModal = dynamic(() => import("@/src/components/InfoModal"));
 
 export default function Home() {
   const {
