@@ -28,6 +28,12 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
 log.info("App starting...");
 
+// --- LIVEKIT SSL BYPASS (Kamera/Mikrofon için) ---
+// Bu komut, belirtilen HTTP adresini "Güvenli" (HTTPS gibi) kabul ettirir.
+app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://130.61.138.162:7880');
+// Ortamdan bağımsız çalışması için gerekli olabilir
+app.commandLine.appendSwitch('ignore-certificate-errors');
+
 // Ortam Değişkenlerini Yükle
 const possibleEnvPaths = [
   path.join(__dirname, ".env.local"),
@@ -50,6 +56,7 @@ require("dotenv").config({ override: false });
 const store = new Store();
 let mainWindow;
 let splashWindow = null; // Splash penceresi
+let exitSplashWindow = null; // Çıkış splash penceresi
 let authServer;
 let isRecordingMode = false;
 let tray = null; // Tray değişkeni
@@ -85,11 +92,7 @@ const getSplashHtml = () => `
   <title>Netrex</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0a0a0f;
       color: #ffffff;
@@ -103,372 +106,104 @@ const getSplashHtml = () => `
       user-select: none;
       position: relative;
     }
-    
-    /* Animated Background Gradient */
     .bg-gradient {
       position: absolute;
       inset: 0;
       background: 
         radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
+        radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.15) 0%, transparent 50%);
       animation: gradient-shift 8s ease infinite;
     }
-    
-    /* Floating Particles */
-    .particles {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-    .particle {
-      position: absolute;
-      width: 4px;
-      height: 4px;
-      background: rgba(99, 102, 241, 0.6);
-      border-radius: 50%;
-      animation: float 15s infinite ease-in-out;
-    }
-    .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
-    .particle:nth-child(2) { left: 20%; animation-delay: 2s; }
-    .particle:nth-child(3) { left: 30%; animation-delay: 4s; }
-    .particle:nth-child(4) { left: 40%; animation-delay: 1s; }
-    .particle:nth-child(5) { left: 50%; animation-delay: 3s; }
-    .particle:nth-child(6) { left: 60%; animation-delay: 5s; }
-    .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
-    .particle:nth-child(8) { left: 80%; animation-delay: 4.5s; }
-    .particle:nth-child(9) { left: 90%; animation-delay: 1.5s; }
-    
-    /* Grid Pattern */
-    .grid-overlay {
-      position: absolute;
-      inset: 0;
-      background-image: 
-        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
-      background-size: 50px 50px;
-      opacity: 0.4;
-      animation: grid-pulse 4s ease-in-out infinite;
-    }
-    
-    /* Main Container */
     .main-container {
       position: relative;
       z-index: 10;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 48px;
-      animation: fade-in-up 0.8s ease-out;
+      gap: 40px;
     }
-    
-    /* Logo Container with 3D Effect */
     .logo-container {
       position: relative;
-      perspective: 1000px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 160px;
+      height: 160px;
     }
-    
     .logo-3d {
       position: relative;
-      width: 140px;
-      height: 140px;
-      transform-style: preserve-3d;
-      animation: logo-float 6s ease-in-out infinite;
+      width: 120px;
+      height: 120px;
     }
-    
-    /* Outer Glow Rings */
-    .glow-ring-1 {
+    .glow-ring {
       position: absolute;
-      inset: -20px;
-      border: 3px solid transparent;
+      inset: -15px;
+      border: 2px solid transparent;
       border-top-color: #6366f1;
       border-right-color: #a855f7;
       border-radius: 50%;
-      animation: spin 4s linear infinite;
-      filter: blur(1px);
+      animation: spin 3s linear infinite;
     }
-    .glow-ring-2 {
-      position: absolute;
-      inset: -10px;
-      border: 2px solid transparent;
-      border-bottom-color: #818cf8;
-      border-left-color: #c084fc;
-      border-radius: 50%;
-      animation: spin-reverse 3s linear infinite;
-      filter: blur(0.5px);
-    }
-    .glow-ring-3 {
-      position: absolute;
-      inset: -30px;
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      border-radius: 50%;
-      animation: spin 5s linear infinite;
-      filter: blur(2px);
-    }
-    
-    /* Center Logo with Glassmorphism */
     .logo-center {
       position: relative;
-      width: 100px;
-      height: 100px;
+      width: 90px;
+      height: 90px;
       background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(168, 85, 247, 0.9) 100%);
-      border-radius: 24px;
+      border-radius: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 
-        0 0 40px rgba(99, 102, 241, 0.5),
-        0 0 80px rgba(168, 85, 247, 0.3),
-        inset 0 2px 10px rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      animation: logo-pulse 3s ease-in-out infinite;
+      box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
+      margin: 15px;
     }
-    
-    .logo-center::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, transparent 50%);
-      border-radius: 24px;
-      pointer-events: none;
-    }
-    
-    .logo-center::after {
-      content: '';
-      position: absolute;
-      inset: -2px;
-      background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
-      border-radius: 26px;
-      z-index: -1;
-      opacity: 0.5;
-      filter: blur(20px);
-      animation: logo-glow 2s ease-in-out infinite;
-    }
-    
     .logo-letter {
       color: white;
       font-weight: 900;
-      font-size: 48px;
+      font-size: 42px;
       text-shadow: 0 2px 20px rgba(255, 255, 255, 0.5);
-      letter-spacing: -2px;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 1;
-      line-height: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
     }
-    
-    /* Text Container */
     .text-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 20px;
-      animation: fade-in-delay 1s ease-out;
+      gap: 16px;
     }
-    
     .loading-text {
-      color: rgba(255, 255, 255, 0.95);
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-      background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: 15px;
+      color: #b5bac1;
+      font-weight: 500;
     }
-    
-    /* Modern Progress Bar */
     .progress-wrapper {
       width: 200px;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
       overflow: hidden;
-      position: relative;
-      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
     }
-    
     .progress-bar {
       height: 100%;
       width: 100%;
-      background: linear-gradient(90deg, 
-        #6366f1 0%, 
-        #818cf8 25%, 
-        #a855f7 50%, 
-        #c084fc 75%, 
-        #ec4899 100%);
-      border-radius: 10px;
-      position: relative;
-      animation: progress-shimmer 2s ease-in-out infinite;
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+      background: linear-gradient(90deg, #6366f1, #a855f7, #6366f1);
+      background-size: 200% 100%;
+      animation: progress-move 1.5s linear infinite;
+      border-radius: 4px;
     }
-    
-    .progress-bar::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, 
-        transparent 0%, 
-        rgba(255, 255, 255, 0.4) 50%, 
-        transparent 100%);
-      animation: shimmer 2s ease-in-out infinite;
-    }
-    
-    /* Animations */
-    @keyframes gradient-shift {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.8; }
-    }
-    
-    @keyframes float {
-      0%, 100% {
-        transform: translateY(100vh) translateX(0) scale(1);
-        opacity: 0;
-      }
-      10% {
-        opacity: 1;
-      }
-      90% {
-        opacity: 1;
-      }
-      100% {
-        transform: translateY(-100px) translateX(50px) scale(0.5);
-        opacity: 0;
-      }
-    }
-    
-    @keyframes grid-pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 0.6; }
-    }
-    
-    @keyframes fade-in-up {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    
-    @keyframes fade-in-delay {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    
-    @keyframes logo-float {
-      0%, 100% {
-        transform: translateY(0) rotateY(0deg);
-      }
-      50% {
-        transform: translateY(-10px) rotateY(5deg);
-      }
-    }
-    
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    
-    @keyframes spin-reverse {
-      from { transform: rotate(360deg); }
-      to { transform: rotate(0deg); }
-    }
-    
-    @keyframes logo-pulse {
-      0%, 100% {
-        transform: scale(1);
-        box-shadow: 
-          0 0 40px rgba(99, 102, 241, 0.5),
-          0 0 80px rgba(168, 85, 247, 0.3);
-      }
-      50% {
-        transform: scale(1.05);
-        box-shadow: 
-          0 0 60px rgba(99, 102, 241, 0.7),
-          0 0 100px rgba(168, 85, 247, 0.5);
-      }
-    }
-    
-    @keyframes logo-glow {
-      0%, 100% {
-        opacity: 0.5;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 0.8;
-        transform: scale(1.1);
-      }
-    }
-    
-    @keyframes progress-shimmer {
-      0% {
-        transform: translateX(-100%);
-      }
-      50% {
-        transform: translateX(0%);
-      }
-      100% {
-        transform: translateX(100%);
-      }
-    }
-    
-    @keyframes shimmer {
-      0% {
-        transform: translateX(-100%);
-      }
-      100% {
-        transform: translateX(200%);
-      }
-    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes gradient-shift { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+    @keyframes progress-move { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   </style>
 </head>
 <body>
   <div class="bg-gradient"></div>
-  <div class="grid-overlay"></div>
-  
-  <div class="particles">
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-  </div>
-  
   <div class="main-container">
     <div class="logo-container">
       <div class="logo-3d">
-        <div class="glow-ring-3"></div>
-        <div class="glow-ring-1"></div>
-        <div class="glow-ring-2"></div>
+        <div class="glow-ring"></div>
         <div class="logo-center">
           <div class="logo-letter">N</div>
         </div>
       </div>
     </div>
-    
     <div class="text-container">
       <div class="loading-text" id="loadingText">Güncellemeler kontrol ediliyor</div>
       <div class="progress-wrapper">
@@ -476,18 +211,152 @@ const getSplashHtml = () => `
       </div>
     </div>
   </div>
-  
   <script>
-    // Nokta animasyonu
     let dots = '';
     const loadingText = document.getElementById('loadingText');
     setInterval(() => {
-      if (dots === '...') {
-        dots = '';
-      } else {
-        dots += '.';
-      }
+      dots = dots === '...' ? '' : dots + '.';
       loadingText.textContent = 'Güncellemeler kontrol ediliyor' + dots;
+    }, 500);
+  </script>
+</body>
+</html>
+`;
+
+// --- EXIT SPLASH SCREEN HTML ---
+const getExitSplashHtml = () => `
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Netrex - Kapatılıyor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      position: relative;
+    }
+    .bg-gradient {
+      position: absolute;
+      inset: 0;
+      background: 
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.15) 0%, transparent 50%);
+      animation: gradient-shift 8s ease infinite;
+    }
+    .main-container {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+    }
+    .logo-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 160px;
+      height: 160px;
+    }
+    .logo-3d {
+      position: relative;
+      width: 120px;
+      height: 120px;
+    }
+    .glow-ring {
+      position: absolute;
+      inset: -15px;
+      border: 2px solid transparent;
+      border-top-color: #6366f1;
+      border-right-color: #a855f7;
+      border-radius: 50%;
+      animation: spin 3s linear infinite;
+    }
+    .logo-center {
+      position: relative;
+      width: 90px;
+      height: 90px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(168, 85, 247, 0.9) 100%);
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
+      margin: 15px;
+    }
+    .logo-letter {
+      color: white;
+      font-weight: 900;
+      font-size: 42px;
+      text-shadow: 0 2px 20px rgba(255, 255, 255, 0.5);
+    }
+    .text-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .loading-text {
+      font-size: 15px;
+      color: #b5bac1;
+      font-weight: 500;
+    }
+    .progress-wrapper {
+      width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #6366f1, #a855f7, #6366f1);
+      background-size: 200% 100%;
+      animation: progress-move 1.5s linear infinite;
+      border-radius: 4px;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes gradient-shift { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+    @keyframes progress-move { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+  <div class="main-container">
+    <div class="logo-container">
+      <div class="logo-3d">
+        <div class="glow-ring"></div>
+        <div class="logo-center">
+          <div class="logo-letter">N</div>
+        </div>
+      </div>
+    </div>
+    <div class="text-container">
+      <div class="loading-text" id="loadingText">Veriler kaydediliyor</div>
+      <div class="progress-wrapper">
+        <div class="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    let dots = '';
+    const loadingText = document.getElementById('loadingText');
+    setInterval(() => {
+      dots = dots === '...' ? '' : dots + '.';
+      loadingText.textContent = 'Veriler kaydediliyor' + dots;
     }, 500);
   </script>
 </body>
@@ -755,7 +624,7 @@ function createWindow() {
       responseHeaders: {
         ...d.responseHeaders,
         "Content-Security-Policy": [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: wss:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:;",
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: wss: http: ws:; img-src 'self' data: blob: https: http:; media-src 'self' data: blob: https: http:;",
         ],
       },
     });
@@ -979,6 +848,99 @@ let isCleaningUp = false;
 let cleanupTimeout = null;
 let cleanupCompleteHandler = null;
 
+// --- EXIT SPLASH WINDOW ---
+function createExitSplashWindow() {
+  if (exitSplashWindow && !exitSplashWindow.isDestroyed()) {
+    return exitSplashWindow;
+  }
+
+  exitSplashWindow = new BrowserWindow({
+    width: 320,
+    height: 400,
+    backgroundColor: "#0a0a0f",
+    frame: false,
+    transparent: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    center: true,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+
+  exitSplashWindow.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(getExitSplashHtml())}`
+  );
+
+  exitSplashWindow.webContents.once("did-finish-load", () => {
+    if (exitSplashWindow && !exitSplashWindow.isDestroyed()) {
+      exitSplashWindow.show();
+      exitSplashWindow.focus();
+    }
+  });
+
+  exitSplashWindow.on("closed", () => {
+    exitSplashWindow = null;
+  });
+
+  return exitSplashWindow;
+}
+
+// Splash'in minimum gösterim süresi (ms)
+const EXIT_SPLASH_MIN_DURATION = 1500;
+let exitSplashShownAt = null;
+
+function closeExitSplashAndQuit() {
+  // Minimum gösterim süresini hesapla
+  const now = Date.now();
+  const elapsed = exitSplashShownAt ? now - exitSplashShownAt : EXIT_SPLASH_MIN_DURATION;
+  const remainingTime = Math.max(0, EXIT_SPLASH_MIN_DURATION - elapsed);
+
+  // Minimum süre dolmadıysa bekle
+  if (remainingTime > 0) {
+    setTimeout(() => {
+      actuallyCloseAndQuit();
+    }, remainingTime);
+  } else {
+    actuallyCloseAndQuit();
+  }
+}
+
+function actuallyCloseAndQuit() {
+  // Cleanup state'ini sıfırla
+  isCleaningUp = false;
+  exitSplashShownAt = null;
+  
+  if (cleanupTimeout) {
+    clearTimeout(cleanupTimeout);
+    cleanupTimeout = null;
+  }
+  
+  if (cleanupCompleteHandler) {
+    ipcMain.removeListener("cleanup-complete", cleanupCompleteHandler);
+    cleanupCompleteHandler = null;
+  }
+
+  // Exit splash'i kapat
+  if (exitSplashWindow && !exitSplashWindow.isDestroyed()) {
+    exitSplashWindow.destroy();
+    exitSplashWindow = null;
+  }
+
+  // uIOhook'u durdur ve çık
+  try {
+    uIOhook.stop();
+  } catch (e) {
+    // Ignore errors
+  }
+  
+  app.exit(0);
+}
+
 app.on("before-quit", (event) => {
   // Eğer zaten cleanup yapıyorsak, tekrar başlatma
   if (isCleaningUp) {
@@ -988,6 +950,15 @@ app.on("before-quit", (event) => {
   // Cleanup başlat
   isCleaningUp = true;
   event.preventDefault(); // Kapatmayı geciktir
+
+  // Ana pencereyi gizle ve exit splash'i göster
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+  
+  // Exit splash ekranını oluştur ve göster
+  createExitSplashWindow();
+  exitSplashShownAt = Date.now(); // Splash gösterim zamanını kaydet
 
   // Renderer process'e cleanup mesajı gönder
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1000,36 +971,22 @@ app.on("before-quit", (event) => {
     
     // Cleanup tamamlandı mesajını dinle
     cleanupCompleteHandler = () => {
-      if (cleanupTimeout) {
-        clearTimeout(cleanupTimeout);
-        cleanupTimeout = null;
-      }
-      isCleaningUp = false;
-      cleanupCompleteHandler = null;
-      uIOhook.stop();
-      app.exit(0);
+      console.log("✅ Cleanup tamamlandı, uygulama kapatılıyor...");
+      closeExitSplashAndQuit();
     };
     
     ipcMain.once("cleanup-complete", cleanupCompleteHandler);
     
-    // Cleanup tamamlandı mesajını bekle
+    // Cleanup tamamlandı mesajını bekle (max 3 saniye)
     cleanupTimeout = setTimeout(() => {
-      // 3 saniye içinde cleanup tamamlanmazsa zorla kapat
-      console.warn("⚠️ Cleanup timeout, zorla kapatılıyor...");
-      if (cleanupCompleteHandler) {
-        ipcMain.removeListener("cleanup-complete", cleanupCompleteHandler);
-        cleanupCompleteHandler = null;
-      }
-      isCleaningUp = false;
-      cleanupTimeout = null;
-      uIOhook.stop();
-      app.exit(0);
+      console.warn("⚠️ Cleanup timeout (3s), zorla kapatılıyor...");
+      closeExitSplashAndQuit();
     }, 3000);
   } else {
-    // Pencere yoksa direkt kapat
-    isCleaningUp = false;
-    uIOhook.stop();
-    app.exit(0);
+    // Pencere yoksa direkt kapat (kısa gecikme ile splash görünsün)
+    setTimeout(() => {
+      closeExitSplashAndQuit();
+    }, 500);
   }
 });
 

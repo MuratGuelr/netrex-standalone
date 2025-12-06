@@ -23,9 +23,9 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
   const [tabWidths, setTabWidths] = useState({ apps: 0, screens: 0 });
   const [tabPositions, setTabPositions] = useState({ apps: 0, screens: 0 });
 
-  // Varsayılan Ayarlar (Optimize edilmiş - daha düşük kaynak kullanımı)
-  const [resolution, setResolution] = useState(720); // 720p varsayılan (480p'ye düşürülebilir)
-  const [fps, setFps] = useState(15); // 15fps varsayılan (30fps'den daha tasarruflu)
+  // Varsayılan Ayarlar
+  const [resolution, setResolution] = useState(1080); // 1080p varsayılan
+  const [fps, setFps] = useState(30); // 30fps varsayılan
 
   // YENİ: Ses Paylaşım Ayarı
   const [withAudio, setWithAudio] = useState(true);
@@ -96,10 +96,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
     [sources, selectedSourceId]
   );
 
-  useEffect(() => {
-    if (resolution === 1080) setFps(5);
-    else if (resolution === 720 && fps === 5) setFps(30);
-  }, [resolution]);
+  // Artık kendi sunucu olduğu için FPS kısıtlaması yok
 
   if (!isOpen) return null;
 
@@ -410,12 +407,16 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                     <Monitor size={16} className="text-indigo-400" /> Çözünürlük
                   </label>
                   <div className="space-y-3">
-                    {[480, 720, 1080].map((res) => (
+                    {[
+                      { value: 720, label: "720p", desc: "HD" },
+                      { value: 1080, label: "1080p", desc: "Full HD" },
+                      { value: 1440, label: "2K", desc: "QHD" },
+                    ].map((res) => (
                       <button
-                        key={res}
-                        onClick={() => setResolution(res)}
+                        key={res.value}
+                        onClick={() => setResolution(res.value)}
                         className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 group relative overflow-hidden ${
-                          resolution === res
+                          resolution === res.value
                             ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
                             : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
                         }`}
@@ -423,7 +424,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                         {/* Hover glow */}
                         <div
                           className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
-                            resolution === res
+                            resolution === res.value
                               ? "opacity-100"
                               : "opacity-0 group-hover:opacity-100"
                           }`}
@@ -432,15 +433,16 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                         <div className="flex flex-col items-start relative z-10">
                           <span
                             className={`font-bold text-lg transition-colors duration-300 ${
-                              resolution === res
+                              resolution === res.value
                                 ? "text-white"
                                 : "text-[#dbdee1] group-hover:text-white"
                             }`}
                           >
-                            {res}p
+                            {res.label}
                           </span>
+                          <span className="text-xs text-[#949ba4]">{res.desc}</span>
                         </div>
-                        {resolution === res && (
+                        {resolution === res.value && (
                           <div className="w-5 h-5 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] flex items-center justify-center relative z-10 animate-scaleIn">
                             <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
                             <div className="absolute inset-0 bg-indigo-500/30 rounded-full animate-ping"></div>
@@ -458,54 +460,49 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                     (FPS)
                   </label>
                   <div className="space-y-3">
-                    {[5, 15, 30].map((f) => {
-                      const isDisabled = resolution === 1080 && f > 5;
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setFps(f)}
-                          disabled={isDisabled}
-                          className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 relative overflow-hidden ${
-                            isDisabled
-                              ? "opacity-30 cursor-not-allowed glass-strong border-white/5 grayscale"
-                              : fps === f
-                              ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
-                              : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
+                    {[
+                      { value: 15, label: "15 FPS", desc: "Tasarruf" },
+                      { value: 30, label: "30 FPS", desc: "Normal" },
+                      { value: 60, label: "60 FPS", desc: "Akıcı" },
+                    ].map((f) => (
+                      <button
+                        key={f.value}
+                        onClick={() => setFps(f.value)}
+                        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 relative overflow-hidden group ${
+                          fps === f.value
+                            ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
+                            : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
+                        }`}
+                      >
+                        {/* Hover glow */}
+                        <div
+                          className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
+                            fps === f.value
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100"
                           }`}
-                        >
-                          {/* Hover glow */}
-                          {!isDisabled && (
-                            <div
-                              className={`absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 transition-opacity duration-300 ${
-                                fps === f
-                                  ? "opacity-100"
-                                  : "opacity-0 group-hover:opacity-100"
-                              }`}
-                            ></div>
-                          )}
+                        ></div>
 
-                          <div className="flex flex-col items-start relative z-10">
-                            <span
-                              className={`font-bold text-lg transition-colors duration-300 ${
-                                fps === f && !isDisabled
-                                  ? "text-white"
-                                  : isDisabled
-                                  ? "text-[#949ba4]"
-                                  : "text-[#dbdee1] group-hover:text-white"
-                              }`}
-                            >
-                              {f} FPS
-                            </span>
+                        <div className="flex flex-col items-start relative z-10">
+                          <span
+                            className={`font-bold text-lg transition-colors duration-300 ${
+                              fps === f.value
+                                ? "text-white"
+                                : "text-[#dbdee1] group-hover:text-white"
+                            }`}
+                          >
+                            {f.label}
+                          </span>
+                          <span className="text-xs text-[#949ba4]">{f.desc}</span>
+                        </div>
+                        {fps === f.value && (
+                          <div className="w-5 h-5 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] flex items-center justify-center relative z-10 animate-scaleIn">
+                            <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <div className="absolute inset-0 bg-indigo-500/30 rounded-full animate-ping"></div>
                           </div>
-                          {!isDisabled && fps === f && (
-                            <div className="w-5 h-5 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] flex items-center justify-center relative z-10 animate-scaleIn">
-                              <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
-                              <div className="absolute inset-0 bg-indigo-500/30 rounded-full animate-ping"></div>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -611,16 +608,16 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 </div>
               )}
 
-              {/* Uyarı - Enhanced */}
-              {resolution === 1080 && (
-                <div className="p-3 bg-gradient-to-r from-yellow-500/15 to-orange-500/15 border border-yellow-500/30 rounded-xl text-[11px] text-yellow-200 flex items-center gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent"></div>
+              {/* Uyarı - Yüksek kalite */}
+              {resolution === 1440 && fps === 60 && (
+                <div className="p-3 bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-xl text-[11px] text-amber-200 flex items-center gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent"></div>
                   <Zap
                     size={14}
-                    className="shrink-0 relative z-10 text-yellow-300"
+                    className="shrink-0 relative z-10 text-amber-300"
                   />
                   <span className="relative z-10">
-                    Ücretsiz plan limitleri: 1080p için FPS 5 ile sınırlıdır.
+                    2K @ 60fps yüksek bant genişliği kullanır. Bağlantı sorunları yaşarsanız kaliteyi düşürün.
                   </span>
                 </div>
               )}

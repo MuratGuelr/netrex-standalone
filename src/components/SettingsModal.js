@@ -1352,6 +1352,75 @@ function VoiceSettings() {
                   }
                 />
               </div>
+
+              {/* Video Kalite Ayarları */}
+              <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
+                <h5 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                  Video Kalitesi
+                </h5>
+
+                {/* Çözünürlük Seçimi */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+                    Çözünürlük
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: "720p", label: "720p", desc: "HD" },
+                      { value: "1080p", label: "1080p", desc: "Full HD" },
+                      { value: "2k", label: "2K", desc: "QHD" },
+                    ].map((res) => (
+                      <button
+                        key={res.value}
+                        onClick={() => settings.setVideoResolution(res.value)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className={`p-3 rounded-xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-1 focus:outline-none ${
+                          settings.videoResolution === res.value
+                            ? "border-indigo-500 bg-indigo-500/10 text-white"
+                            : "border-white/10 bg-white/5 text-[#949ba4] hover:border-white/20 hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="font-bold text-sm">{res.label}</span>
+                        <span className="text-[10px] opacity-70">{res.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* FPS Seçimi */}
+                <div className="mb-2">
+                  <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+                    Kare Hızı (FPS)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 5, label: "5 FPS", desc: "Tasarruf" },
+                      { value: 30, label: "30 FPS", desc: "Normal" },
+                      { value: 60, label: "60 FPS", desc: "Akıcı" },
+                    ].map((fps) => (
+                      <button
+                        key={fps.value}
+                        onClick={() => settings.setVideoFrameRate(fps.value)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className={`p-3 rounded-xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-1 focus:outline-none ${
+                          settings.videoFrameRate === fps.value
+                            ? "border-indigo-500 bg-indigo-500/10 text-white"
+                            : "border-white/10 bg-white/5 text-[#949ba4] hover:border-white/20 hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="font-bold text-sm">{fps.label}</span>
+                        <span className="text-[10px] opacity-70">{fps.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#949ba4] mt-3 flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5">⚠️</span>
+                  <span>Yüksek kalite daha fazla bant genişliği kullanır. Bağlantı sorunları yaşarsanız kaliteyi düşürün.</span>
+                </p>
+              </div>
             </>
           ) : (
             // Kamera Devre Dışı İse Gösterilecek Mesaj

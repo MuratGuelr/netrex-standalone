@@ -56,6 +56,8 @@ export const useSettingsStore = create(
 
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
+      videoResolution: "1080p", // "720p" | "1080p" | "2k"
+      videoFrameRate: 30, // 5 | 30 | 60
 
       // Online/Offline durumu
       userStatus: "online", // "online" | "offline" | "invisible"
@@ -167,6 +169,8 @@ export const useSettingsStore = create(
 
       // Kamera ayarları
       setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),
+      setVideoResolution: (resolution) => set({ videoResolution: resolution }),
+      setVideoFrameRate: (fps) => set({ videoFrameRate: fps }),
 
       // Online/Offline ayarları
       setUserStatus: (status) => set({ userStatus: status }),

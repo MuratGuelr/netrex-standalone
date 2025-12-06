@@ -3503,7 +3503,7 @@ function BottomControls({
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
   const [isMuted, setMuted] = useState(false);
-  const { profileColor, enableCamera, videoId } = useSettingsStore();
+  const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate } = useSettingsStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);
@@ -3748,14 +3748,14 @@ function BottomControls({
 
     try {
       if (newState) {
-        // ÜCRETSİZ PLAN İÇİN DENGELİ (KALİTE + TASARRUF) AYARLAR
-        const videoConstraints = {
-          resolution: { width: 480, height: 360 }, // Dengeli çözünürlük (küçük UI'da yeterli netlik)
-          frameRate: 18, // Biraz daha akıcı görünüm (15fps'den iyi)
-          maxBitrate: 120000, // 120kbps (tasarruf + okunabilirlik dengesi)
-          simulcast: false, // Simulcast bandwidth artırır, kapalı
-          deviceId: videoId !== "default" ? videoId : undefined,
+        // Çözünürlük ayarlarını belirle
+        const resolutionMap = {
+          "720p": { width: 1280, height: 720, bitrate: 1500000 },
+          "1080p": { width: 1920, height: 1080, bitrate: 3000000 },
+          "2k": { width: 2560, height: 1440, bitrate: 5000000 },
         };
+        const selectedResolution = resolutionMap[videoResolution] || resolutionMap["1080p"];
+        const selectedFps = videoFrameRate || 30;
 
         // Önce eski video track'i kaldır (eğer varsa)
         const existingVideoTracks = localParticipant
@@ -3775,15 +3775,14 @@ function BottomControls({
           }
         }
 
-        // Kamera stream'i al - Minimum bandwidth kullanımı
+        // Kamera stream'i al - Kullanıcı ayarlarına göre
         const constraints = {
           video: {
             deviceId: videoId !== "default" ? { exact: videoId } : undefined,
-            width: { ideal: 320, max: 320 },
-            height: { ideal: 240, max: 240 },
-            frameRate: { ideal: 12, max: 12 }, // Minimum bandwidth
-            // Bandwidth tasarrufu için ekstra constraint'ler
-            facingMode: "user", // Ön kamera (daha verimli)
+            width: { ideal: selectedResolution.width, max: selectedResolution.width },
+            height: { ideal: selectedResolution.height, max: selectedResolution.height },
+            frameRate: { ideal: selectedFps, max: selectedFps },
+            facingMode: "user",
           },
         };
 
@@ -3794,16 +3793,15 @@ function BottomControls({
           throw new Error("Video track alınamadı");
         }
 
-        // Video track'i ücretsiz plan için optimize et (dengeli kalite)
+        // Video track'i kullanıcı ayarlarına göre optimize et
         if (videoTrack.getCapabilities) {
           const capabilities = videoTrack.getCapabilities();
-          // Mümkünse daha düşük ayarlar uygula
           if (videoTrack.applyConstraints) {
             try {
               await videoTrack.applyConstraints({
-                width: { ideal: 320, max: 320 },
-                height: { ideal: 240, max: 240 },
-                frameRate: { ideal: 18, max: 18 },
+                width: { ideal: selectedResolution.width, max: selectedResolution.width },
+                height: { ideal: selectedResolution.height, max: selectedResolution.height },
+                frameRate: { ideal: selectedFps, max: selectedFps },
               });
             } catch (err) {
               console.warn("Video track constraint uygulanamadı:", err);
@@ -3819,20 +3817,22 @@ function BottomControls({
             height: settings.height,
             frameRate: settings.frameRate,
             deviceId: settings.deviceId,
+            requestedResolution: videoResolution,
+            requestedFps: selectedFps,
           });
         }
 
-        // Video track'i LiveKit'e publish et - Minimum bandwidth kullanımı
+        // Video track'i LiveKit'e publish et - Kullanıcı ayarlarına göre
         let publication;
         try {
           publication = await localParticipant.publishTrack(videoTrack, {
             source: Track.Source.Camera,
             videoEncoding: {
-              maxBitrate: 50000, // 50kbps (minimum bandwidth)
-              maxFramerate: 12, // 12 fps (daha az bandwidth)
+              maxBitrate: selectedResolution.bitrate,
+              maxFramerate: selectedFps,
             },
-            videoCodec: "vp8", // VP8 daha az bandwidth kullanır
-            simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
+            videoCodec: "vp8",
+            simulcast: false,
           });
         } catch (publishError) {
           console.error("❌ Track publish hatası:", publishError);
@@ -3898,8 +3898,8 @@ function BottomControls({
                 {
                   source: Track.Source.Camera,
                   videoEncoding: {
-                    maxBitrate: 120000,
-                    maxFramerate: 18,
+                    maxBitrate: selectedResolution.bitrate,
+                    maxFramerate: selectedFps,
                   },
                   videoCodec: "vp8",
                   simulcast: false,
@@ -4082,7 +4082,7 @@ function BottomControls({
       // Toggle bittiğini işaretle (event listener'ları tekrar aktif et)
       isTogglingCameraRef.current = false;
     }
-  }, [enableCamera, videoId, localParticipant, setIsCameraOn, isCameraOn]);
+  }, [enableCamera, videoId, videoResolution, videoFrameRate, localParticipant, setIsCameraOn, isCameraOn]);
 
   const startScreenShare = async ({
     resolution,
@@ -4125,7 +4125,9 @@ function BottomControls({
       }
 
       const { width, height } =
-        resolution === 1080
+        resolution === 1440
+          ? { width: 2560, height: 1440 }
+          : resolution === 1080
           ? { width: 1920, height: 1080 }
           : resolution === 720
           ? { width: 1280, height: 720 }
@@ -4199,20 +4201,24 @@ function BottomControls({
       }
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
-      // Minimum bandwidth kullanımı için optimize edilmiş bitrate
-      // 1080p: 200kbps, 720p: 150kbps, 480p: 100kbps
+      
+      // Çözünürlüğe göre bitrate ayarla (yüksek kalite için)
+      // 2K: 8Mbps, 1080p: 5Mbps, 720p: 2.5Mbps
       const maxBitrate =
-        resolution === 1080 ? 200000 : resolution === 720 ? 150000 : 100000;
-
-      // Frame rate'i de düşür (daha az bandwidth)
-      const optimizedFps = Math.min(fps, 15); // Max 15 fps
+        resolution === 1440
+          ? 8000000
+          : resolution === 1080
+          ? 5000000
+          : resolution === 720
+          ? 2500000
+          : 1500000;
 
       await localParticipant.publishTrack(videoTrack, {
         name: "screen_share_video",
         source: Track.Source.ScreenShare,
         videoCodec: "vp8",
-        simulcast: false, // Simulcast çok bandwidth kullanır, kapalı
-        videoEncoding: { maxBitrate, maxFramerate: optimizedFps },
+        simulcast: false,
+        videoEncoding: { maxBitrate, maxFramerate: fps },
       });
 
       const audioTrack = stream.getAudioTracks()[0];
