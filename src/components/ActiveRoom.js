@@ -443,13 +443,16 @@ function SettingsUpdater() {
     noiseSuppression,
     echoCancellation,
     autoGainControl,
+    noiseSuppressionMode, // EKLENDI
   } = useSettingsStore();
+
   const prevSettingsRef = useRef({
     audioInputId,
     videoId,
     noiseSuppression,
     echoCancellation,
     autoGainControl,
+    noiseSuppressionMode, // EKLENDI
   });
   const isUpdatingRef = useRef(false);
 
@@ -467,6 +470,7 @@ function SettingsUpdater() {
         noiseSuppression,
         echoCancellation,
         autoGainControl,
+        noiseSuppressionMode,
       };
       return;
     }
@@ -476,7 +480,8 @@ function SettingsUpdater() {
       prevSettingsRef.current.audioInputId !== audioInputId ||
       prevSettingsRef.current.noiseSuppression !== noiseSuppression ||
       prevSettingsRef.current.echoCancellation !== echoCancellation ||
-      prevSettingsRef.current.autoGainControl !== autoGainControl;
+      prevSettingsRef.current.autoGainControl !== autoGainControl ||
+      prevSettingsRef.current.noiseSuppressionMode !== noiseSuppressionMode;
 
     const videoSettingsChanged = prevSettingsRef.current.videoId !== videoId;
 
@@ -490,6 +495,7 @@ function SettingsUpdater() {
         noiseSuppression,
         echoCancellation,
         autoGainControl,
+        noiseSuppressionMode,
       };
       return;
     }
@@ -507,6 +513,12 @@ function SettingsUpdater() {
           if (micPublication?.track) {
             const oldTrack = micPublication.track;
 
+            // ÖNEMLİ: Eğer yapay zeka (krisp) veya standart gürültü engelleme açıksa,
+            // tarayıcının kendi native gürültü engellemesini KAPAT.
+            // İkisi birden çalışırsa ses kesilir ("alo" -> "lo" sorunu).
+            const shouldUseNativeNoiseSuppression = 
+              noiseSuppression && (noiseSuppressionMode === "none" || !noiseSuppressionMode);
+
             // Yeni constraint'lerle mikrofon stream'i al
             const constraints = {
               audio: {
@@ -515,7 +527,7 @@ function SettingsUpdater() {
                     ? { exact: audioInputId }
                     : undefined,
                 echoCancellation,
-                noiseSuppression,
+                noiseSuppression: shouldUseNativeNoiseSuppression,
                 autoGainControl,
               },
             };
