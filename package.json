@@ -2,6 +2,7 @@
   "name": "netrex",
   "version": "2.4.0",
   "description": "Secure Desktop Voice Chat Application",
+  "homepage": "./",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",

@@ -15,32 +15,32 @@ const CONFIG = {
   BUFFER_SIZE: 2048, // 4096 -> 2048
 
   // KRISP BENZERİ TEPKİ AYARLARI
-  RELEASE_TIME: 250,
-  RELEASE_TIME_RNNOISE: 450,
-  ATTACK_TIME: 5,
-  ATTACK_TIME_RNNOISE: 2, 
-  MIN_VOICE_DURATION: 30,
-  MIN_VOICE_DURATION_RNNOISE: 15,
-  MAX_SHORT_NOISE_DURATION: 20,
-  CHECK_INTERVAL: 100, // 50ms -> 100ms (CPU kullanımını yarıya indirir)
+  RELEASE_TIME: 350,   // 250 -> 350 (Kelime aralarında kesilmeyi önle)
+  RELEASE_TIME_RNNOISE: 500, // 450 -> 500
+  ATTACK_TIME: 1,      // 5 -> 1 (Ses algılanır algılanmaz aç)
+  ATTACK_TIME_RNNOISE: 1, // 2 -> 1
+  MIN_VOICE_DURATION: 10, // 30 -> 10 (Kısa sesleri de yakala)
+  MIN_VOICE_DURATION_RNNOISE: 10, // 15 -> 10
+  MAX_SHORT_NOISE_DURATION: 50, // 20 -> 50 (Yanlışlıkla gürültü sanılan kısa seslere tolerans)
+  CHECK_INTERVAL: 80,  // 100 -> 80 (Daha sık kontrol et)
 
   // Smoothing (Dengeli)
-  RMS_SMOOTHING: 0.15, // Biraz daha yüksek (daha az işlem)
-  SPECTRAL_SMOOTHING: 0.3,
+  RMS_SMOOTHING: 0.1,  // 0.15 -> 0.1 (Daha hızlı RMS tepkisi)
+  SPECTRAL_SMOOTHING: 0.2, // 0.3 -> 0.2
   THRESHOLD_SMOOTHING: 0.05,
 
   // KRISP BENZERİ EŞİK DEĞERLERİ
-  MIN_RMS: 0.002,
+  MIN_RMS: 0.001,      // 0.002 -> 0.001 (Daha düşük sesleri algıla)
   MAX_RMS: 0.12,
 
   // Gürültü Profili - Azaltılmış
-  NOISE_PROFILE_SAMPLES: 50, // 100 -> 50
-  NOISE_UPDATE_INTERVAL: 5000, // 3000 -> 5000
+  NOISE_PROFILE_SAMPLES: 50,
+  NOISE_UPDATE_INTERVAL: 5000,
   NOISE_PROFILE_THRESHOLD: 0.003,
 
   // Ses Bandı
-  VOICE_LOW_FREQ: 100,
-  VOICE_HIGH_FREQ: 7000,
+  VOICE_LOW_FREQ: 80,   // 100 -> 80 (Daha kalın sesleri de al)
+  VOICE_HIGH_FREQ: 8000, // 7000 -> 8000
 
   // Rüzgar/Arka plan gürültü frekansları
   WIND_LOW_FREQ: 20,
@@ -49,25 +49,25 @@ const CONFIG = {
   // Darbe tespiti - Basitleştirilmiş
   IMPACT_DETECTION_ENABLED: true,
   IMPACT_HIGH_FREQ_START: 5000,
-  IMPACT_HIGH_FREQ_END: 16000, // 18000 -> 16000
-  IMPACT_TRANSIENT_RATIO: 2.2,
-  IMPACT_MIN_RMS_FACTOR: 1.12,
-  IMPACT_ZCR_THRESHOLD: 0.19,
+  IMPACT_HIGH_FREQ_END: 16000,
+  IMPACT_TRANSIENT_RATIO: 2.5, // 2.2 -> 2.5 (Daha az agresif darbe tespiti)
+  IMPACT_MIN_RMS_FACTOR: 1.2,
+  IMPACT_ZCR_THRESHOLD: 0.25, // 0.19 -> 0.25 (Daha yüksek eşik)
   IMPACT_HOLD_MS: 85,
   IMPACT_WEAK_VOICE_RATIO: 0.45,
   IMPACT_MIN_DURATION: 5,
 
   // Zero-Crossing Rate
-  ZCR_THRESHOLD_MIN: 0.015,
-  ZCR_THRESHOLD_MAX: 0.16,
+  ZCR_THRESHOLD_MIN: 0.01,  // 0.015 -> 0.01 (Daha geniş aralık)
+  ZCR_THRESHOLD_MAX: 0.25,  // 0.16 -> 0.25
 
   // Spektral Gating - DEVRİŞİK BIRAKILDI (CPU yoğun)
-  SPECTRAL_GATING_ENABLED: false, // true -> false (büyük CPU tasarrufu)
-  SPECTRAL_SUBTRACTION_FACTOR: 2.0,
-  MIN_SPECTRAL_RATIO: 1.3,
+  SPECTRAL_GATING_ENABLED: false,
+  SPECTRAL_SUBTRACTION_FACTOR: 1.5, // 2.0 -> 1.5 (Daha az agresif çıkarma)
+  MIN_SPECTRAL_RATIO: 1.1, // 1.3 -> 1.1 (Daha toleranslı)
 
   // Voice Quality Scoring
-  MIN_VOICE_QUALITY: 0.35,
+  MIN_VOICE_QUALITY: 0.2, // 0.35 -> 0.2 (Daha düşük kalite eşiği)
 
   INIT_DELAY: 1500,
 };

@@ -28,13 +28,7 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
 log.info("App starting...");
 
-// --- LIVEKIT SSL BYPASS (Kamera/Mikrofon için) ---
-// Bu komut, belirtilen HTTP adresini "Güvenli" (HTTPS gibi) kabul ettirir.
-app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://130.61.138.162:7880');
-// Ortamdan bağımsız çalışması için gerekli olabilir
-app.commandLine.appendSwitch('ignore-certificate-errors');
-
-// Ortam Değişkenlerini Yükle
+// Ortam Değişkenlerini Yükle (SSL bypass'tan ÖNCE yüklenmeli)
 const possibleEnvPaths = [
   path.join(__dirname, ".env.local"),
   path.join(__dirname, "../.env.local"),
@@ -48,10 +42,35 @@ if (app.isPackaged) {
 for (const envPath of possibleEnvPaths) {
   if (fs.existsSync(envPath)) {
     require("dotenv").config({ path: envPath, override: false });
+    console.log("✅ .env.local yüklendi:", envPath);
     break;
   }
 }
 require("dotenv").config({ override: false });
+
+// --- LIVEKIT SSL BYPASS (Kamera/Mikrofon için) ---
+// SSL sertifikası olmayan LiveKit sunucuları için güvenli olarak işaretle
+const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+if (livekitUrl) {
+  // wss:// veya ws:// -> http:// veya https:// dönüşümü
+  const httpUrl = livekitUrl
+    .replace('wss://', 'https://')
+    .replace('ws://', 'http://');
+  
+  // Ayrıca http versiyonunu da ekle (SSL olmayan sunucular için)
+  const insecureUrl = livekitUrl
+    .replace('wss://', 'http://')
+    .replace('ws://', 'http://');
+  
+  console.log("🔐 LiveKit SSL bypass URL'leri:", httpUrl, insecureUrl);
+  
+  // Her iki URL'yi de güvenli olarak işaretle
+  app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', `${httpUrl},${insecureUrl}`);
+} else {
+  console.warn("⚠️ NEXT_PUBLIC_LIVEKIT_URL tanımlı değil!");
+}
+// Ortamdan bağımsız çalışması için gerekli olabilir
+app.commandLine.appendSwitch('ignore-certificate-errors');
 
 const store = new Store();
 let mainWindow;
@@ -618,6 +637,11 @@ function createWindow() {
   });
 
   if (app.isPackaged) mainWindow.setMenu(null);
+  
+  // DevTools (Sadece dev ortamında otomatik aç)
+  if (!app.isPackaged) {
+    // mainWindow.webContents.openDevTools();
+  }
 
   session.defaultSession.webRequest.onHeadersReceived((d, c) => {
     c({
