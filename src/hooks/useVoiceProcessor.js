@@ -10,27 +10,28 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 
 const CONFIG = {
   // Analiz Ayarları - CPU OPTİMİZASYONU
-  FFT_SIZE: 1024, // 2048 -> 1024 (CPU kullanımını yarıya indirir)
+  FFT_SIZE: 1024, // 2048 -> 1024 (21ms buffer @ 48kHz)
   SAMPLE_RATE: 48000,
-  BUFFER_SIZE: 2048, // 4096 -> 2048
+  BUFFER_SIZE: 2048,
 
   // KRISP BENZERİ TEPKİ AYARLARI
-  RELEASE_TIME: 350,   // 250 -> 350 (Kelime aralarında kesilmeyi önle)
-  RELEASE_TIME_RNNOISE: 500, // 450 -> 500
-  ATTACK_TIME: 1,      // 5 -> 1 (Ses algılanır algılanmaz aç)
-  ATTACK_TIME_RNNOISE: 1, // 2 -> 1
-  MIN_VOICE_DURATION: 10, // 30 -> 10 (Kısa sesleri de yakala)
-  MIN_VOICE_DURATION_RNNOISE: 10, // 15 -> 10
-  MAX_SHORT_NOISE_DURATION: 50, // 20 -> 50 (Yanlışlıkla gürültü sanılan kısa seslere tolerans)
-  CHECK_INTERVAL: 80,  // 100 -> 80 (Daha sık kontrol et)
+  RELEASE_TIME: 350,
+  RELEASE_TIME_RNNOISE: 500,
+  ATTACK_TIME: 1,      // Hemen aç
+  ATTACK_TIME_RNNOISE: 1,
+  MIN_VOICE_DURATION: 10,
+  MIN_VOICE_DURATION_RNNOISE: 10,
+  MAX_SHORT_NOISE_DURATION: 50,
+  // ÖNEMLİ DÜZELTME: Interval buffer boyutundan (21ms) büyük olmamalı yoksa veri kaybı olur!
+  CHECK_INTERVAL: 20,  // 80 -> 20 (FFT_SIZE ile uyumlu, kör nokta yok)
 
   // Smoothing (Dengeli)
-  RMS_SMOOTHING: 0.1,  // 0.15 -> 0.1 (Daha hızlı RMS tepkisi)
-  SPECTRAL_SMOOTHING: 0.2, // 0.3 -> 0.2
+  RMS_SMOOTHING: 0.05,  // 0.1 -> 0.05 (Çok daha hızlı tepki)
+  SPECTRAL_SMOOTHING: 0.1, // 0.2 -> 0.1 (Spektrum analizi daha hassas)
   THRESHOLD_SMOOTHING: 0.05,
 
   // KRISP BENZERİ EŞİK DEĞERLERİ
-  MIN_RMS: 0.001,      // 0.002 -> 0.001 (Daha düşük sesleri algıla)
+  MIN_RMS: 0.001,
   MAX_RMS: 0.12,
 
   // Gürültü Profili - Azaltılmış
@@ -39,8 +40,8 @@ const CONFIG = {
   NOISE_PROFILE_THRESHOLD: 0.003,
 
   // Ses Bandı
-  VOICE_LOW_FREQ: 80,   // 100 -> 80 (Daha kalın sesleri de al)
-  VOICE_HIGH_FREQ: 8000, // 7000 -> 8000
+  VOICE_LOW_FREQ: 80,
+  VOICE_HIGH_FREQ: 8000,
 
   // Rüzgar/Arka plan gürültü frekansları
   WIND_LOW_FREQ: 20,
@@ -50,24 +51,24 @@ const CONFIG = {
   IMPACT_DETECTION_ENABLED: true,
   IMPACT_HIGH_FREQ_START: 5000,
   IMPACT_HIGH_FREQ_END: 16000,
-  IMPACT_TRANSIENT_RATIO: 2.5, // 2.2 -> 2.5 (Daha az agresif darbe tespiti)
+  IMPACT_TRANSIENT_RATIO: 2.5,
   IMPACT_MIN_RMS_FACTOR: 1.2,
-  IMPACT_ZCR_THRESHOLD: 0.25, // 0.19 -> 0.25 (Daha yüksek eşik)
+  IMPACT_ZCR_THRESHOLD: 0.25,
   IMPACT_HOLD_MS: 85,
   IMPACT_WEAK_VOICE_RATIO: 0.45,
   IMPACT_MIN_DURATION: 5,
 
   // Zero-Crossing Rate
-  ZCR_THRESHOLD_MIN: 0.01,  // 0.015 -> 0.01 (Daha geniş aralık)
-  ZCR_THRESHOLD_MAX: 0.25,  // 0.16 -> 0.25
+  ZCR_THRESHOLD_MIN: 0.01,
+  ZCR_THRESHOLD_MAX: 0.25,
 
   // Spektral Gating - DEVRİŞİK BIRAKILDI (CPU yoğun)
   SPECTRAL_GATING_ENABLED: false,
-  SPECTRAL_SUBTRACTION_FACTOR: 1.5, // 2.0 -> 1.5 (Daha az agresif çıkarma)
-  MIN_SPECTRAL_RATIO: 1.1, // 1.3 -> 1.1 (Daha toleranslı)
+  SPECTRAL_SUBTRACTION_FACTOR: 1.5,
+  MIN_SPECTRAL_RATIO: 1.1,
 
   // Voice Quality Scoring
-  MIN_VOICE_QUALITY: 0.2, // 0.35 -> 0.2 (Daha düşük kalite eşiği)
+  MIN_VOICE_QUALITY: 0.2,
 
   INIT_DELAY: 1500,
 };
@@ -114,6 +115,7 @@ export function useVoiceProcessor() {
   const analyserRef = useRef(null);
   const cloneStreamRef = useRef(null);
   const workletNodeRef = useRef(null);
+  const rawAnalyserRef = useRef(null); // Raw audio analyser (RNNoise gecikmesini bypass etmek için)
 
   // Ses işleme ref'leri
   const highPassFilterRef = useRef(null);
@@ -604,6 +606,7 @@ export function useVoiceProcessor() {
       compressorRef,
       gainNodeRef,
       workletNodeRef,
+      rawAnalyserRef,
     ];
     
     // RNNoise'u sadece preserve edilmeyecekse temizle
@@ -766,6 +769,14 @@ export function useVoiceProcessor() {
         // 3. GELİŞMİŞ AUDIO ZİNCİRİ OLUŞTUR
         const source = ctx.createMediaStreamSource(cloneStreamRef.current);
         sourceRef.current = source;
+
+        // RAW ANALYSER (Gecikmesiz VAD tetikleme için)
+        // RNNoise'un attack süresini beklemeden kapıyı açmak için ham sesi analiz et
+        const rawAnalyser = ctx.createAnalyser();
+        rawAnalyser.fftSize = CONFIG.FFT_SIZE;
+        rawAnalyser.smoothingTimeConstant = 0; // Anlık tepki için smoothing yok
+        source.connect(rawAnalyser);
+        rawAnalyserRef.current = rawAnalyser;
 
         let currentNode = source;
 
@@ -1038,6 +1049,14 @@ export function useVoiceProcessor() {
 
           // 1. RMS Hesaplama
           const rms = calculateRMS(timeDataArray);
+          
+          // Raw RMS Hesaplama (Gecikmesiz)
+          let rawRms = rms;
+          if (rawAnalyserRef.current) {
+            const rawTimeData = new Uint8Array(rawAnalyserRef.current.fftSize);
+            rawAnalyserRef.current.getByteTimeDomainData(rawTimeData);
+            rawRms = calculateRMS(rawTimeData);
+          }
 
           // RMS Yumuşatma
           smoothedRmsRef.current =
@@ -1156,7 +1175,8 @@ export function useVoiceProcessor() {
 
             // 2. Güçlü ses kontrolü (RNNoise modunda daha düşük eşik)
             const strongVoiceMultiplier = noiseSuppressionMode === "krisp" ? 0.9 : 1.35;
-            const isStrongVoice = smoothedRmsRef.current > threshold * strongVoiceMultiplier;
+            // Raw RMS kullanarak gecikmesiz kontrol
+            const isStrongVoice = Math.max(smoothedRmsRef.current, rawRms) > threshold * strongVoiceMultiplier;
 
             // 3. Attack time geçti mi? (RNNoise modunda çok daha kısa)
             const attackTime = noiseSuppressionMode === "krisp" 
@@ -1174,7 +1194,10 @@ export function useVoiceProcessor() {
             if (noiseSuppressionMode === "krisp") {
               // RNNoise modunda: Ses algılandığında HEMEN aç (ilk harfi kaçırmamak için)
               // Sadece çok düşük sesler için bekle
-              if (smoothedRmsRef.current > threshold * 0.7 || hasVoiceCharacteristics || hasAttackTime) {
+              // RNNoise modunda: Ses algılandığında HEMEN aç (ilk harfi kaçırmamak için)
+              // Sadece çok düşük sesler için bekle
+              // Raw RMS ile kontrol et (RNNoise gecikmesini bypass et)
+              if (rawRms > threshold * 0.5 || smoothedRmsRef.current > threshold * 0.7 || hasVoiceCharacteristics || hasAttackTime) {
                 if (!originalStreamTrack.enabled) {
                   originalStreamTrack.enabled = true;
                 }

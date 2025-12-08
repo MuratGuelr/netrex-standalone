@@ -81,6 +81,60 @@ let isRecordingMode = false;
 let tray = null; // Tray değişkeni
 let isQuitting = false; // Gerçekten çıkıyor muyuz kontrolü
 
+// --- SINGLE INSTANCE LOCK ---
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Lock alınamadıysa (zaten çalışıyorsa), uyarı gösterip kapat
+  app.whenReady().then(() => {
+    const warningWindow = new BrowserWindow({
+      width: 400,
+      height: 320,
+      frame: false,
+      transparent: false,
+      backgroundColor: "#0a0a0f",
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+      center: true
+    });
+
+    warningWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(getAlreadyRunningHtml())}`
+    );
+
+    warningWindow.once('ready-to-show', () => {
+      warningWindow.show();
+      warningWindow.focus();
+      
+      // 3 saniye sonra kapat ve çık
+      setTimeout(() => {
+        warningWindow.close();
+        app.exit(0);
+      }, 3000);
+    });
+  });
+  
+} else {
+  app.on("second-instance", () => {
+    // Biri ikinci bir örneği çalıştırmaya çalıştı, bu pencereye odaklanalım.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    } else if (splashWindow) {
+      if (splashWindow.isMinimized()) splashWindow.restore();
+      splashWindow.focus();
+    }
+  });
+}
+
 // --- MODERN HTML ŞABLONU ---
 const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
 <!DOCTYPE html>
@@ -382,6 +436,7 @@ const getExitSplashHtml = () => `
 </html>
 `;
 
+
 // --- AUTH SERVER ---
 const startLocalAuthServer = () => {
   return new Promise((resolve) => {
@@ -442,6 +497,97 @@ const startLocalAuthServer = () => {
     });
   });
 };
+
+// --- ALREADY RUNNING HTML ---
+const getAlreadyRunningHtml = () => `
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Netrex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      position: relative;
+    }
+    .bg-gradient {
+      position: absolute;
+      inset: 0;
+      background: 
+        radial-gradient(circle at 20% 30%, rgba(220, 38, 38, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(239, 68, 68, 0.15) 0%, transparent 50%);
+      animation: gradient-shift 8s ease infinite;
+    }
+    .main-container {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+    }
+    .icon-container {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 30px rgba(220, 38, 38, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .warning-icon {
+      font-size: 40px;
+    }
+    .text-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-align: center;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #9ca3af;
+      max-width: 250px;
+      line-height: 1.5;
+    }
+    @keyframes gradient-shift { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+  <div class="main-container">
+    <div class="icon-container">
+      <div class="warning-icon">⚠️</div>
+    </div>
+    <div class="text-container">
+      <div class="title">Netrex Zaten Çalışıyor</div>
+      <div class="subtitle">Uygulamanın başka bir örneği zaten açık durumda. Bu pencere otomatik olarak kapanacak.</div>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
 
 // --- TRAY OLUŞTURMA ---
 function createTray() {
@@ -826,6 +972,8 @@ autoUpdater.on("update-downloaded", (info) => {
 });
 
 app.on("ready", async () => {
+  if (!gotTheLock) return; // İkinci instance ise normal başlatmayı yapma
+
   // Windows'ta bildirim app adını düzgün göstermek için
   if (process.platform === "win32") {
     app.setAppUserModelId("Netrex Client");
