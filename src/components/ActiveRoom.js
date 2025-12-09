@@ -3024,7 +3024,7 @@ function UserCard({
   return (
     <div
       onContextMenu={onContextMenu}
-      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-500 group cursor-context-menu ${
+      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-500 group cursor-context-menu bg-gray-900 ${
         isSpeaking
           ? "speaking-card border-2 shadow-glow glass-strong animate-user-card-active"
           : isMuted || isDeafened
@@ -3072,7 +3072,7 @@ function UserCard({
           }}
         />
       )}
-      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
+      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10 ">
         {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
         {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
         {/* Eğer kullanıcı kendi screen share'ini açtıysa, kendi kameranın gösterilmesi gerekiyor */}

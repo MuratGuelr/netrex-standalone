@@ -1366,10 +1366,8 @@ function VoiceSettings() {
                     Çözünürlük
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: "720p", label: "720p", desc: "HD" },
-                      { value: "1080p", label: "1080p", desc: "Full HD" },
-                      { value: "2k", label: "2K", desc: "QHD" },
+                    {[ 
+                      { value: "240p", label: "240p", desc: "Temel" },
                     ].map((res) => (
                       <button
                         key={res.value}
@@ -1395,9 +1393,9 @@ function VoiceSettings() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { value: 5, label: "5 FPS", desc: "Tasarruf" },
-                      { value: 30, label: "30 FPS", desc: "Normal" },
-                      { value: 60, label: "60 FPS", desc: "Akıcı" },
+                      { value: 10, label: "10 FPS", desc: "Düşük" },
+                      { value: 15, label: "15 FPS", desc: "Normal" },
+                      { value: 18, label: "18 FPS", desc: "Yüksek" },
                     ].map((fps) => (
                       <button
                         key={fps.value}

@@ -11,6 +11,7 @@ import {
   Rocket,
   Volume2,
   VolumeX,
+  Info,
 } from "lucide-react";
 
 export default function ScreenShareModal({ isOpen, onClose, onStart }) {
@@ -24,12 +25,19 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
   const [tabPositions, setTabPositions] = useState({ apps: 0, screens: 0 });
 
   // Varsayılan Ayarlar
-  const [resolution, setResolution] = useState(1080); // 1080p varsayılan
+  const [resolution, setResolution] = useState(720); // 720p varsayılan
   const [fps, setFps] = useState(30); // 30fps varsayılan
 
   // YENİ: Ses Paylaşım Ayarı
   const [withAudio, setWithAudio] = useState(true);
   const [audioMode, setAudioMode] = useState("system"); // "system" | "app" - Ekran için sistem, uygulama için uygulama
+
+  // 1080p seçildiğinde FPS'i 15'e düşür (Kısıtlama)
+  useEffect(() => {
+    if (resolution === 1080 && fps > 15) {
+      setFps(15);
+    }
+  }, [resolution, fps]);
 
   // Modal açıldığında kaynakları yükle
   useEffect(() => {
@@ -408,9 +416,9 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                   </label>
                   <div className="space-y-3">
                     {[
+                      { value: 480, label: "480p", desc: "SD" },
                       { value: 720, label: "720p", desc: "HD" },
                       { value: 1080, label: "1080p", desc: "Full HD" },
-                      { value: 1440, label: "2K", desc: "QHD" },
                     ].map((res) => (
                       <button
                         key={res.value}
@@ -461,15 +469,20 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                   </label>
                   <div className="space-y-3">
                     {[
-                      { value: 15, label: "15 FPS", desc: "Tasarruf" },
+                      { value: 5, label: "5 FPS", desc: "Minimum" },
+                      { value: 15, label: "15 FPS", desc: "Düşük" },
                       { value: 30, label: "30 FPS", desc: "Normal" },
-                      { value: 60, label: "60 FPS", desc: "Akıcı" },
-                    ].map((f) => (
+                    ].map((f) => {
+                      const isDisabled = resolution === 1080 && f.value > 15;
+                      return (
                       <button
                         key={f.value}
-                        onClick={() => setFps(f.value)}
+                        onClick={() => !isDisabled && setFps(f.value)}
+                        disabled={isDisabled}
                         className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-500 relative overflow-hidden group ${
-                          fps === f.value
+                          isDisabled
+                            ? "opacity-50 grayscale cursor-not-allowed border-white/5 bg-white/5"
+                            : fps === f.value
                             ? "gradient-primary border-indigo-400/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] scale-105"
                             : "glass-strong border-white/20 hover:border-indigo-500/40 hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 hover:shadow-soft-lg hover:scale-[1.02]"
                         }`}
@@ -502,7 +515,8 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                           </div>
                         )}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -608,16 +622,16 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 </div>
               )}
 
-              {/* Uyarı - Yüksek kalite */}
-              {resolution === 1440 && fps === 60 && (
-                <div className="p-3 bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-xl text-[11px] text-amber-200 flex items-center gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent"></div>
-                  <Zap
+              {/* Uyarı - 1080p Limit */}
+              {resolution === 1080 && (
+                <div className="p-3 bg-gradient-to-r from-indigo-500/15 to-purple-500/15 border border-indigo-500/30 rounded-xl text-[11px] text-indigo-200 flex items-center gap-2 shadow-soft backdrop-blur-sm animate-fadeIn relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent"></div>
+                  <Info
                     size={14}
-                    className="shrink-0 relative z-10 text-amber-300"
+                    className="shrink-0 relative z-10 text-indigo-300"
                   />
                   <span className="relative z-10">
-                    2K @ 60fps yüksek bant genişliği kullanır. Bağlantı sorunları yaşarsanız kaliteyi düşürün.
+                    1080p çözünürlük için kare hızı 15 FPS ile sınırlandırılmıştır.
                   </span>
                 </div>
               )}
