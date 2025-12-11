@@ -246,10 +246,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <div className="text-[11px] text-white font-medium">Netrex</div>
                 <div className="text-[10px] text-[#949ba4]">v{process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}</div>
               </div>
-              <div className="text-[8px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 font-bold border border-green-500/20">
-                ONLINE
-              </div>
-            </div>
+          </div>
           </div>
         </div>
         <div className="flex-1 bg-gradient-to-br from-nds-bg-tertiary to-nds-bg-primary relative flex flex-col min-w-0">
@@ -727,6 +724,59 @@ function ApplicationSettings() {
           </div>
         </div>
       </div>
+
+      {/* Test Simulation Button (Development Only) */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card mt-4">
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+          <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+            <div className="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <Zap size={14} className="text-cyan-400" />
+            </div>
+            Geliştirici Araçları
+          </h4>
+          
+          <button
+            onClick={() => {
+              // 1. Available
+              window.dispatchEvent(
+                new CustomEvent("NETREX_TEST_UPDATE", {
+                  detail: { status: "available", progress: 0 },
+                })
+              );
+
+              // 2. Download Simulation
+              let p = 0;
+              const interval = setInterval(() => {
+                p += 5;
+                if (p > 100) {
+                  clearInterval(interval);
+                  // 3. Downloaded
+                  window.dispatchEvent(
+                    new CustomEvent("NETREX_TEST_UPDATE", {
+                      detail: { status: "downloaded", progress: 100 },
+                    })
+                  );
+                } else {
+                  window.dispatchEvent(
+                    new CustomEvent("NETREX_TEST_UPDATE", {
+                      detail: { status: "downloading", progress: p },
+                    })
+                  );
+                }
+              }, 200);
+            }}
+            className="w-full bg-[#1e1f22] hover:bg-[#2b2d31] border border-white/10 hover:border-cyan-500/30 rounded-xl p-3 flex items-center justify-center gap-2 text-cyan-400 text-sm font-semibold transition-all duration-300 relative z-10 group/btn"
+          >
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+            <span>Güncelleme Bildirimini Test Et (Simülasyon)</span>
+            <div className="ml-auto opacity-0 group-hover/btn:opacity-100 transition-opacity">
+              <ChevronRight size={14} />
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

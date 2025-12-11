@@ -1960,6 +1960,7 @@ export default function ActiveRoom({
             isCameraOn={isCameraOn}
             setIsCameraOn={setIsCameraOn}
             stopScreenShare={stopScreenShare}
+            chatPosition={chatPosition}
           />
         )}
       />
@@ -3649,11 +3650,13 @@ function BottomControls({
   isCameraOn,
   setIsCameraOn,
   stopScreenShare,
+  chatPosition,
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
   const [isMuted, setMuted] = useState(false);
   const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate } = useSettingsStore();
+  const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);
@@ -4442,29 +4445,20 @@ function BottomControls({
         onClose={() => setShowScreenShareModal(false)}
         onStart={startScreenShare}
       />
-      <div className="h-controls bg-gradient-to-t from-[#0e0f12] via-[#12131a] to-transparent flex items-center justify-center shrink-0 select-none relative overflow-visible py-3">
-        {/* Animated top border glow */}
-        <div className="absolute top-0 left-0 right-0 h-px">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/20 to-transparent animate-pulse-slow" />
-        </div>
-        
-        {/* Background ambient glow */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[150px] bg-gradient-to-t from-indigo-500/[0.08] via-purple-500/[0.04] to-transparent blur-[80px]" />
-          <div className="absolute bottom-0 left-1/3 w-[300px] h-[100px] bg-cyan-500/[0.05] blur-[60px]" />
-          <div className="absolute bottom-0 right-1/3 w-[300px] h-[100px] bg-pink-500/[0.04] blur-[60px]" />
-        </div>
-        
-        {/* Kontrol Butonları Container */}
-        <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 relative z-10 rounded-2xl sm:rounded-3xl backdrop-blur-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)]">
-          
+      
+      {/* Floating Control Bar Container - Absolute Overlay */}
+      <div className={`h-controls absolute bottom-0 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none pb-12 transition-all duration-300 ${!showChatPanel || chatPosition !== "left" ? "left-0" : "left-[380px]"} ${!showChatPanel || chatPosition !== "right" ? "right-0" : "right-[380px]"}`}>
+        {/* Kontrol Butonları - Floating Glass Style */}
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 relative z-10 rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+          {/* Inner Glow */}
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
+
           {/* Ses Kontrolleri Grubu */}
-          <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-white/[0.03]">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <ControlButton
               isActive={!isMuted}
-              activeIcon={<Mic size={18} className="sm:w-5 sm:h-5" />}
-              inactiveIcon={<MicOff size={18} className="sm:w-5 sm:h-5" />}
+              activeIcon={<Mic size={20} className="sm:w-5 sm:h-5" />}
+              inactiveIcon={<MicOff size={20} className="sm:w-5 sm:h-5" />}
               onClick={toggleMute}
               tooltip={isMuted ? "Susturmayı Kaldır" : "Sustur"}
               danger={isMuted}
@@ -4472,8 +4466,8 @@ function BottomControls({
             />
             <ControlButton
               isActive={!isDeafened}
-              activeIcon={<Headphones size={18} className="sm:w-5 sm:h-5" />}
-              inactiveIcon={<VolumeX size={18} className="sm:w-5 sm:h-5" />}
+              activeIcon={<Headphones size={20} className="sm:w-5 sm:h-5" />}
+              inactiveIcon={<VolumeX size={20} className="sm:w-5 sm:h-5" />}
               onClick={toggleDeaf}
               tooltip={isDeafened ? "Sağırlaştırmayı Kaldır" : "Sağırlaştır"}
               danger={isDeafened}
@@ -4481,20 +4475,20 @@ function BottomControls({
           </div>
           
           {/* Ayırıcı */}
-          <div className="w-px h-6 sm:h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent mx-0.5 sm:mx-1" />
+          <div className="w-px h-8 bg-white/10 mx-1"></div>
           
           {/* Video Kontrolleri Grubu */}
-          <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-white/[0.03]">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             {/* Kamera Butonu */}
             <button
               onClick={toggleCamera}
               disabled={!enableCamera}
-              className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
+              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
                 !enableCamera
-                  ? "opacity-40 cursor-not-allowed bg-[#15151a] border border-red-500/20 text-red-400/60"
+                  ? "opacity-40 cursor-not-allowed bg-white/5 border border-white/5 text-white/40"
                   : isCameraOn
-                  ? "bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700 text-white shadow-[0_0_24px_rgba(99,102,241,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_0_32px_rgba(99,102,241,0.5)] active:scale-95"
-                  : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
+                  ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 hover:shadow-[0_0_25px_rgba(255,255,255,0.4)]"
+                  : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
               }`}
               title={
                 !enableCamera
@@ -4504,12 +4498,8 @@ function BottomControls({
                   : "Kamerayı Aç"
               }
             >
-              {/* Shine effect on active */}
-              {isCameraOn && enableCamera && (
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-              )}
               <div className="relative z-10">
-                {isCameraOn ? <Video size={18} className="sm:w-5 sm:h-5" /> : <VideoOff size={18} className="sm:w-5 sm:h-5" />}
+                {isCameraOn ? <Video size={20} className="sm:w-5 sm:h-5" /> : <VideoOff size={20} className="sm:w-5 sm:h-5" />}
               </div>
             </button>
             
@@ -4523,28 +4513,17 @@ function BottomControls({
                     setShowScreenShareModal(true);
                   }
                 }}
-                className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
+                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
                   isScreenSharing
-                    ? "bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 text-white shadow-[0_0_24px_rgba(34,197,94,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_0_32px_rgba(34,197,94,0.5)] active:scale-95"
-                    : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
+                    ? "bg-[#23a559] text-white shadow-[0_0_20px_rgba(35,165,89,0.3)] hover:bg-[#1b8746] hover:scale-105 hover:shadow-[0_0_25px_rgba(35,165,89,0.4)]"
+                    : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
                 }`}
                 title={
                   isScreenSharing ? "Ekran Paylaşımı Seçenekleri" : "Ekran Paylaş"
                 }
               >
-                {/* Pulse ring when active */}
-                {isScreenSharing && (
-                  <>
-                    <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-green-400/20 animate-ping opacity-75" style={{ animationDuration: '2s' }} />
-                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                  </>
-                )}
                 <div className="relative z-10">
-                  {isScreenSharing ? (
-                    <Monitor size={18} className="sm:w-5 sm:h-5" />
-                  ) : (
-                    <Monitor size={18} className="sm:w-5 sm:h-5" />
-                  )}
+                  <Monitor size={20} className="sm:w-5 sm:h-5" />
                 </div>
               </button>
 
@@ -4552,7 +4531,7 @@ function BottomControls({
               {showScreenShareMenu && isScreenSharing && (
                 <div
                   ref={screenShareMenuRef}
-                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[99999] w-60 animate-scaleIn origin-bottom backdrop-blur-2xl bg-gradient-to-br from-[#1a1b1f]/95 via-[#141518]/95 to-[#0e0f12]/95 overflow-hidden border border-white/10"
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-[99999] w-64 animate-scaleIn origin-bottom bg-[#111214] border border-white/10 overflow-hidden"
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -4561,54 +4540,32 @@ function BottomControls({
                     e.stopPropagation();
                   }}
                 >
-                  {/* Top glow line */}
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-                  
-                  {/* Header */}
-                  <div className="px-4 py-3 border-b border-white/5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-xs font-medium text-white/70">Yayın Aktif</span>
+                  <div className="p-1.5 space-y-1">
+                    <div className="px-3 py-2 flex items-center gap-2 mb-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-white/90">Yayın Aktif</span>
                     </div>
-                  </div>
 
-                  <div className="p-2">
                     <button
                       onClick={() => {
                         setShowScreenShareMenu(false);
                         setShowScreenShareModal(true);
                       }}
-                      className="w-full px-3 py-2.5 rounded-xl text-left text-sm font-medium text-white/90 hover:bg-gradient-to-r hover:from-indigo-500/15 hover:to-purple-500/15 transition-all duration-200 flex items-center gap-3 group/item"
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/20">
-                        <Monitor size={16} className="text-indigo-400" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="block">Ekranı Değiştir</span>
-                        <span className="text-xs text-white/40">Farklı bir pencere seç</span>
-                      </div>
-                      <ChevronRight
-                        size={16}
-                        className="text-white/30 group-hover/item:text-white/70 group-hover/item:translate-x-1 transition-all duration-200"
-                      />
+                      <Monitor size={16} />
+                      Ekranı Değiştir
                     </button>
-
-                    <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-1.5" />
 
                     <button
                       onClick={() => {
                         setShowScreenShareMenu(false);
                         stopScreenShare();
                       }}
-                      className="w-full px-3 py-2.5 rounded-xl text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all duration-200 flex items-center gap-3 group/item"
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                        <MonitorOff size={16} className="text-red-400" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="block">Paylaşımı Durdur</span>
-                        <span className="text-xs text-red-400/50">Yayını sonlandır</span>
-                      </div>
+                      <MonitorOff size={16} />
+                      Paylaşımı Durdur
                     </button>
                   </div>
                 </div>
@@ -4617,17 +4574,15 @@ function BottomControls({
           </div>
           
           {/* Ayırıcı */}
-          <div className="w-px h-6 sm:h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent mx-0.5 sm:mx-1" />
+          <div className="w-px h-8 bg-white/10 mx-1"></div>
           
           {/* Çıkış butonu */}
           <button
             onClick={onLeave}
-            className="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-red-500/15 to-red-600/10 border border-red-500/30 text-red-400 hover:from-red-500/25 hover:to-red-600/20 hover:border-red-500/50 hover:text-red-300 hover:shadow-[0_0_24px_rgba(239,68,68,0.3)] transition-all duration-300 active:scale-95 group relative overflow-hidden"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-all duration-300 active:scale-95 group relative overflow-hidden"
             title="Bağlantıyı Kes"
           >
-            {/* Hover glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-red-500/0 via-red-400/10 to-red-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <PhoneOff size={18} className="sm:w-5 sm:h-5 relative z-10" />
+            <PhoneOff size={20} className="sm:w-5 sm:h-5 relative z-10" />
           </button>
         </div>
       </div>
@@ -4654,20 +4609,16 @@ function ControlButton({
       onClick={handleClick}
       title={tooltip}
       disabled={disabled}
-      className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
+      className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
         disabled
-          ? "opacity-40 cursor-not-allowed bg-[#15151a] border border-red-500/20 text-red-400/60"
+          ? "opacity-40 cursor-not-allowed bg-white/5 border border-white/5 text-white/40"
           : danger
-          ? "bg-gradient-to-br from-red-500/15 to-red-600/10 border border-red-500/30 text-red-400 hover:from-red-500/25 hover:to-red-600/20 hover:border-red-500/50 hover:text-red-300 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] active:scale-95"
+          ? "bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95"
           : isActive
-          ? "bg-[#15151a] border border-white/10 text-white hover:bg-[#1e1f24] hover:border-white/20 active:scale-95"
-          : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
+          ? "bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-white/20 active:scale-95"
+          : "bg-[#1e1f22] border border-white/5 text-[#b5bac1] hover:bg-white hover:text-black hover:border-white hover:shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-95"
       }`}
     >
-      {/* Hover shine effect */}
-      {!disabled && !danger && (
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 pointer-events-none" />
-      )}
       
       {/* Icon Container */}
       <div className="relative z-10">
@@ -4679,11 +4630,6 @@ function ControlButton({
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-[70%] h-[2px] bg-red-400/50 rotate-45 rounded-full" />
         </div>
-      )}
-      
-      {/* Danger glow on hover */}
-      {danger && !disabled && (
-        <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-red-500/0 to-red-500/0 group-hover:from-red-500/10 group-hover:to-red-600/5 transition-all duration-300 pointer-events-none" />
       )}
     </button>
   );

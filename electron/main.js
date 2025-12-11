@@ -156,6 +156,13 @@ const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
   </html>
 `;
 
+// --- ICON PATH HELPER ---
+const getIconPath = () => {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "logo.ico")
+    : path.join(__dirname, "../public/logo.ico");
+};
+
 // --- SPLASH SCREEN HTML (Animated SVG Version) ---
 const getSplashHtml = (logoPath) => `
 <!DOCTYPE html>
@@ -341,7 +348,7 @@ const getSplashHtml = (logoPath) => `
       color: rgba(255, 255, 255, 0.5);
       font-weight: 500;
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: 4px;
     }
     
@@ -564,7 +571,7 @@ const getExitSplashHtml = (logoPath) => `
       color: rgba(255, 255, 255, 0.5);
       font-weight: 500;
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: 4px;
     }
     
@@ -1859,6 +1866,7 @@ function createSplashWindow() {
       contextIsolation: true,
       sandbox: true,
     },
+    icon: getIconPath(),
   });
 
   // Logo yolunu hesapla
@@ -1934,6 +1942,7 @@ function createWindow() {
       sandbox: false,
       backgroundThrottling: false,
     },
+    icon: getIconPath(), // İkonu ekle
   });
 
   if (app.isPackaged) mainWindow.setMenu(null);
@@ -2217,6 +2226,7 @@ function createExitSplashWindow() {
       contextIsolation: true,
       sandbox: true,
     },
+    icon: getIconPath(),
   });
 
   exitSplashWindow.loadURL(

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback, memo } from "react";
+import { createPortal } from "react-dom";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { useChatStore } from "@/src/store/chatStore";
@@ -284,8 +285,8 @@ export default function ChatView({ channelId, username, userId }) {
   const handleContextMenu = useCallback((e, msg, isInSequence) => {
     e.preventDefault();
     setContextMenu({ 
-      x: e.pageX, 
-      y: e.pageY, 
+      x: e.clientX, 
+      y: e.clientY, 
       message: msg,
       isInSequence: isInSequence || false
     });
@@ -802,10 +803,16 @@ export default function ChatView({ channelId, username, userId }) {
       )}
 
       {/* SAĞ TIK MENÜSÜ */}
-      {contextMenu && (
+      {contextMenu && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed glass-strong border border-white/10 rounded-xl w-56 py-2 shadow-soft-lg z-50 text-[#dbdee1] text-sm animate-scaleIn origin-top-left"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className={`fixed glass-strong border border-white/10 rounded-xl w-56 py-2 shadow-soft-lg z-[9999] text-[#dbdee1] text-sm animate-scaleIn ${
+            contextMenu.y + 220 > window.innerHeight ? "origin-bottom-left" : "origin-top-left"
+          }`}
+          style={{ 
+            top: contextMenu.y + 220 > window.innerHeight ? 'auto' : contextMenu.y,
+            bottom: contextMenu.y + 220 > window.innerHeight ? window.innerHeight - contextMenu.y : 'auto',
+            left: contextMenu.x 
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <div
@@ -845,7 +852,8 @@ export default function ChatView({ channelId, username, userId }) {
               )}
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

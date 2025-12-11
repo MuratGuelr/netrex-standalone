@@ -164,6 +164,28 @@ export default function RoomList({
     };
   }, [startTextChannelListener]);
 
+  // Responsive user list limit
+  const [maxVisibleUsers, setMaxVisibleUsers] = useState(7);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const height = window.innerHeight;
+      if (height < 700) {
+        setMaxVisibleUsers(4);
+      } else if (height < 900) {
+        setMaxVisibleUsers(7);
+      } else {
+        setMaxVisibleUsers(12);
+      }
+    };
+
+    // Initial check
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Room presence'leri dinle ve yeni kullanıcı girişlerinde bildirim göster
   const { desktopNotifications, notifyOnJoin } = useSettingsStore();
   const prevPresenceRef = useRef({});
@@ -589,7 +611,7 @@ export default function RoomList({
                     {/* Kullanıcı listesi - Kanalın altında */}
                     {userCount > 0 && (
                       <div className="ml-4 mt-1 space-y-0.5 mb-1 border-l-2 border-white/5 pl-3">
-                        {activeUsers.slice(0, 4).map((activeUser, idx) => (
+                        {activeUsers.slice(0, maxVisibleUsers).map((activeUser, idx) => (
                           <div
                             key={activeUser.userId || idx}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors duration-200 group/user"
@@ -610,9 +632,9 @@ export default function RoomList({
                           </div>
                         ))}
                         {/* Fazla kullanıcı varsa "+X" göster */}
-                        {userCount > 4 && (
+                        {userCount > maxVisibleUsers && (
                           <div className="px-2 py-1 text-[10px] text-[#5c5e66] font-medium">
-                            +{userCount - 4} kişi daha
+                            +{userCount - maxVisibleUsers} kişi daha
                           </div>
                         )}
                       </div>
