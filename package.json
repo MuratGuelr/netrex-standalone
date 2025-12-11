@@ -1,6 +1,6 @@
 {
   "name": "netrex",
-  "version": "2.5.0",
+  "version": "3.0.0",
   "description": "Secure Desktop Voice Chat Application",
   "homepage": "./",
   "main": "electron/main.js",
@@ -32,6 +32,10 @@
       {
         "from": "public/logo.ico",
         "to": "logo.ico"
+      },
+      {
+        "from": "public/logo.png",
+        "to": "logo.png"
       },
       {
         "from": "public/rnnoise.wasm",
@@ -67,6 +71,7 @@
     "electron-store": "^8.1.0",
     "electron-updater": "^6.6.2",
     "firebase": "^11.0.2",
+    "framer-motion": "^12.23.26",
     "livekit-client": "latest",
     "livekit-server-sdk": "latest",
     "lucide-react": "^0.300.0",

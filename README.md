@@ -2,7 +2,7 @@
 
 **Netrex**, Discord benzeri modern bir masaüstü sesli sohbet ve metin mesajlaşma uygulamasıdır. Electron, Next.js, Firebase ve LiveKit teknolojileri kullanılarak geliştirilmiş, güvenli ve kullanıcı dostu bir iletişim platformudur.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)

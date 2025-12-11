@@ -62,6 +62,7 @@ import {
   arrayUnion,
   arrayRemove,
 } from "firebase/firestore";
+import { generateLiveKitIdentity } from "@/src/utils/deviceId";
 
 // --- STYLES ---
 const styleInjection = `
@@ -848,11 +849,11 @@ function RoomEventsHandler({
         notifyOnJoin &&
         participant &&
         !participant.isLocal &&
-        participant.identity !== user?.displayName
+        participant.name !== user?.displayName
       ) {
         showNotification(
           "Kullanıcı Katıldı",
-          `${participant.identity || "Bir kullanıcı"} ${
+          `${participant.name || "Bir kullanıcı"} ${
             roomName ? `"${roomName}"` : ""
           } odasına katıldı`,
           false
@@ -868,11 +869,11 @@ function RoomEventsHandler({
         notifyOnLeave &&
         participant &&
         !participant.isLocal &&
-        participant.identity !== user?.displayName
+        participant.name !== user?.displayName
       ) {
         showNotification(
           "Kullanıcı Ayrıldı",
-          `${participant.identity || "Bir kullanıcı"} ${
+          `${participant.name || "Bir kullanıcı"} ${
             roomName ? `"${roomName}"` : ""
           } odasından ayrıldı`,
           false
@@ -1454,7 +1455,12 @@ export default function ActiveRoom({
     (async () => {
       try {
         if (window.netrex) {
-          const t = await window.netrex.getLiveKitToken(roomName, username);
+          // Generate persistent identity using userId
+          // This prevents ghost participants when users reconnect
+          const identity = generateLiveKitIdentity(userId);
+          
+          // Get token with persistent identity and display name
+          const t = await window.netrex.getLiveKitToken(roomName, identity, username);
           setToken(t);
 
           // 20 saniye içinde bağlantı kurulamazsa hata göster
@@ -1601,9 +1607,27 @@ export default function ActiveRoom({
   // Token yoksa loading göster
   if (!token) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-[#313338] gap-4">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-sm font-medium">Kanala Bağlanılıyor...</span>
+      <div className="flex flex-col items-center justify-center h-full bg-[#0a0a0c] relative overflow-hidden">
+        {/* Animated background */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[100px] animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[80px] animate-pulse" style={{ animationDelay: '1s' }} />
+        </div>
+        
+        {/* Content */}
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          {/* Spinner with glow */}
+          <div className="relative">
+            <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
+            <div className="relative w-12 h-12 sm:w-14 sm:h-14 border-3 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+          </div>
+          
+          {/* Text */}
+          <div className="text-center">
+            <p className="text-white font-semibold text-sm sm:text-base mb-1">Kanala Bağlanılıyor</p>
+            <p className="text-[#5c5e66] text-xs sm:text-sm">Lütfen bekleyin...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1618,15 +1642,35 @@ export default function ActiveRoom({
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
       data-lk-theme="default"
-      className="flex-1 flex flex-col bg-[#313338]"
-      connectOptions={{ autoSubscribe: true, dynacast: true }}
+      className="flex-1 flex flex-col bg-gradient-to-b from-[#1a1b1f] to-[#0e0f12]"
+      // Quota-Efficient Connection Options
+      connectOptions={{ 
+        autoSubscribe: true, 
+        // Adaptive streaming for lower bandwidth usage
+        dynacast: true,
+        // Faster participant timeout (seconds) - helps clear ghost participants quicker
+        // Note: This affects server-side participant timeout
+        peerConnectionTimeout: 10000, // 10 seconds to establish WebRTC connection
+      }}
+      // Room options for robust reconnection handling
       options={{
         audioCaptureDefaults: {
           echoCancellation,
           noiseSuppression,
           autoGainControl,
         },
+        // Enable automatic reconnection
         reconnect: true,
+        // Disconnect cleanly when window closes
+        disconnectOnPageLeave: true,
+        // Stop tracks when disconnecting (prevents lingering audio)
+        stopLocalTrackOnUnpublish: true,
+        // Adaptive stream for bandwidth efficiency
+        adaptiveStream: true,
+      }}
+      // Handle disconnect event immediately
+      onDisconnected={(reason) => {
+        console.log("🔌 LiveKitRoom disconnected:", reason);
       }}
     >
       <GlobalChatListener
@@ -1647,64 +1691,91 @@ export default function ActiveRoom({
 
       {/* LiveKit bağlantısı kurulana kadar loading overlay */}
       {!hasConnectedOnce && !connectionError && (
-        <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-medium mt-4">
-            Bağlantı sağlanana kadar bekleniyor...
-          </span>
+        <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md">
+          {/* Animated background */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse" />
+            <div className="absolute bottom-1/3 right-1/3 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }} />
+          </div>
+          
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center">
+            {/* Spinner with glow */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-indigo-500/30 rounded-full blur-2xl animate-pulse" />
+              <div className="relative w-14 h-14 border-[3px] border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+            </div>
+            
+            {/* Text */}
+            <h3 className="text-white font-semibold text-base sm:text-lg mb-2">Bağlantı Kuruluyor</h3>
+            <p className="text-[#5c5e66] text-sm">Lütfen bekleyin...</p>
+          </div>
         </div>
       )}
 
       {/* İlk bağlantı hatası (sadece timeout veya token hatası varsa) */}
       {connectionError && !hasConnectedOnce && (
-        <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
-          <div className="bg-red-500/20 p-4 rounded-lg border border-red-500/50 max-w-md text-center">
-            <h2 className="text-xl font-bold mb-2 text-red-400">
-              Bağlantı Hatası
-            </h2>
-            <p className="text-gray-300 mb-4">{connectionError}</p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => {
-                  setConnectionError(null);
-                  setHasConnectedOnce(false);
-                  hasConnectedOnceRef.current = false;
-                  // Token'ı yeniden al
-                  if (window.netrex) {
-                    window.netrex
-                      .getLiveKitToken(roomName, username)
-                      .then((t) => {
-                        setToken(t);
-                        // Yeni timeout başlat
-                        if (connectionTimeoutRef.current) {
-                          clearTimeout(connectionTimeoutRef.current);
-                        }
-                        connectionTimeoutRef.current = setTimeout(() => {
-                          if (!hasConnectedOnceRef.current) {
-                            setConnectionError(
-                              "Odaya bağlanılamadı. Lütfen tekrar deneyin."
-                            );
+        <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4">
+          {/* Animated background */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-red-500/10 rounded-full blur-[120px] animate-pulse" />
+          </div>
+          
+          {/* Error Card */}
+          <div className="relative z-10 w-full max-w-md">
+            {/* Card glow */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-3xl blur-xl opacity-60" />
+            
+            {/* Card */}
+            <div className="relative bg-gradient-to-br from-[#1a1b1e]/95 to-[#111214]/95 backdrop-blur-xl rounded-2xl border border-red-500/20 p-6 sm:p-8 text-center">
+              {/* Icon */}
+              <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center border border-red-500/20">
+                <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              
+              <h2 className="text-xl font-bold mb-2 text-white">Bağlantı Hatası</h2>
+              <p className="text-[#949ba4] mb-6 text-sm">{connectionError}</p>
+              
+              <div className="flex gap-3 justify-center flex-wrap">
+                <button
+                  onClick={() => {
+                    setConnectionError(null);
+                    setHasConnectedOnce(false);
+                    hasConnectedOnceRef.current = false;
+                    if (window.netrex) {
+                      const identity = generateLiveKitIdentity(userId);
+                      window.netrex
+                        .getLiveKitToken(roomName, identity, username)
+                        .then((t) => {
+                          setToken(t);
+                          if (connectionTimeoutRef.current) {
+                            clearTimeout(connectionTimeoutRef.current);
                           }
-                        }, 20000);
-                      })
-                      .catch((e) => {
-                        console.error("Token hatası:", e);
-                        setConnectionError(
-                          "Token alınamadı. Lütfen tekrar deneyin."
-                        );
-                      });
-                  }
-                }}
-                className="px-6 py-2 bg-indigo-600 rounded hover:bg-indigo-700 transition"
-              >
-                Tekrar Dene
-              </button>
-              <button
-                onClick={handleManualLeave}
-                className="px-6 py-2 bg-gray-600 rounded hover:bg-gray-700 transition"
-              >
-                Çık
-              </button>
+                          connectionTimeoutRef.current = setTimeout(() => {
+                            if (!hasConnectedOnceRef.current) {
+                              setConnectionError("Odaya bağlanılamadı. Lütfen tekrar deneyin.");
+                            }
+                          }, 20000);
+                        })
+                        .catch((e) => {
+                          console.error("Token hatası:", e);
+                          setConnectionError("Token alınamadı. Lütfen tekrar deneyin.");
+                        });
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-medium text-white text-sm hover:shadow-[0_0_30px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                >
+                  Tekrar Dene
+                </button>
+                <button
+                  onClick={handleManualLeave}
+                  className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-[#949ba4] text-sm hover:bg-white/10 hover:text-white transition-all duration-200"
+                >
+                  Çık
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1712,18 +1783,34 @@ export default function ActiveRoom({
 
       {/* Bağlantı koptu (başarılı bağlantıdan sonra) */}
       {isReconnecting && hasConnectedOnce && (
-        <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
-          <h2 className="text-xl font-bold">Bağlantı Koptu</h2>
-          <p className="text-gray-400 mt-2 mb-6">
-            Yeniden bağlanmaya çalışılıyor...
-          </p>
-          <button
-            onClick={handleManualLeave}
-            className="px-6 py-2 bg-red-600 rounded hover:bg-red-700 transition"
-          >
-            Vazgeç ve Çık
-          </button>
+        <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4">
+          {/* Animated background */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-[120px] animate-pulse" />
+          </div>
+          
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center">
+            {/* Pulsing icon */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-2xl animate-pulse" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/10 flex items-center justify-center border border-amber-500/20 animate-pulse">
+                <svg className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            </div>
+            
+            <h2 className="text-xl font-bold text-white mb-2">Bağlantı Koptu</h2>
+            <p className="text-[#949ba4] mb-6 text-sm">Yeniden bağlanmaya çalışılıyor...</p>
+            
+            <button
+              onClick={handleManualLeave}
+              className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 rounded-xl font-medium text-white text-sm hover:shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            >
+              Vazgeç ve Çık
+            </button>
+          </div>
         </div>
       )}
 
@@ -1735,78 +1822,91 @@ export default function ActiveRoom({
         onClose={() => setShowSettings(false)}
       />
 
-      {/* ÜST BAR - Modern Profesyonel Tasarım */}
-      <div className="h-14 relative flex items-center px-5 justify-between shrink-0 z-20 select-none overflow-hidden">
-        {/* Arka plan katmanları */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#1a1b1e] via-[#1e1f22] to-[#1a1b1e]"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent"></div>
+      {/* ÜST BAR - Premium Glassmorphism Tasarım */}
+      <div className="h-14 sm:h-16 relative flex items-center px-4 sm:px-6 justify-between shrink-0 z-20 select-none overflow-hidden">
+        {/* Premium gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b1f]/95 via-[#141518]/95 to-[#0e0f12]/95 backdrop-blur-xl" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
+        
+        {/* Ambient glow */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-0 left-1/4 w-[200px] h-[80px] bg-indigo-500/[0.06] blur-[60px]" />
+          <div className="absolute top-0 right-1/4 w-[200px] h-[80px] bg-purple-500/[0.04] blur-[60px]" />
+        </div>
 
-        {/* Alt border glow */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#2b2d31] to-transparent"></div>
+        {/* Top glow line */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+        
+        {/* Bottom border */}
+        <div className="absolute bottom-0 left-0 right-0 h-px">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent animate-pulse-slow" />
+        </div>
 
         {/* Sol taraf - Kanal bilgisi */}
-        <div className="flex items-center gap-4 overflow-hidden relative z-10">
-          <div className="flex items-center gap-3 min-w-0 group">
-            {/* Kanal icon container */}
-            <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#2b2d31] to-[#25272a] flex items-center justify-center border border-white/5 shadow-lg group-hover:border-indigo-500/30 transition-all duration-300 group-hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+        <div className="flex items-center gap-3 sm:gap-4 overflow-hidden relative z-10 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 group">
+            {/* Kanal icon container - Premium */}
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-transparent flex items-center justify-center border border-indigo-500/20 shadow-lg backdrop-blur-sm group-hover:border-indigo-500/40 transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.25)] group-hover:scale-105">
                 <Volume2
                   size={18}
-                  className="text-[#949ba4] group-hover:text-indigo-400 transition-colors duration-300"
+                  className="text-indigo-400 group-hover:text-indigo-300 transition-colors duration-300"
                 />
               </div>
-              {/* Online indicator */}
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#1a1b1e] rounded-full flex items-center justify-center">
-                <div className="w-2 h-2 bg-[#23a559] rounded-full shadow-[0_0_6px_rgba(35,165,89,0.6)] animate-pulse"></div>
+              {/* Online pulse indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gradient-to-br from-[#1a1b1f] to-[#0e0f12] rounded-full flex items-center justify-center shadow-lg">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
               </div>
             </div>
 
             {/* Kanal adı */}
             <div className="flex flex-col min-w-0">
-              <span className="text-white font-bold text-[15px] tracking-tight truncate group-hover:text-[#dbdee1] transition-colors duration-300">
+              <span className="text-white font-bold text-sm sm:text-base tracking-tight truncate group-hover:text-indigo-100 transition-colors duration-300">
                 {roomName}
               </span>
-              <span className="text-[10px] text-[#949ba4] font-medium tracking-wide">
+              <span className="text-[10px] sm:text-xs text-white/50 font-medium tracking-wide">
                 Ses Kanalı
               </span>
             </div>
           </div>
 
           {/* Ayırıcı */}
-          <div className="w-px h-8 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1 hidden sm:block"></div>
+          <div className="w-px h-8 sm:h-10 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1 hidden md:block" />
 
           {/* Bağlantı durumu */}
-          <ConnectionStatusIndicator />
+          <div className="hidden md:block">
+            <ConnectionStatusIndicator />
+          </div>
         </div>
 
         {/* Sağ taraf - Kontrol butonları */}
-        <div className="flex items-center gap-0.5 relative z-10 bg-[#111214]/80 rounded-md p-0.5">
+        <div className="flex items-center gap-1 relative z-10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] rounded-2xl p-1 backdrop-blur-sm border border-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
           {/* Kullanıcılar butonu */}
           <button
             onClick={() => setShowVoicePanel(!showVoicePanel)}
-            className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
+            title="Kişiler"
+            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 ${
               showVoicePanel
-                ? "bg-white/10 text-white"
-                : "text-[#949ba4] hover:text-white hover:bg-white/5"
+                ? "bg-gradient-to-br from-indigo-500/20 to-purple-500/10 text-white border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.2)]"
+                : "text-white/60 hover:text-white hover:bg-white/[0.05]"
             }`}
           >
-            <Users size={14} />
-            <span className="hidden sm:inline">Kişiler</span>
+            <Users size={16} />
           </button>
 
           {/* Chat butonu */}
           {currentTextChannel && (
             <button
               onClick={() => setShowChatPanel(!showChatPanel)}
-              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors duration-200 text-xs font-medium ${
+              title="Sohbet"
+              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 ${
                 showChatPanel
-                  ? "bg-white/10 text-white"
-                  : "text-[#949ba4] hover:text-white hover:bg-white/5"
+                  ? "bg-gradient-to-br from-indigo-500/20 to-purple-500/10 text-white border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.2)]"
+                  : "text-white/60 hover:text-white hover:bg-white/[0.05]"
               }`}
             >
-              <MessageSquare size={14} />
-              <span className="hidden sm:inline">Sohbet</span>
+              <MessageSquare size={16} />
             </button>
           )}
 
@@ -1816,12 +1916,13 @@ export default function ActiveRoom({
               onClick={() =>
                 setChatPosition(chatPosition === "right" ? "left" : "right")
               }
-              className="p-1 rounded text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-white/50 hover:text-white/90 hover:bg-white/[0.05] transition-all duration-200 hover:scale-110 active:scale-95"
+              title="Chat pozisyonunu değiştir"
             >
               {chatPosition === "right" ? (
-                <ChevronLeft size={14} />
+                <ChevronLeft size={16} />
               ) : (
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               )}
             </button>
           )}
@@ -2083,7 +2184,7 @@ function StageManager({
           desktopNotifications &&
           notifyOnJoin
         ) {
-          const participantName = track.participant.identity || "Birisi";
+          const participantName = track.participant.name || track.participant.identity || "Birisi";
           if (Notification.permission === "granted") {
             const notification = new Notification("Yayın Başladı", {
               body: `${participantName} ekran paylaşımı başlattı`,
@@ -2147,11 +2248,32 @@ function StageManager({
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex overflow-hidden min-h-0 relative bg-black"
+      className="flex-1 flex overflow-hidden min-h-0 relative bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12]"
     >
+      {/* Animated background decorations */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Gradient orbs - daha güçlü */}
+        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-indigo-500/[0.08] rounded-full blur-[150px] animate-pulse-slow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/[0.06] rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-cyan-500/[0.05] rounded-full blur-[180px] animate-pulse-slow" style={{ animationDelay: '2s' }} />
+        
+        {/* Subtle grid pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.015]"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)
+            `,
+            backgroundSize: '60px 60px',
+            maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%)'
+          }}
+        />
+      </div>
       {showVoicePanel && (
         <div
-          className={`flex-1 overflow-y-auto custom-scrollbar min-w-0 flex flex-col ${
+          className={`flex-1 overflow-y-auto custom-scrollbar min-w-0 flex flex-col transition-all duration-300 ease-in-out ${
             showChatPanel && currentTextChannel
               ? chatPosition === "left"
                 ? "order-2"
@@ -2184,7 +2306,7 @@ function StageManager({
                   <Monitor size={12} />
                   {t.participant.isLocal
                     ? "Senin Yayının"
-                    : t.participant.identity}
+                    : (t.participant.name || t.participant.identity)}
                 </button>
               ))}
             </div>
@@ -2244,7 +2366,7 @@ function StageManager({
               />
             )
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-4 relative">
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 relative transition-all duration-300 ease-in-out" style={{ opacity: 1, transform: 'scale(1)' }}>
               <ParticipantList
                 onUserContextMenu={onUserContextMenu}
                 compact={false}
@@ -2256,39 +2378,49 @@ function StageManager({
           )}
         </div>
       )}
-      {showChatPanel && currentTextChannel && (
-        <>
-          {/* Resizable Divider */}
-          {showVoicePanel && (
-            <div
-              onMouseDown={handleResizeStart}
-              className={`w-1 bg-[#26272d] hover:bg-[#5865f2] cursor-col-resize transition-colors z-20 flex-shrink-0 ${
-                chatPosition === "left" ? "order-2" : "order-1"
-              } ${isResizing ? "bg-[#5865f2]" : ""}`}
-              style={{ userSelect: "none" }}
-            >
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="w-0.5 h-12 bg-[#5865f2] rounded-full opacity-0 hover:opacity-100 transition-opacity"></div>
+      {/* Chat Panel - Always rendered, animated with transform */}
+      <div
+        className={`overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 transition-all duration-300 ease-in-out ${
+          chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
+        } ${
+          showChatPanel && currentTextChannel
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        }`}
+        style={{
+          width: showChatPanel && currentTextChannel ? `${chatWidth}px` : "0px",
+          flexShrink: 0,
+          transform: showChatPanel && currentTextChannel 
+            ? "translateX(0)" 
+            : chatPosition === "left" 
+              ? "translateX(-20px)" 
+              : "translateX(20px)",
+        }}
+      >
+        {currentTextChannel && (
+          <>
+            {/* Resizable Divider */}
+            {showVoicePanel && showChatPanel && (
+              <div
+                onMouseDown={handleResizeStart}
+                className={`absolute ${chatPosition === "left" ? "right-0" : "left-0"} top-0 bottom-0 w-1 bg-[#26272d] hover:bg-[#5865f2] cursor-col-resize transition-colors z-20 ${
+                  isResizing ? "bg-[#5865f2]" : ""
+                }`}
+                style={{ userSelect: "none" }}
+              >
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-0.5 h-12 bg-[#5865f2] rounded-full opacity-0 hover:opacity-100 transition-opacity"></div>
+                </div>
               </div>
-            </div>
-          )}
-          <div
-            className={`overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 ${
-              chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
-            }`}
-            style={{
-              width: `${chatWidth}px`,
-              flexShrink: 0,
-            }}
-          >
+            )}
             <ChatView
               channelId={currentTextChannel}
               username={username}
               userId={userId}
             />
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
       {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-[#313338]">
           <Users size={32} className="opacity-50 mb-4" />
@@ -2492,7 +2624,13 @@ function ScreenShareStage({
   }, []);
 
   return (
-    <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0f0f0f] relative overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] relative overflow-hidden">
+      {/* Ambient background orbs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/[0.04] rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/[0.03] rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '1s' }} />
+      </div>
+
       <div
         ref={containerRef}
         className={`flex-1 relative flex items-center justify-center overflow-hidden ${
@@ -2502,32 +2640,34 @@ function ScreenShareStage({
       >
         <VideoTrack
           trackRef={trackRef}
-          className="max-w-full max-h-full object-contain shadow-glow"
+          className="max-w-full max-h-full object-contain shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
         />
         {!isLocalSharing && <audio ref={audioRef} autoPlay />}
 
-        {/* Modern Glassmorphism Overlay - Mouse movement ile kontrol ediliyor */}
+        {/* Premium Glassmorphism Overlay - Mouse movement ile kontrol ediliyor */}
         {/* Overlay arka planı - görünür değilken pointer-events-none */}
         <div
-          className={`absolute inset-0 bg-gradient-to-t from-black/40 via-black/20 to-black/30 transition-all duration-500 ${
+          className={`absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/50 transition-all duration-500 ${
             showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
-        ></div>
+        />
 
-        {/* Top Bar - Her zaman görünür ve tıklanabilir */}
-        <div className="absolute top-0 left-0 right-0 flex justify-between items-start p-6 z-50 pointer-events-none">
+        {/* Top Bar - Premium Design */}
+        <div className="absolute top-0 left-0 right-0 flex justify-between items-start p-4 sm:p-6 z-50 pointer-events-none">
           <div
-            className={`flex items-center gap-3 glass-strong px-4 py-2.5 rounded-2xl border border-white/10 shadow-soft-lg transition-all duration-500 pointer-events-auto ${
+            className={`flex items-center gap-2 sm:gap-3 backdrop-blur-xl bg-gradient-to-br from-white/[0.08] to-white/[0.04] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)] transition-all duration-500 pointer-events-auto hover:scale-105 ${
               showOverlay ? "opacity-100" : "opacity-0"
             }`}
           >
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 rounded-lg blur-sm opacity-75"></div>
-              <div className="relative bg-gradient-to-r from-red-500 to-red-600 px-3 py-1 rounded-lg text-xs font-extrabold text-white shadow-glow uppercase tracking-wider">
+            {/* LIVE Badge - More vibrant */}
+            <div className="relative flex-shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 rounded-xl blur-md opacity-75 animate-pulse" />
+              <div className="relative bg-gradient-to-r from-red-500 to-red-600 px-2.5 sm:px-3 py-1 rounded-xl text-[10px] sm:text-xs font-extrabold text-white shadow-[0_0_20px_rgba(239,68,68,0.5)] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                 Canlı
               </div>
             </div>
-            <span className="text-white font-bold drop-shadow-lg text-base tracking-tight">
+            <span className="text-white font-bold drop-shadow-lg text-sm sm:text-base tracking-tight">
               {isLocalSharing
                 ? "Senin Yayının"
                 : `${participant?.identity} yayını`}
@@ -2537,18 +2677,18 @@ function ScreenShareStage({
             {isLocalSharing && (
               <button
                 onClick={onHideLocal}
-                className={`glass-strong hover:glass border border-white/10 hover:border-white/20 text-gray-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow group/btn ${
+                className={`backdrop-blur-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] hover:border-white/20 text-white/70 hover:text-white p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 group/btn ${
                   showOverlay ? "opacity-100" : "opacity-0"
                 }`}
                 title="Önizlemeyi Gizle"
               >
                 <EyeOff
-                  size={20}
-                  className="group-hover/btn:scale-110 transition-transform"
+                  size={18}
+                  className="sm:w-5 sm:h-5 group-hover/btn:scale-110 transition-transform"
                 />
               </button>
             )}
-            {/* İzlemeyi Durdur butonu - Her zaman görünür ve tıklanabilir */}
+            {/* İzlemeyi Durdur butonu - Always visible */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -2561,12 +2701,12 @@ function ScreenShareStage({
                   console.error("❌ onStopWatching fonksiyonu tanımlı değil!");
                 }
               }}
-              className="glass-strong hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-gray-300 hover:text-red-400 p-2.5 rounded-xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:shadow-glow-red group/btn z-[100]"
+              className="backdrop-blur-xl bg-white/[0.06] hover:bg-red-500/20 border border-white/[0.12] hover:border-red-500/40 text-white/70 hover:text-red-400 p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95 group/btn z-[100]"
               title="İzlemeyi Durdur"
             >
               <Minimize
-                size={20}
-                className="group-hover/btn:scale-110 transition-transform"
+                size={18}
+                className="sm:w-5 sm:h-5 group-hover/btn:scale-110 transition-transform"
               />
             </button>
           </div>
@@ -2915,7 +3055,13 @@ function UserCard({
   setActiveStreamId,
   activeStreamId,
 }) {
-  const { identity, metadata } = useParticipantInfo({ participant });
+  // Extract both identity (for tracking) and name (for display)
+  // identity = persistent unique ID (e.g., "userId_deviceShort")
+  // name = user-friendly display name (e.g., "sk jsksos")
+  const { identity, name, metadata } = useParticipantInfo({ participant });
+  
+  // Use name for display, fallback to identity if name is not set
+  const displayName = name || identity;
   const audioActive = useAudioActivity(participant);
 
   // Screen share track kontrolü
@@ -3024,54 +3170,46 @@ function UserCard({
   return (
     <div
       onContextMenu={onContextMenu}
-      className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-500 group cursor-context-menu bg-gray-900 ${
-        isSpeaking
-          ? "speaking-card border-2 shadow-glow glass-strong animate-user-card-active"
-          : isMuted || isDeafened
-          ? "glass border-2 border-red-500/40 hover:border-red-500/50 hover:shadow-soft-lg hover:scale-[1.02]"
-          : "glass border-2 border-white/10 hover:border-white/30 hover:shadow-soft-lg hover:scale-[1.02]"
-      }`}
+      className="relative w-full h-full rounded-2xl flex flex-col items-center justify-center group cursor-context-menu backdrop-blur-md hover:shadow-soft-lg hover:scale-[1.02]"
       style={{
+        background: isSpeaking
+          ? userColor.includes("gradient")
+            ? `linear-gradient(135deg, ${getBorderColor(userColor)}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
+            : `linear-gradient(135deg, ${userColor}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
+          : isMuted || isDeafened
+          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)'
+          : 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(10,10,12,0.6) 50%, rgba(10,10,12,0.8) 100%)',
+        borderWidth: '2px',
+        borderStyle: 'solid',
         borderColor: isSpeaking
           ? getBorderColor(userColor)
           : isMuted || isDeafened
           ? "rgba(239, 68, 68, 0.4)"
-          : undefined,
+          : "rgba(255, 255, 255, 0.1)",
         boxShadow: isSpeaking
           ? userColor.includes("gradient")
-            ? `0 0 40px ${getBorderColor(
-                userColor
-              )}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${getBorderColor(
-                userColor
-              )}20`
+            ? `0 0 40px ${getBorderColor(userColor)}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${getBorderColor(userColor)}20`
             : `0 0 40px ${userColor}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${userColor}20`
           : isMuted || isDeafened
           ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
-          : undefined,
-        background: isSpeaking
-          ? userColor.includes("gradient")
-            ? `linear-gradient(135deg, ${getBorderColor(
-                userColor
-              )}08 0%, transparent 50%)`
-            : `${userColor}08`
-          : undefined,
-        overflow: "visible", // Glow efektlerinin kesilmemesi için
+          : '0 4px 24px rgba(0,0,0,0.3)',
+        overflow: "visible",
+        transition: 'border-color 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), background 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
       }}
     >
-      {/* Animated background glow for speaking - Container dışına taşmaması için */}
-      {isSpeaking && (
-        <div
-          className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse-glow-slow"
-          style={{
-            background: userColor.includes("gradient")
-              ? `radial-gradient(circle at center, ${getBorderColor(
-                  userColor
-                )}20 0%, transparent 70%)`
-              : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
-            transform: "scale(0.95)", // Container içinde kalması için
-          }}
-        />
-      )}
+      {/* Animated background glow for speaking - Smooth fade in/out */}
+      <div
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        style={{
+          background: userColor.includes("gradient")
+            ? `radial-gradient(circle at center, ${getBorderColor(userColor)}20 0%, transparent 70%)`
+            : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
+          transform: "scale(0.95)",
+          opacity: isSpeaking ? 1 : 0,
+          animation: isSpeaking ? 'pulseGlowSlow 3s ease-in-out infinite' : 'none',
+          transition: 'opacity 0.8s cubic-bezier(0.25, 0.1, 0.25, 1)',
+        }}
+      />
       <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10 ">
         {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
         {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
@@ -3279,9 +3417,9 @@ function UserCard({
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/avatar:translate-x-full transition-transform duration-1000 pointer-events-none rounded-2xl"></div>
             )}
 
-            {/* Letter */}
+            {/* Letter - use displayName for proper initials */}
             <span className="relative z-10 drop-shadow-lg">
-              {identity?.charAt(0).toUpperCase()}
+              {displayName?.charAt(0).toUpperCase()}
             </span>
 
             {/* Speaking pulse rings */}
@@ -3389,7 +3527,7 @@ function UserCard({
                   "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
               }}
             >
-              {identity}
+              {displayName}
             </span>
           </div>
         </div>
@@ -4304,138 +4442,192 @@ function BottomControls({
         onClose={() => setShowScreenShareModal(false)}
         onStart={startScreenShare}
       />
-      <div className="h-[80px] bg-[#1a1b1e] flex items-center justify-center shrink-0 select-none border-t border-white/10 relative overflow-visible">
-        {/* Orta: Tüm Kontrol Butonları */}
-        <div className="flex items-center gap-3 px-6 relative z-10">
-          <ControlButton
-            isActive={!isMuted}
-            activeIcon={<Mic size={20} />}
-            inactiveIcon={<MicOff size={20} />}
-            onClick={toggleMute}
-            tooltip={isMuted ? "Susturmayı Kaldır" : "Sustur"}
-            danger={isMuted}
-            disabled={isDeafened}
-          />
-          <ControlButton
-            isActive={!isDeafened}
-            activeIcon={<Headphones size={20} />}
-            inactiveIcon={<VolumeX size={20} />}
-            onClick={toggleDeaf}
-            tooltip={isDeafened ? "Sağırlaştırmayı Kaldır" : "Sağırlaştır"}
-            danger={isDeafened}
-          />
-          <button
-            onClick={toggleCamera}
-            disabled={!enableCamera}
-            className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
-              !enableCamera
-                ? "opacity-50 cursor-not-allowed bg-[#2b2d31] border border-red-500/30 text-red-400"
-                : isCameraOn
-                ? "bg-white text-gray-900 hover:bg-gray-50 active:scale-95"
-                : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
-            }`}
-            title={
-              !enableCamera
-                ? "Kamera Devre Dışı"
-                : isCameraOn
-                ? "Kamerayı Kapat"
-                : "Kamerayı Aç"
-            }
-          >
-            <div className="relative z-10">
-              {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-            </div>
-          </button>
-          <div className="relative" ref={screenShareButtonRef}>
+      <div className="h-controls bg-gradient-to-t from-[#0e0f12] via-[#12131a] to-transparent flex items-center justify-center shrink-0 select-none relative overflow-visible py-3">
+        {/* Animated top border glow */}
+        <div className="absolute top-0 left-0 right-0 h-px">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/20 to-transparent animate-pulse-slow" />
+        </div>
+        
+        {/* Background ambient glow */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[150px] bg-gradient-to-t from-indigo-500/[0.08] via-purple-500/[0.04] to-transparent blur-[80px]" />
+          <div className="absolute bottom-0 left-1/3 w-[300px] h-[100px] bg-cyan-500/[0.05] blur-[60px]" />
+          <div className="absolute bottom-0 right-1/3 w-[300px] h-[100px] bg-pink-500/[0.04] blur-[60px]" />
+        </div>
+        
+        {/* Kontrol Butonları Container */}
+        <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 relative z-10 rounded-2xl sm:rounded-3xl backdrop-blur-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)]">
+          
+          {/* Ses Kontrolleri Grubu */}
+          <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-white/[0.03]">
+            <ControlButton
+              isActive={!isMuted}
+              activeIcon={<Mic size={18} className="sm:w-5 sm:h-5" />}
+              inactiveIcon={<MicOff size={18} className="sm:w-5 sm:h-5" />}
+              onClick={toggleMute}
+              tooltip={isMuted ? "Susturmayı Kaldır" : "Sustur"}
+              danger={isMuted}
+              disabled={isDeafened}
+            />
+            <ControlButton
+              isActive={!isDeafened}
+              activeIcon={<Headphones size={18} className="sm:w-5 sm:h-5" />}
+              inactiveIcon={<VolumeX size={18} className="sm:w-5 sm:h-5" />}
+              onClick={toggleDeaf}
+              tooltip={isDeafened ? "Sağırlaştırmayı Kaldır" : "Sağırlaştır"}
+              danger={isDeafened}
+            />
+          </div>
+          
+          {/* Ayırıcı */}
+          <div className="w-px h-6 sm:h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent mx-0.5 sm:mx-1" />
+          
+          {/* Video Kontrolleri Grubu */}
+          <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-xl bg-white/[0.03]">
+            {/* Kamera Butonu */}
             <button
-              onClick={() => {
-                if (isScreenSharing) {
-                  setShowScreenShareMenu(!showScreenShareMenu);
-                } else {
-                  setShowScreenShareModal(true);
-                }
-              }}
-              className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
-                isScreenSharing
-                  ? "bg-green-500 text-white hover:bg-green-600 active:scale-95"
-                  : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
+              onClick={toggleCamera}
+              disabled={!enableCamera}
+              className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
+                !enableCamera
+                  ? "opacity-40 cursor-not-allowed bg-[#15151a] border border-red-500/20 text-red-400/60"
+                  : isCameraOn
+                  ? "bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700 text-white shadow-[0_0_24px_rgba(99,102,241,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_0_32px_rgba(99,102,241,0.5)] active:scale-95"
+                  : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
               }`}
               title={
-                isScreenSharing ? "Ekran Paylaşımı Seçenekleri" : "Ekran Paylaş"
+                !enableCamera
+                  ? "Kamera Devre Dışı"
+                  : isCameraOn
+                  ? "Kamerayı Kapat"
+                  : "Kamerayı Aç"
               }
             >
+              {/* Shine effect on active */}
+              {isCameraOn && enableCamera && (
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+              )}
               <div className="relative z-10">
-                {isScreenSharing ? (
-                  <MonitorOff size={20} />
-                ) : (
-                  <Monitor size={20} />
-                )}
+                {isCameraOn ? <Video size={18} className="sm:w-5 sm:h-5" /> : <VideoOff size={18} className="sm:w-5 sm:h-5" />}
               </div>
             </button>
-
-            {/* Ekran Paylaşımı Menüsü */}
-            {showScreenShareMenu && isScreenSharing && (
-              <div
-                ref={screenShareMenuRef}
-                className="absolute bottom-full left-0 mb-2 glass-strong border border-white/20 rounded-xl shadow-2xl z-[99999] w-56 animate-scaleIn origin-bottom-left backdrop-blur-xl bg-gradient-to-br from-[#2b2d31]/95 to-[#1e1f22]/95 overflow-hidden"
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
+            
+            {/* Ekran Paylaşımı Butonu */}
+            <div className="relative" ref={screenShareButtonRef}>
+              <button
+                onClick={() => {
+                  if (isScreenSharing) {
+                    setShowScreenShareMenu(!showScreenShareMenu);
+                  } else {
+                    setShowScreenShareModal(true);
+                  }
                 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+                className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
+                  isScreenSharing
+                    ? "bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 text-white shadow-[0_0_24px_rgba(34,197,94,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_0_32px_rgba(34,197,94,0.5)] active:scale-95"
+                    : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
+                }`}
+                title={
+                  isScreenSharing ? "Ekran Paylaşımı Seçenekleri" : "Ekran Paylaş"
+                }
               >
-                {/* Top glow */}
-                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-
-                <div className="p-2">
-                  <button
-                    onClick={() => {
-                      setShowScreenShareMenu(false);
-                      setShowScreenShareModal(true);
-                    }}
-                    className="w-full px-4 py-3 rounded-lg text-left text-sm font-medium text-white hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/20 transition-all duration-300 flex items-center gap-3 group/item relative overflow-hidden"
-                  >
-                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300"></div>
-                    <Monitor
-                      size={18}
-                      className="text-indigo-400 relative z-10 group-hover/item:scale-110 transition-transform duration-300"
-                    />
-                    <span className="relative z-10">Ekranı Değiştir</span>
-                    <ChevronRight
-                      size={16}
-                      className="ml-auto text-[#949ba4] group-hover/item:text-white group-hover/item:translate-x-1 transition-all duration-300 relative z-10"
-                    />
-                  </button>
-
-                  <div className="h-px bg-white/10 my-1"></div>
-
-                  <button
-                    onClick={() => {
-                      setShowScreenShareMenu(false);
-                      stopScreenShare();
-                    }}
-                    className="w-full px-4 py-3 rounded-lg text-left text-sm font-medium text-red-300 hover:bg-gradient-to-r hover:from-red-500/20 hover:to-red-600/20 transition-all duration-300 flex items-center gap-3 group/item relative overflow-hidden"
-                  >
-                    <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300"></div>
-                    <MonitorOff
-                      size={18}
-                      className="text-red-400 relative z-10 group-hover/item:scale-110 transition-transform duration-300"
-                    />
-                    <span className="relative z-10">Paylaşımı Durdur</span>
-                  </button>
+                {/* Pulse ring when active */}
+                {isScreenSharing && (
+                  <>
+                    <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-green-400/20 animate-ping opacity-75" style={{ animationDuration: '2s' }} />
+                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  </>
+                )}
+                <div className="relative z-10">
+                  {isScreenSharing ? (
+                    <Monitor size={18} className="sm:w-5 sm:h-5" />
+                  ) : (
+                    <Monitor size={18} className="sm:w-5 sm:h-5" />
+                  )}
                 </div>
-              </div>
-            )}
+              </button>
+
+              {/* Ekran Paylaşımı Menüsü */}
+              {showScreenShareMenu && isScreenSharing && (
+                <div
+                  ref={screenShareMenuRef}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[99999] w-60 animate-scaleIn origin-bottom backdrop-blur-2xl bg-gradient-to-br from-[#1a1b1f]/95 via-[#141518]/95 to-[#0e0f12]/95 overflow-hidden border border-white/10"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  {/* Top glow line */}
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+                  
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-white/5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-xs font-medium text-white/70">Yayın Aktif</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2">
+                    <button
+                      onClick={() => {
+                        setShowScreenShareMenu(false);
+                        setShowScreenShareModal(true);
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl text-left text-sm font-medium text-white/90 hover:bg-gradient-to-r hover:from-indigo-500/15 hover:to-purple-500/15 transition-all duration-200 flex items-center gap-3 group/item"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/20">
+                        <Monitor size={16} className="text-indigo-400" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="block">Ekranı Değiştir</span>
+                        <span className="text-xs text-white/40">Farklı bir pencere seç</span>
+                      </div>
+                      <ChevronRight
+                        size={16}
+                        className="text-white/30 group-hover/item:text-white/70 group-hover/item:translate-x-1 transition-all duration-200"
+                      />
+                    </button>
+
+                    <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-1.5" />
+
+                    <button
+                      onClick={() => {
+                        setShowScreenShareMenu(false);
+                        stopScreenShare();
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all duration-200 flex items-center gap-3 group/item"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                        <MonitorOff size={16} className="text-red-400" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="block">Paylaşımı Durdur</span>
+                        <span className="text-xs text-red-400/50">Yayını sonlandır</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="w-px h-10 bg-white/10 mx-2"></div>
+          
+          {/* Ayırıcı */}
+          <div className="w-px h-6 sm:h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent mx-0.5 sm:mx-1" />
+          
+          {/* Çıkış butonu */}
           <button
             onClick={onLeave}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#390101] border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/40 transition-all duration-200 active:scale-95"
+            className="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-red-500/15 to-red-600/10 border border-red-500/30 text-red-400 hover:from-red-500/25 hover:to-red-600/20 hover:border-red-500/50 hover:text-red-300 hover:shadow-[0_0_24px_rgba(239,68,68,0.3)] transition-all duration-300 active:scale-95 group relative overflow-hidden"
             title="Bağlantıyı Kes"
           >
-            <PhoneOff size={20} />
+            {/* Hover glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-red-500/0 via-red-400/10 to-red-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <PhoneOff size={18} className="sm:w-5 sm:h-5 relative z-10" />
           </button>
         </div>
       </div>
@@ -4462,26 +4654,36 @@ function ControlButton({
       onClick={handleClick}
       title={tooltip}
       disabled={disabled}
-      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 relative group ${
+      className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all duration-300 relative group overflow-hidden ${
         disabled
-          ? "opacity-50 cursor-not-allowed bg-[#2b2d31] border border-red-500/30 text-red-400"
+          ? "opacity-40 cursor-not-allowed bg-[#15151a] border border-red-500/20 text-red-400/60"
           : danger
-          ? "bg-[#2b2d31] border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40 active:scale-95"
+          ? "bg-gradient-to-br from-red-500/15 to-red-600/10 border border-red-500/30 text-red-400 hover:from-red-500/25 hover:to-red-600/20 hover:border-red-500/50 hover:text-red-300 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] active:scale-95"
           : isActive
-          ? "bg-[#2b2d31] border border-white/10 text-white hover:bg-[#36373a] hover:border-white/20 active:scale-95"
-          : "bg-[#2b2d31] border border-white/10 text-[#b5bac1] hover:bg-[#36373a] hover:text-white hover:border-white/20 active:scale-95"
+          ? "bg-[#15151a] border border-white/10 text-white hover:bg-[#1e1f24] hover:border-white/20 active:scale-95"
+          : "bg-[#15151a] border border-white/10 text-[#8b8d93] hover:bg-[#1e1f24] hover:text-white hover:border-white/20 active:scale-95"
       }`}
     >
+      {/* Hover shine effect */}
+      {!disabled && !danger && (
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 pointer-events-none" />
+      )}
+      
       {/* Icon Container */}
       <div className="relative z-10">
         {isActive ? activeIcon : inactiveIcon}
       </div>
 
-      {/* Disabled Overlay */}
+      {/* Disabled Overlay - Çizgi */}
       {disabled && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-full h-[2px] bg-red-400 rotate-45 rounded-full opacity-60"></div>
+          <div className="w-[70%] h-[2px] bg-red-400/50 rotate-45 rounded-full" />
         </div>
+      )}
+      
+      {/* Danger glow on hover */}
+      {danger && !disabled && (
+        <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-red-500/0 to-red-500/0 group-hover:from-red-500/10 group-hover:to-red-600/5 transition-all duration-300 pointer-events-none" />
       )}
     </button>
   );

@@ -19,9 +19,11 @@ contextBridge.exposeInMainWorld("netrex", {
   onRawKeydown: (callback) =>
     ipcRenderer.on("raw-keydown", (_, event) => callback(event)),
 
-  // LiveKit
-  getLiveKitToken: (room, user) =>
-    ipcRenderer.invoke("get-livekit-token", room, user),
+  // LiveKit - Quota Efficient Token Generation
+  // identity: Persistent unique ID (userId_deviceShort) - prevents ghost participants
+  // displayName: User-friendly name shown in UI
+  getLiveKitToken: (room, identity, displayName) =>
+    ipcRenderer.invoke("get-livekit-token", room, identity, displayName),
 
   // Utils
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),

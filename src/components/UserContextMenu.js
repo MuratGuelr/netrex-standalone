@@ -77,11 +77,11 @@ export default function UserContextMenu({
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-sm opacity-60"></div>
           <div className="relative w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-extrabold text-white shrink-0 shadow-glow">
-            {participant.identity?.charAt(0).toUpperCase()}
+            {(participant.name || participant.identity)?.charAt(0).toUpperCase()}
           </div>
         </div>
         <span className="text-sm font-bold text-white truncate">
-          {participant.identity}
+          {participant.name || participant.identity}
         </span>
       </div>
 

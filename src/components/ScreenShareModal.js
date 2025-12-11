@@ -130,24 +130,37 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       : categorizedSources.apps;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
-      {/* Animated background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4 backdrop-blur-xl animate-fadeIn">
+      {/* Animated background gradient - More vibrant */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 pointer-events-none animate-gradient" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
 
-      <div className="glass-strong w-full max-w-4xl h-[650px] rounded-3xl shadow-2xl border border-white/20 overflow-hidden flex flex-col relative animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1e1f22]/95 via-[#25272a]/95 to-[#2b2d31]/95">
-        {/* Top glow effect */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+      <div className="glass-strong w-full max-w-4xl h-[650px] rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_100px_rgba(99,102,241,0.2)] border border-white/20 overflow-hidden flex flex-col relative animate-scaleIn backdrop-blur-2xl bg-gradient-to-br from-[#1a1b1f]/98 via-[#141518]/98 to-[#0e0f12]/98">
+        {/* Top glow effect - More prominent */}
+        <div className="absolute top-0 left-0 right-0 h-px">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/40 to-transparent animate-pulse-slow" />
+        </div>
+
+        {/* Ambient glow orbs */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-indigo-500/[0.08] rounded-full blur-[100px] animate-pulse-slow" />
+          <div className="absolute top-0 right-1/4 w-[250px] h-[250px] bg-purple-500/[0.06] rounded-full blur-[80px] animate-pulse-slow" style={{ animationDelay: '1s' }} />
+        </div>
 
         {/* --- HEADER --- */}
-        <div className="p-6 pb-4 shrink-0 flex justify-between items-start border-b border-white/10 relative bg-gradient-to-r from-[#25272a]/50 to-transparent">
+        <div className="p-6 pb-5 shrink-0 flex justify-between items-start border-b border-white/[0.15] relative bg-gradient-to-br from-white/[0.02] via-transparent to-transparent">
           <div className="relative z-10">
-            <h2 className="text-2xl font-bold text-white mb-1.5 tracking-tight relative">
-              <span className="relative z-10">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500/30 via-purple-500/20 to-transparent border border-indigo-500/30 flex items-center justify-center backdrop-blur-sm shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                <Monitor size={20} className="text-indigo-300" />
+              </div>
+              <span className="relative">
                 {step === 1 ? "Ekran Paylaşımı" : "Yayın Kalitesi"}
+                <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500/50 via-purple-500/50 to-transparent rounded-full" />
               </span>
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
             </h2>
-            <p className="text-[#b5bac1] text-sm group-hover:text-[#dbdee1] transition-colors">
+            <p className="text-white/60 text-sm font-medium ml-[52px]">
               {step === 1
                 ? "Arkadaşlarına ne göstermek istersin?"
                 : "Yayının ne kadar net ve akıcı olacağını seç."}
@@ -155,13 +168,13 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           </div>
           <button
             onClick={onClose}
-            className="text-[#b5bac1] hover:text-red-400 glass-strong border border-white/10 p-2.5 rounded-xl hover:bg-gradient-to-br hover:from-red-500/20 hover:to-red-600/20 hover:border-red-500/30 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative z-10 group/close"
+            className="text-white/60 hover:text-white bg-white/[0.03] hover:bg-gradient-to-br hover:from-red-500/20 hover:to-red-600/15 border border-white/[0.08] hover:border-red-500/30 p-2.5 rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95 relative z-10 group/close backdrop-blur-sm"
           >
             <X
               size={20}
               className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
             />
-            <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-white/5 rounded-2xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300" />
           </button>
         </div>
 
@@ -170,10 +183,10 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           {/* STEP 1: KAYNAK SEÇİMİ */}
           {step === 1 && (
             <>
-              <div className="px-6 border-b border-white/10 flex gap-8 mt-4 relative">
+              <div className="px-6 pt-4 pb-0 border-b border-white/[0.08] flex gap-6 relative bg-gradient-to-b from-white/[0.01] to-transparent">
                 {/* Animated background for active tab - Dynamic width */}
                 <div
-                  className="absolute bottom-0 h-[3px] bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full shadow-[0_0_15px_rgba(99,102,241,0.5)] transition-all duration-300"
+                  className="absolute bottom-0 h-[2px] bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 rounded-t-full shadow-[0_0_20px_rgba(99,102,241,0.6)] transition-all duration-300 ease-out"
                   style={{
                     left:
                       activeTab === "apps"
@@ -189,26 +202,32 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 <button
                   ref={appsTabRef}
                   onClick={() => setActiveTab("apps")}
-                  className={`pb-3 text-sm font-bold transition-all duration-300 relative flex items-center gap-2 group/tab ${
+                  className={`pb-3.5 px-1 text-sm font-bold transition-all duration-300 relative flex items-center gap-2.5 group/tab ${
                     activeTab === "apps"
                       ? "text-white"
-                      : "text-[#949ba4] hover:text-white"
+                      : "text-white/50 hover:text-white/90"
                   }`}
                 >
-                  <AppWindow
-                    size={18}
-                    className={`transition-all duration-300 ${
-                      activeTab === "apps"
-                        ? "text-indigo-400 scale-110"
-                        : "group-hover/tab:scale-110"
-                    }`}
-                  />
-                  <span>Uygulamalar</span>
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                    activeTab === "apps"
+                      ? "bg-gradient-to-br from-indigo-500/25 to-purple-500/20 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+                      : "bg-white/[0.03] border border-white/[0.08] group-hover/tab:bg-white/[0.08] group-hover/tab:border-white/[0.15]"
+                  }`}>
+                    <AppWindow
+                      size={16}
+                      className={`transition-all duration-300 ${
+                        activeTab === "apps"
+                          ? "text-indigo-300 scale-110"
+                          : "text-white/60 group-hover/tab:text-white/90 group-hover/tab:scale-110"
+                      }`}
+                    />
+                  </div>
+                  <span className="font-semibold">Uygulamalar</span>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full transition-all duration-300 ${
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all duration-300 ${
                       activeTab === "apps"
-                        ? "glass-strong border border-indigo-500/30 text-indigo-300 bg-indigo-500/10"
-                        : "glass-light text-[#b5bac1]"
+                        ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/40 text-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)]"
+                        : "bg-white/[0.05] border border-white/[0.08] text-white/50 group-hover/tab:bg-white/[0.08]"
                     }`}
                   >
                     {categorizedSources.apps.length}
@@ -217,26 +236,32 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 <button
                   ref={screensTabRef}
                   onClick={() => setActiveTab("screens")}
-                  className={`pb-3 text-sm font-bold transition-all duration-300 relative flex items-center gap-2 group/tab ${
+                  className={`pb-3.5 px-1 text-sm font-bold transition-all duration-300 relative flex items-center gap-2.5 group/tab ${
                     activeTab === "screens"
                       ? "text-white"
-                      : "text-[#949ba4] hover:text-white"
+                      : "text-white/50 hover:text-white/90"
                   }`}
                 >
-                  <Monitor
-                    size={18}
-                    className={`transition-all duration-300 ${
-                      activeTab === "screens"
-                        ? "text-indigo-400 scale-110"
-                        : "group-hover/tab:scale-110"
-                    }`}
-                  />
-                  <span>Ekranlar</span>
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                    activeTab === "screens"
+                      ? "bg-gradient-to-br from-indigo-500/25 to-purple-500/20 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+                      : "bg-white/[0.03] border border-white/[0.08] group-hover/tab:bg-white/[0.08] group-hover/tab:border-white/[0.15]"
+                  }`}>
+                    <Monitor
+                      size={16}
+                      className={`transition-all duration-300 ${
+                        activeTab === "screens"
+                          ? "text-indigo-300 scale-110"
+                          : "text-white/60 group-hover/tab:text-white/90 group-hover/tab:scale-110"
+                      }`}
+                    />
+                  </div>
+                  <span className="font-semibold">Ekranlar</span>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full transition-all duration-300 ${
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all duration-300 ${
                       activeTab === "screens"
-                        ? "glass-strong border border-indigo-500/30 text-indigo-300 bg-indigo-500/10"
-                        : "glass-light text-[#b5bac1]"
+                        ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/40 text-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)]"
+                        : "bg-white/[0.05] border border-white/[0.08] text-white/50 group-hover/tab:bg-white/[0.08]"
                     }`}
                   >
                     {categorizedSources.screens.length}
@@ -244,7 +269,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gradient-to-b from-[#25272a] to-[#2b2d31] relative">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gradient-to-b from-[#1a1b1f] to-[#0e0f12] relative">
                 {/* Animated background particles */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                   <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl animate-pulse-slow"></div>

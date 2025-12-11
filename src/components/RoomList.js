@@ -56,6 +56,7 @@ export default function RoomList({
   onOpenSettings,
   onJoinTextChannel,
   currentRoom,
+  currentTextChannel,
 }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -414,42 +415,66 @@ export default function RoomList({
   const showCreateButton = isAdmin;
 
   return (
-    <div className="w-60 bg-[#1e1f22] h-full flex flex-col flex-shrink-0 select-none border-r border-[#141517]">
+    <div className="w-sidebar h-full flex flex-col flex-shrink-0 select-none relative overflow-hidden">
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214] pointer-events-none" />
       
-      {/* 1. ÜST BAŞLIK */}
-      <div className="h-14 relative flex items-center justify-between px-4 z-10">
-        {/* Alt border */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-[#1a1b1e]"></div>
-        
-        {/* Logo ve başlık */}
-        <div className="flex items-center gap-3 relative z-10">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">N</span>
-          </div>
-          <div className="flex flex-col">
-            <h1 className="font-semibold text-white text-[14px] tracking-tight leading-none">Netrex</h1>
-            <span className="text-[10px] text-[#5c6370] font-medium mt-0.5">Client</span>
-          </div>
-      </div>
-        
-        {/* Sağ butonlar */}
-        <div className="flex items-center gap-1 relative z-10">
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowShortcutModal(true); }}
-            className="w-8 h-8 rounded-md flex items-center justify-center text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
-            title="Klavye kısayolları (Ctrl + /)"
-          >
-            <HelpCircle size={16} />
-          </button>
-          {showCreateButton && (
-            <div className="w-8 h-8 flex items-center justify-center">
-              <Shield size={14} className="text-[#23a559]" title="Yönetici" />
+      {/* Subtle glow effects */}
+      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-purple-500/3 to-transparent pointer-events-none" />
+      
+      {/* Right border */}
+      <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-white/10 via-white/5 to-white/10" />
+      
+      {/* 1. ÜST BAŞLIK - Premium */}
+      <div className="relative z-10 px-3 py-4">
+        {/* Header card */}
+        <div className="flex items-center justify-between">
+          {/* Logo ve başlık */}
+          <div className="flex items-center gap-3 group">
+            {/* Logo container with glow */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl blur-md opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
+              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg overflow-hidden">
+                <img 
+                  src="/logo.png" 
+                  alt="Netrex" 
+                  className="w-10 h-10 object-contain" 
+                  onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} 
+                />
+                <span className="text-white font-bold text-lg hidden">N</span>
+              </div>
             </div>
-          )}
+            
+            <div className="flex flex-col">
+              <h1 className="font-bold text-white text-base tracking-tight leading-none">Netrex</h1>
+              <span className="text-[10px] text-[#5c5e66] font-medium mt-0.5">Sesli Sohbet</span>
+            </div>
+          </div>
+          
+          {/* Sağ butonlar */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowShortcutModal(true); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-[#5c5e66] hover:text-white hover:bg-white/10 transition-all duration-200"
+              title="Klavye kısayolları (Ctrl + /)"
+            >
+              <HelpCircle size={16} />
+            </button>
+            {showCreateButton && (
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/10 border border-green-500/20">
+                <Shield size={14} className="text-green-400" title="Yönetici" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
+      
+      {/* Divider */}
+      <div className="relative z-10 mx-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      
       {globalError && (
-        <div className="mx-4 mb-3 px-4 py-3 rounded-xl glass-strong border border-red-500/30 text-red-300 text-xs font-medium flex items-center justify-between gap-4 animate-fadeIn shadow-soft">
+        <div className="relative z-10 mx-3 mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-medium flex items-center justify-between gap-4 animate-fadeIn">
           <span>{globalError}</span>
           <button
             onClick={() => setGlobalError("")}
@@ -461,18 +486,18 @@ export default function RoomList({
       )}
 
       {/* 2. KANALLAR LİSTESİ */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-4 pt-3 relative z-10">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-3 space-y-4 pt-4 relative z-10">
         {/* --- SES KANALLARI --- */}
         <div>
-          <div className="flex items-center justify-between px-1.5 mb-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#5c6370]">
-              <ChevronDown size={10} strokeWidth={2.5} />
-              <span>Ses Kanalları</span>
+          <div className="flex items-center justify-between px-1 mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-3 rounded-full bg-gradient-to-b from-cyan-400 to-blue-500" />
+              <span className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider">Ses Kanalları</span>
             </div>
             {showCreateButton && (
               <button
                 onClick={createRoom}
-                className="w-5 h-5 flex items-center justify-center rounded text-[#5c6370] hover:text-[#949ba4] transition-colors duration-200"
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-[#5c5e66] hover:text-white hover:bg-white/10 transition-all duration-200"
                 title="Ses Kanalı Oluştur"
               >
                 <Plus size={14} strokeWidth={2} />
@@ -480,9 +505,10 @@ export default function RoomList({
             )}
           </div>
 
-          <div className="space-y-[2px]">
+          <div className="space-y-1">
             {loading ? (
-              <div className="px-2 py-1 text-xs text-[#949ba4] animate-pulse">
+              <div className="px-3 py-2 text-xs text-[#5c5e66] animate-pulse flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" />
                 Yükleniyor...
               </div>
             ) : (
@@ -503,74 +529,89 @@ export default function RoomList({
                 };
 
                 return (
-                  <div key={room.id} className="mb-0.5">
+                  <div key={room.id} className="mb-1">
                     {/* Kanal Başlığı */}
                     <div
-                  onClick={() => onJoin(room.name)}
-                  onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
-                  onMouseLeave={() => setHoveredChannel(null)}
-                      className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors duration-200 relative ${
+                      onClick={() => onJoin(room.name)}
+                      onMouseEnter={() => setHoveredChannel(`voice-${room.id}`)}
+                      onMouseLeave={() => setHoveredChannel(null)}
+                      className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden ${
                         currentRoom === room.name
-                          ? "bg-white/[0.08] text-white"
-                          : "text-[#8b8f96] hover:text-[#dbdee1] hover:bg-white/[0.04]"
+                          ? "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]"
+                          : "hover:bg-white/5 border border-transparent"
                       }`}
                     >
-                      {/* Active indicator */}
+                      {/* Active glow */}
                       {currentRoom === room.name && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-r-full"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent pointer-events-none" />
                       )}
                       
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1 relative z-10">
-                    <Volume2
-                      size={18}
-                          className={`shrink-0 transition-colors duration-200 ${
-                            currentRoom === room.name
-                              ? "text-white"
-                              : "text-[#5c6370] group-hover:text-[#949ba4]"
-                          }`}
-                    />
-                        <span className={`truncate text-[14px] ${
-                          currentRoom === room.name ? "font-semibold" : "font-medium"
+                      <div className="flex items-center gap-3 min-w-0 flex-1 relative z-10">
+                        {/* Icon container */}
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          currentRoom === room.name
+                            ? "bg-cyan-500/20 text-cyan-400"
+                            : "bg-white/5 text-[#5c5e66] group-hover:bg-white/10 group-hover:text-[#949ba4]"
                         }`}>
-                      {room.name}
-                    </span>
-                  </div>
+                          <Volume2 size={16} />
+                        </div>
+                        
+                        <div className="flex flex-col min-w-0">
+                          <span className={`truncate text-sm ${
+                            currentRoom === room.name ? "font-semibold text-white" : "font-medium text-[#949ba4] group-hover:text-white"
+                          }`}>
+                            {room.name}
+                          </span>
+                          {userCount > 0 && (
+                            <span className="text-[10px] text-[#5c5e66]">
+                              {userCount} kullanıcı
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Active indicator dot */}
+                      {currentRoom === room.name && (
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)] animate-pulse mr-2" />
+                      )}
 
                       {showCreateButton && (
-                      <button
+                        <button
                           onClick={(e) => handleDeleteRoom(e, room)}
-                          className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0 hover:bg-red-500/10"
-                        title="Odayı Sil"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                </div>
+                          className="text-[#5c5e66] hover:text-red-400 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 shrink-0 hover:bg-red-500/10 relative z-10"
+                          title="Odayı Sil"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                     
                     {/* Kullanıcı listesi - Kanalın altında */}
                     {userCount > 0 && (
-                      <div className="ml-7 mt-0.5 space-y-px mb-1">
+                      <div className="ml-4 mt-1 space-y-0.5 mb-1 border-l-2 border-white/5 pl-3">
                         {activeUsers.slice(0, 4).map((activeUser, idx) => (
                           <div
                             key={activeUser.userId || idx}
-                            className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-white/[0.03] transition-colors duration-200 group/user"
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors duration-200 group/user"
                           >
                             {/* Küçük Avatar */}
                             <div
-                              className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                              className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm"
                               style={{ background: getAvatarColor(activeUser.userId) }}
                             >
                               {activeUser.username?.charAt(0).toUpperCase() || "?"}
                             </div>
                             {/* Kullanıcı Adı */}
-                            <span className="text-[12px] text-[#5c6370] group-hover/user:text-[#949ba4] truncate">
+                            <span className="text-xs text-[#5c5e66] group-hover/user:text-[#949ba4] truncate transition-colors">
                               {activeUser.username || "Bilinmeyen"}
                             </span>
+                            {/* Speaking indicator placeholder */}
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500/50 ml-auto opacity-0 group-hover/user:opacity-100 transition-opacity" />
                           </div>
                         ))}
                         {/* Fazla kullanıcı varsa "+X" göster */}
                         {userCount > 4 && (
-                          <div className="px-2 py-1 text-[11px] text-[#5c6370] font-medium">
+                          <div className="px-2 py-1 text-[10px] text-[#5c5e66] font-medium">
                             +{userCount - 4} kişi daha
                           </div>
                         )}
@@ -584,105 +625,114 @@ export default function RoomList({
         </div>
 
         {/* --- METİN KANALLARI --- */}
-        <div>
-          <div className="flex items-center justify-between px-1.5 mb-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#5c6370]">
-              <ChevronDown size={10} strokeWidth={2.5} />
-              <span>Metin Kanalları</span>
+        <div className="mt-4">
+          <div className="flex items-center justify-between px-1 mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-3 rounded-full bg-gradient-to-b from-purple-400 to-pink-500" />
+              <span className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider">Metin Kanalları</span>
             </div>
             <button
               onClick={handleCreateTextChannel}
-              className="w-5 h-5 flex items-center justify-center rounded text-[#5c6370] hover:text-[#949ba4] transition-colors duration-200"
+              className="w-6 h-6 flex items-center justify-center rounded-lg text-[#5c5e66] hover:text-white hover:bg-white/10 transition-all duration-200"
               title="Metin Kanalı Oluştur"
             >
               <Plus size={14} strokeWidth={2} />
             </button>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {textChannels.length === 0 ? (
-              <div className="px-2.5 py-2 text-xs text-[#5c6370] italic">
+              <div className="px-3 py-2 text-xs text-[#5c5e66] italic">
                 Kanal yok
               </div>
             ) : (
               textChannels.map((channel) => {
-                // Okunmamış mesaj var mı?
                 const hasUnread = unreadCounts[channel.id] > 0;
-                // Şu an seçili kanal mı? (ve panel açık mı?)
-                const isSelected = currentChannel?.id === channel.id && showChatPanel;
+                const isSelected = currentTextChannel === channel.id;
 
                 return (
                   <div
                     key={channel.id}
                     onClick={async () => {
-                      // Önce ses kanalı kontrolü yap
                       if (!currentRoom) {
-                        // Bu durumda parent'a bildir, o modal gösterecek
                         onJoinTextChannel(channel.id);
                         return;
                       }
                       
-                      // Aynı kanala tıklanırsa toggle yap
                       if (currentChannel?.id === channel.id) {
-                        // Açık/Kapanır yapı isteği üzerine toggle davranışı:
                         setShowChatPanel(!showChatPanel);
                       } else {
-                        // Farklı kanala tıklanırsa paneli aç ve kanalı değiştir
                         setShowChatPanel(true);
-                        // Önce store'u güncelle (hemen currentChannel güncellensin)
                         try {
-                          // UI'da anında geri bildirim için önce seç
                           onJoinTextChannel(channel.id);
                           await loadChannelMessages(channel.id);
                         } catch (error) {
                           console.error("Kanal mesajları yüklenirken hata:", error);
                           toast.error("Kanal açılamadı. Lütfen tekrar deneyin.");
-                          // Hata durumunda paneli kapat
                           setShowChatPanel(false);
                         }
                       }
                     }}
                     onMouseEnter={() => setHoveredChannel(`text-${channel.id}`)}
                     onMouseLeave={() => setHoveredChannel(null)}
-                    className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors duration-200 relative ${
+                    className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden ${
                       isSelected
-                        ? "bg-white/[0.08] text-white border-l-2 border-white"
+                        ? "bg-gradient-to-r from-purple-500/20 to-pink-500/10 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
                         : hasUnread
-                          ? "bg-indigo-500/10 text-white border-l-2 border-indigo-500"
-                          : "text-[#8b8f96] hover:text-[#dbdee1] hover:bg-white/[0.04]"
+                          ? "bg-indigo-500/10 border border-indigo-500/20"
+                          : "hover:bg-white/5 border border-transparent"
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Hash
-                        size={18}
-                        className={`transition-colors duration-200 ${
-                          isSelected
-                            ? "text-white"
-                            : hasUnread
-                              ? "text-indigo-400"
-                              : "text-[#5c6370] group-hover:text-[#949ba4]"
-                        }`}
-                      />
-                      <span className={`truncate text-[14px] ${isSelected || hasUnread ? "font-semibold" : "font-medium"}`}>
+                    {/* Active glow */}
+                    {isSelected && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent pointer-events-none" />
+                    )}
+                    
+                    <div className="flex items-center gap-3 min-w-0 relative z-10">
+                      {/* Icon container */}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                        isSelected
+                          ? "bg-purple-500/20 text-purple-400"
+                          : hasUnread
+                            ? "bg-indigo-500/20 text-indigo-400"
+                            : "bg-white/5 text-[#5c5e66] group-hover:bg-white/10 group-hover:text-[#949ba4]"
+                      }`}>
+                        <Hash size={16} />
+                      </div>
+                      
+                      <span className={`truncate text-sm ${
+                        isSelected ? "font-semibold text-white" : 
+                        hasUnread ? "font-semibold text-white" : 
+                        "font-medium text-[#949ba4] group-hover:text-white"
+                      }`}>
                         {channel.name}
                       </span>
                     </div>
 
-                    {/* Okunmamış Noktası */}
+                    {/* Unread badge */}
                     {hasUnread && !isSelected && (
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full shadow-[0_0_6px_rgba(99,102,241,0.6)]"></div>
+                      <div className="flex items-center gap-2 relative z-10">
+                        <div className="px-2 py-0.5 rounded-full bg-indigo-500 text-[10px] font-bold text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]">
+                          {unreadCounts[channel.id]}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Active indicator */}
+                    {isSelected && (
+                      <div className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.6)] animate-pulse relative z-10" />
                     )}
 
                     {/* Silme Butonu */}
-                    {(channel.createdBy === user?.uid || isAdmin) && !hasUnread && (
-                        <button
+                    {(channel.createdBy === user?.uid || isAdmin) && !hasUnread && !isSelected && (
+                      <button
                         onClick={(e) => handleDeleteChannel(e, channel)}
-                        className="text-[#5c6370] hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-500/10"
-                          title="Kanalı Sil"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                        className="text-[#5c5e66] hover:text-red-400 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-500/10 relative z-10"
+                        title="Kanalı Sil"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -690,109 +740,136 @@ export default function RoomList({
           </div>
         </div>
       </div>
-
-      {/* 3. KULLANICI PANELİ */}
-      <div className="relative h-[52px] flex items-center px-2 justify-between shrink-0 select-none z-10 bg-[#1a1b1e]" data-user-menu>
-        {/* Üst border */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-[#141517]"></div>
+      {/* 3. KULLANICI PANELİ - Premium */}
+      <div className="relative z-10 p-3" data-user-menu>
+        {/* Top divider */}
+        <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         
-        {/* Profil Kısmı */}
-        <div
-          onClick={() => setShowUserMenu(!showUserMenu)}
-          className="flex items-center gap-2 p-1.5 rounded-md cursor-pointer min-w-0 overflow-hidden flex-1 hover:bg-white/5 transition-colors duration-200"
-        >
-          <div className="relative shrink-0">
-            {/* Avatar */}
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm overflow-hidden"
-              style={{ background: profileColor }}
-            >
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-              ) : (
-                <span>{user?.displayName?.charAt(0).toUpperCase() || "?"}</span>
-              )}
+        <div className="flex items-center justify-between bg-gradient-to-br from-white/5 to-transparent rounded-2xl p-2 border border-white/5 hover:border-white/10 transition-all duration-200 group">
+          {/* Profil Kısmı */}
+          <div
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="flex items-center gap-3 cursor-pointer min-w-0 overflow-hidden flex-1"
+          >
+            <div className="relative shrink-0">
+              {/* Avatar with glow */}
+              <div className="absolute inset-0 rounded-xl blur-md opacity-50 transition-opacity group-hover:opacity-70" style={{ background: profileColor }} />
+              <div
+                className="relative w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm overflow-hidden shadow-lg border border-white/10"
+                style={{ background: profileColor }}
+              >
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-base">{user?.displayName?.charAt(0).toUpperCase() || "?"}</span>
+                )}
+              </div>
+              
+              {/* Status indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#111214] rounded-full flex items-center justify-center">
+                <div className={`w-2.5 h-2.5 rounded-full ${
+                  userStatus === "online" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" :
+                  userStatus === "offline" ? "bg-gray-500" :
+                  "bg-indigo-500"
+                }`} />
+              </div>
             </div>
-            
-            {/* Status indicator */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#1a1b1e] rounded-full flex items-center justify-center">
-              <div className={`w-2.5 h-2.5 rounded-full ${
-                userStatus === "online" ? "bg-[#23a559]" :
-                userStatus === "offline" ? "bg-[#80848e]" :
-                "bg-[#5865f2]"
-              }`}></div>
+
+            <div className="flex flex-col overflow-hidden flex-1">
+              <div className="text-sm font-semibold text-white truncate leading-tight">
+                {user?.displayName || "Misafir"}
+              </div>
+              <div className="text-[10px] text-[#5c5e66] truncate leading-tight flex items-center gap-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  userStatus === "online" ? "bg-green-500" :
+                  userStatus === "offline" ? "bg-gray-500" :
+                  "bg-indigo-500"
+                }`} />
+                {userStatus === "online" && "Online"}
+                {userStatus === "offline" && "Offline"}
+                {userStatus === "invisible" && "Görünmez"}
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col overflow-hidden flex-1">
-            <div className="text-[13px] font-semibold text-white truncate leading-tight">
-              {user?.displayName || "Misafir"}
-            </div>
-            <div className="text-[11px] text-[#5c6370] truncate leading-tight">
-              {userStatus === "online" && "Online"}
-              {userStatus === "offline" && "Offline"}
-              {userStatus === "invisible" && "Görünmez"}
-            </div>
-            </div>
-          </div>
-
-        {/* Settings Butonu */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenSettings();
-              }}
-          className="w-8 h-8 flex items-center justify-center rounded-md text-[#5c6370] hover:text-[#949ba4] hover:bg-white/5 transition-colors duration-200"
-              title="Kullanıcı Ayarları"
-            >
-          <Settings size={18} />
-        </button>
+          {/* Settings Butonu */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSettings();
+            }}
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-[#5c5e66] hover:text-white hover:bg-white/10 hover:rotate-90 transition-all duration-300"
+            title="Kullanıcı Ayarları"
+          >
+            <Settings size={18} />
+          </button>
+        </div>
 
         {/* Kullanıcı Durum Menüsü */}
         {showUserMenu && (
-          <div className="absolute bottom-[56px] left-2 right-2 bg-[#111214] border border-[#2b2d31] rounded-lg shadow-xl p-1.5 z-50 animate-scaleIn origin-bottom">
-            <div className="text-[10px] font-semibold text-[#5c6370] uppercase tracking-wider px-2 py-1.5 mb-0.5">
-              Durum
+          <div className="absolute bottom-[72px] left-3 right-3 bg-gradient-to-br from-[#1e1f22] to-[#16171a] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-2 z-50 animate-scaleIn origin-bottom backdrop-blur-xl">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-3 py-2 mb-1">
+              <div className="w-1 h-3 rounded-full bg-gradient-to-b from-indigo-400 to-purple-500" />
+              <span className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider">Durumunu Değiştir</span>
             </div>
             
             {/* Online */}
             <button
               onClick={() => { setUserStatus("online"); setShowUserMenu(false); }}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 ${
-                userStatus === "online" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
+                userStatus === "online" 
+                  ? "bg-green-500/10 border border-green-500/30" 
+                  : "hover:bg-white/5 border border-transparent"
               }`}
             >
-              <Circle size={16} className="text-[#23a559]" />
-              <span className="font-medium text-sm">Online</span>
-              {userStatus === "online" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                userStatus === "online" ? "bg-green-500/20" : "bg-white/5"
+              }`}>
+                <Circle size={16} className="text-green-400" />
+              </div>
+              <span className="font-medium text-sm text-white">Online</span>
+              {userStatus === "online" && <div className="ml-auto w-2 h-2 bg-green-400 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />}
             </button>
 
             {/* Offline */}
             <button
               onClick={() => { setUserStatus("offline"); setShowUserMenu(false); }}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 mt-0.5 ${
-                userStatus === "offline" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 mt-1 ${
+                userStatus === "offline" 
+                  ? "bg-gray-500/10 border border-gray-500/30" 
+                  : "hover:bg-white/5 border border-transparent"
               }`}
             >
-              <CircleOff size={16} className="text-[#80848e]" />
-              <span className="font-medium text-sm">Offline</span>
-              {userStatus === "offline" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                userStatus === "offline" ? "bg-gray-500/20" : "bg-white/5"
+              }`}>
+                <CircleOff size={16} className="text-gray-400" />
+              </div>
+              <span className="font-medium text-sm text-white">Offline</span>
+              {userStatus === "offline" && <div className="ml-auto w-2 h-2 bg-gray-400 rounded-full" />}
             </button>
 
             {/* Görünmez */}
             <button
               onClick={() => { setUserStatus("invisible"); setShowUserMenu(false); }}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors duration-200 mt-0.5 ${
-                userStatus === "invisible" ? "bg-[#5865f2]/20 text-white" : "text-[#b5bac1] hover:bg-white/5 hover:text-white"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 mt-1 ${
+                userStatus === "invisible" 
+                  ? "bg-indigo-500/10 border border-indigo-500/30" 
+                  : "hover:bg-white/5 border border-transparent"
               }`}
             >
-              <EyeOff size={16} className="text-[#5865f2]" />
-              <span className="font-medium text-sm">Görünmez</span>
-              {userStatus === "invisible" && <div className="ml-auto w-1.5 h-1.5 bg-[#5865f2] rounded-full"></div>}
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                userStatus === "invisible" ? "bg-indigo-500/20" : "bg-white/5"
+              }`}>
+                <EyeOff size={16} className="text-indigo-400" />
+              </div>
+              <span className="font-medium text-sm text-white">Görünmez</span>
+              {userStatus === "invisible" && <div className="ml-auto w-2 h-2 bg-indigo-400 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.6)]" />}
             </button>
           </div>
         )}
-        </div>
+      </div>
 
       {/* 4. MODALLAR (PORTAL İLE BODY'YE RENDER) */}
       {showTextChannelModal &&
