@@ -54,6 +54,7 @@ import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useChatStore } from "@/src/store/chatStore";
 import { toastOnce, chatToast, systemToast } from "@/src/utils/toast";
 import { useAuthStore } from "@/src/store/authStore";
+import { useServerStore } from "@/src/store/serverStore";
 import { db } from "@/src/lib/firebase";
 import {
   doc,
@@ -438,6 +439,7 @@ function VoiceProcessorHandler() {
 // Mikrofon ve kamera ayarları değiştiğinde track'leri yeniden oluştur
 function SettingsUpdater() {
   const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
   const {
     audioInputId,
     videoId,
@@ -458,8 +460,8 @@ function SettingsUpdater() {
   const isUpdatingRef = useRef(false);
 
   useEffect(() => {
-    // localParticipant yoksa bekle
-    if (!localParticipant) {
+    // localParticipant yoksa veya oda bağlı değilse bekle
+    if (!localParticipant || !room || room.state !== ConnectionState.Connected) {
       return;
     }
 
@@ -503,6 +505,9 @@ function SettingsUpdater() {
 
     // Ayarlar değişti, track'leri yeniden oluştur
     const updateTracks = async () => {
+      // Çifte kontrol: Oda hala bağlı mı?
+      if (room.state !== ConnectionState.Connected) return;
+
       isUpdatingRef.current = true;
       try {
         // Mikrofon ayarları değiştiyse mikrofon track'ini güncelle
@@ -540,10 +545,18 @@ function SettingsUpdater() {
 
             if (newTrack) {
               // Eski track'i unpublish et
-              await localParticipant.unpublishTrack(oldTrack);
+              try {
+                  await localParticipant.unpublishTrack(oldTrack);
+                  oldTrack.stop();
+              } catch (err) {
+                  console.warn("Eski track durdurulurken hata:", err);
+              }
 
-              // Eski track'i durdur
-              oldTrack.stop();
+              // Odanın hala bağlı olduğunu kontrol et
+              if (room.state !== ConnectionState.Connected) {
+                  newTrack.stop();
+                  return;
+              }
 
               // Yeni track'i publish et
               await localParticipant.publishTrack(newTrack, {
@@ -589,10 +602,18 @@ function SettingsUpdater() {
 
             if (newTrack) {
               // Eski track'i unpublish et
-              await localParticipant.unpublishTrack(oldTrack);
+              try {
+                  await localParticipant.unpublishTrack(oldTrack);
+                  oldTrack.stop();
+              } catch (err) {
+                  console.warn("Eski video track durdurulurken hata:", err);
+              }
 
-              // Eski track'i durdur
-              oldTrack.stop();
+              // Odanın hala bağlı olduğunu kontrol et
+              if (room.state !== ConnectionState.Connected) {
+                   newTrack.stop();
+                   return;
+              }
 
               // Yeni track'i publish et - Minimum bandwidth kullanımı
               const newPublication = await localParticipant.publishTrack(
@@ -640,6 +661,7 @@ function SettingsUpdater() {
           noiseSuppression,
           echoCancellation,
           autoGainControl,
+          noiseSuppressionMode,
         };
       }
     };
@@ -647,15 +669,18 @@ function SettingsUpdater() {
     updateTracks();
   }, [
     localParticipant,
+    room,
     audioInputId,
     videoId,
     noiseSuppression,
     echoCancellation,
     autoGainControl,
+    noiseSuppressionMode,
   ]);
 
   return null;
 }
+
 
 // Bağlantı Durumu Göstergesi (Kalite)
 function ConnectionStatusIndicator() {
@@ -1042,7 +1067,11 @@ function RoomEventsHandler({
         try {
           const presenceRef = doc(db, "room_presence", roomName);
           // beforeunload'da async işlemler tamamlanmayabilir, bu yüzden fetch ile keepalive kullan
-          const userData = { userId, username };
+          const userData = { 
+            userId, 
+            username,
+            photoURL: user?.photoURL || null
+          };
           // Firestore REST API ile cleanup (daha güvenilir)
           await updateDoc(presenceRef, {
             users: arrayRemove(userData),
@@ -1105,7 +1134,11 @@ function RoomEventsHandler({
             // 2. Firestore Cleanup
             if (userId && roomName && username) {
               const presenceRef = doc(db, "room_presence", roomName);
-              const userData = { userId, username };
+              const userData = { 
+                userId, 
+                username,
+                photoURL: user?.photoURL || null
+              };
               tasks.push(
                 updateDoc(presenceRef, { users: arrayRemove(userData) })
                   .then(() => console.log("✅ Firestore presence temizlendi (app close)"))
@@ -1379,11 +1412,13 @@ function useAudioActivity(participant) {
 // --- ANA BİLEŞEN ---
 export default function ActiveRoom({
   roomName,
+  displayName,
   username,
   onLeave,
   currentTextChannel,
   userId,
 }) {
+  const { user } = useAuthStore();
   const [token, setToken] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
@@ -1410,6 +1445,13 @@ export default function ActiveRoom({
   const { noiseSuppression, echoCancellation, autoGainControl } =
     useSettingsStore();
   const { playSound } = useSoundEffects();
+  const { channels } = useServerStore();
+
+  const roomDisplayName = useMemo(() => {
+    if (displayName) return displayName;
+    const channel = channels?.find(c => c.id === roomName);
+    return channel?.name || roomName;
+  }, [displayName, channels, roomName]);
 
   // currentTextChannel null olduğunda paneli kapat
   useEffect(() => {
@@ -1493,7 +1535,11 @@ export default function ActiveRoom({
       if (userId && roomName) {
         const presenceRef = doc(db, "room_presence", roomName);
         updateDoc(presenceRef, {
-          users: arrayRemove({ userId, username }),
+          users: arrayRemove({ 
+            userId, 
+            username,
+            photoURL: user?.photoURL || null
+          }),
         }).catch((error) => {
           // Document yoksa veya zaten silinmişse sessizce devam et
           if (error.code !== "not-found") {
@@ -1512,7 +1558,11 @@ export default function ActiveRoom({
       try {
         const presenceRef = doc(db, "room_presence", roomName);
         await updateDoc(presenceRef, {
-          users: arrayRemove({ userId, username }),
+          users: arrayRemove({ 
+            userId, 
+            username,
+            photoURL: user?.photoURL || null
+          }),
         });
       } catch (error) {
         console.error("Room presence çıkarma hatası:", error);
@@ -1539,7 +1589,12 @@ export default function ActiveRoom({
     if (userId && roomName) {
       try {
         const presenceRef = doc(db, "room_presence", roomName);
-        const userData = { userId, username };
+        // photoURL'i de ekle
+        const userData = { 
+          userId, 
+          username,
+          photoURL: user?.photoURL || null
+        };
         await updateDoc(presenceRef, {
           users: arrayUnion(userData),
         }).catch(async (error) => {
@@ -1564,12 +1619,17 @@ export default function ActiveRoom({
       setIsReconnecting(true);
     }
 
+
     // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
     if (userId && roomName) {
       try {
         const presenceRef = doc(db, "room_presence", roomName);
         await updateDoc(presenceRef, {
-          users: arrayRemove({ userId, username }),
+          users: arrayRemove({ 
+            userId, 
+            username,
+            photoURL: user?.photoURL || null
+          }),
         });
       } catch (error) {
         // Document yoksa veya zaten silinmişse sessizce devam et
@@ -1863,7 +1923,7 @@ export default function ActiveRoom({
             {/* Kanal adı */}
             <div className="flex flex-col min-w-0">
               <span className="text-white font-bold text-sm sm:text-base tracking-tight truncate group-hover:text-indigo-100 transition-colors duration-300">
-                {roomName}
+                {roomDisplayName}
               </span>
               <span className="text-[10px] sm:text-xs text-white/50 font-medium tracking-wide">
                 Ses Kanalı

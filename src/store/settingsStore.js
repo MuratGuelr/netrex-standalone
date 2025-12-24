@@ -9,6 +9,13 @@ export const useSettingsStore = create(
       audioOutputId: "default",
       videoId: "default",
 
+      // Global Voice State
+      isMuted: false,
+      isDeafened: false,
+      
+      // Global Modal State
+      showSettingsModal: false,
+
       // YENİ: KAMERA İZNİ (Varsayılan Açık)
       enableCamera: true,
 
@@ -66,6 +73,11 @@ export const useSettingsStore = create(
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
       setVideoInput: (deviceId) => set({ videoId: deviceId }),
+
+      // Voice State Toggles
+      toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+      toggleDeaf: () => set((state) => ({ isDeafened: !state.isDeafened })),
+      setSettingsOpen: (isOpen) => set({ showSettingsModal: isOpen }),
 
       // YENİ: KAMERA İZNİ TOGGLE
       toggleEnableCamera: () =>

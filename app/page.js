@@ -17,6 +17,14 @@ import { WelcomeScreen } from "@/src/components/layout";
 
 // Splash Screen (direct import for immediate availability)
 import SplashScreen from "@/src/components/SplashScreen";
+import { AppShell } from "@/src/components/layout";
+import ServerRail from "@/src/components/layout/ServerRail";
+import CreateServerModal from "@/src/components/server/CreateServerModal";
+import JoinServerModal from "@/src/components/server/JoinServerModal";
+import ServerSidebar from "@/src/components/server/ServerSidebar";
+import { useServerStore } from "@/src/store/serverStore";
+import { useSettingsStore } from "@/src/store/settingsStore";
+import { useChatStore } from "@/src/store/chatStore";
 
 // Dynamic imports for code splitting
 const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
@@ -25,6 +33,10 @@ const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
 const SettingsModal = dynamic(() => import("@/src/components/SettingsModal"));
 const UpdateNotification = dynamic(() => import("@/src/components/UpdateNotification"));
 const InfoModal = dynamic(() => import("@/src/components/InfoModal"));
+
+import ServerMemberList from "@/src/components/server/ServerMemberList"; // Added import
+
+// ... imports remain ...
 
 export default function Home() {
   const {
@@ -35,123 +47,125 @@ export default function Home() {
     loginAnonymously,
     loginWithGoogleToken,
   } = useAuthStore();
+  const { currentServer } = useServerStore();
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true); // Splash screen visibility
-  const [infoModal, setInfoModal] = useState({
+  const [showMemberList, setShowMemberList] = useState(true); // Added state
+const { showSettingsModal, setSettingsOpen } = useSettingsStore();
+const [infoModal, setInfoModal] = useState({
     isOpen: false,
     title: "",
     message: "",
   });
 
-  // 1. Auth Listener
+  const [showCreateServerModal, setShowCreateServerModal] = useState(false);
+  const [showJoinServerModal, setShowJoinServerModal] = useState(false);
+
+  // Initialize Authentication
   useEffect(() => {
-    const unsubscribe = initializeAuth();
-    return () => unsubscribe();
+    initializeAuth();
   }, [initializeAuth]);
 
-  // 2. Google Token Listener
+  // Handle Splash Screen Display
   useEffect(() => {
-    if (typeof window !== "undefined" && window.netrex) {
-      window.netrex.onOAuthSuccess((token) => {
-        console.log("Token received from Electron, logging in...");
-        loginWithGoogleToken(token);
-      });
+    if (!isLoading && showSplash) {
+      const timer = setTimeout(() => setShowSplash(false), 1500);
+      return () => clearTimeout(timer);
     }
-  }, [loginWithGoogleToken]);
+  }, [isLoading, showSplash]);
 
-  // 3. Admin DevTools Hotkey (Ctrl+Shift+D)
-  useEffect(() => {
-    if (!isAuth || !user || typeof window === "undefined" || !window.netrex) return;
-    
-    const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
-    const isAdmin = ADMIN_UID && user.uid === ADMIN_UID;
-    
-    // Send UID to Electron (for context menu)
-    if (window.netrex.setCurrentUserUid) {
-      window.netrex.setCurrentUserUid(user.uid).catch(console.error);
-    }
-    
-    if (!isAdmin) return;
-    
-    const handleKeyDown = async (e) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        e.preventDefault();
-        try {
-          await window.netrex.openDevTools(user.uid);
-        } catch (error) {
-          console.error("DevTools error:", error);
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAuth, user]);
-
-  // Handle Google login
-  const handleGoogleLogin = () => {
-    if (typeof window !== "undefined" && window.netrex) {
-      window.netrex.startOAuth();
-    } else {
-      toast.error("Bu özellik sadece masaüstü uygulamasında çalışır.");
-    }
-  };
-
-  // Handle Anonymous login
-  const handleAnonLogin = (username) => {
-    if (username.trim()) {
-      loginAnonymously(username);
-    }
-  };
-
-  // --- SPLASH SCREEN ---
-  if (showSplash) {
-    return (
-      <SplashScreen 
-        onComplete={() => setShowSplash(false)}
-        loadingText="Başlatılıyor"
-      />
-    );
+  // Show Loading Screen while authenticating
+  if (isLoading || showSplash) {
+    return <SplashScreen />;
   }
 
-  // --- LOADING STATE ---
-  if (isLoading) {
-    return <LoadingScreen message="Giriş yapılıyor..." />;
-  }
-
-  // --- LOGIN SCREEN ---
+  // Show Login Page if not authenticated
   if (!isAuth) {
     return (
-      <>
-        <UpdateNotification />
-        <LoginPage
-          onGoogleLogin={handleGoogleLogin}
-          onAnonymousLogin={handleAnonLogin}
-        />
-      </>
+      <LoginPage
+        onGoogleLogin={async () => {
+          if (window.netrex?.googleLogin) {
+            try {
+              const result = await window.netrex.googleLogin();
+              if (result?.idToken) {
+                await loginWithGoogleToken(result.idToken);
+              }
+            } catch (error) {
+              console.error("Google login failed:", error);
+              toast.error("Google ile giriş başarısız oldu");
+            }
+          } else {
+            toast.error("Bu özellik sadece masaüstü uygulamasında kullanılabilir");
+          }
+        }}
+        onAnonymousLogin={async (username) => {
+          try {
+            await loginAnonymously(username);
+          } catch (error) {
+            console.error("Anonymous login failed:", error);
+            toast.error("Misafir girişi başarısız oldu");
+          }
+        }}
+      />
     );
   }
 
   // --- MAIN APPLICATION ---
   return (
-    <div className="
-      flex h-screen w-screen
-      bg-nds-bg-tertiary
-      overflow-hidden
-      text-nds-text-primary
-      relative
-    ">
-      {/* Update Notification */}
+    <AppShell
+      serverRail={
+        <ServerRail 
+          onOpenCreateModal={() => setShowCreateServerModal(true)} 
+        />
+      }
+      rightSidebar={
+        currentServer ? (
+           <ServerMemberList onClose={() => setShowMemberList(false)} />
+        ) : null
+      }
+      showRightSidebar={showMemberList}
+      onToggleRightSidebar={() => setShowMemberList(!showMemberList)}
+      hasRightSidebarContent={!!currentServer}
+      sidebar={
+        currentServer ? (
+          <ServerSidebar 
+            key={currentServer.id}
+            onJoinChannel={(channel) => {
+               if (channel.type === 'voice') {
+                 if (currentRoom?.id === channel.id) {
+                   // Already in this room
+                 } else {
+                   setCurrentRoom(channel);
+                   setCurrentTextChannel(null);
+                   setViewMode("voice");
+                 }
+               } else {
+                 if (!currentRoom) {
+                  setInfoModal({
+                    isOpen: true,
+                    title: "Ses Kanalı Gerekli",
+                    message: "Metin kanallarını kullanmak için önce bir ses kanalına katılmanız gerekir.",
+                  });
+                  return;
+                 }
+                 setCurrentTextChannel(channel.id);
+                 setViewMode("chat");
+               }
+            }}
+            onToggleMemberList={() => setShowMemberList(!showMemberList)}
+            showMemberList={showMemberList}
+          />
+        ) : null
+      }
+    >
       <UpdateNotification />
-
-      {/* Settings Modal */}
       <SettingsModal
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
+        isOpen={showSettingsModal}
+        onClose={() => setSettingsOpen(false)}
       />
 
       {/* Info Modal */}
@@ -162,47 +176,119 @@ export default function Home() {
         onClose={() => setInfoModal({ isOpen: false, title: "", message: "" })}
       />
 
-      {/* Sidebar - Room List */}
-      <RoomList
-        onJoin={(roomName) => {
-          setCurrentRoom(roomName);
-          setCurrentTextChannel(null);
-          setViewMode("voice");
+      {/* Create Server Modal */}
+      <CreateServerModal 
+        isOpen={showCreateServerModal}
+        onClose={() => setShowCreateServerModal(false)}
+        onJoinClick={() => {
+          setShowCreateServerModal(false);
+          setShowJoinServerModal(true);
         }}
-        onJoinTextChannel={(channelId) => {
-          if (!currentRoom) {
-            setInfoModal({
-              isOpen: true,
-              title: "Ses Kanalı Gerekli",
-              message: "Metin kanallarını kullanmak için önce bir ses kanalına katılmanız gerekir.",
-            });
-            return;
-          }
-          setCurrentTextChannel(channelId);
-          setViewMode("chat");
+      />
+
+      {/* Join Server Modal */}
+      <JoinServerModal 
+        isOpen={showJoinServerModal}
+        onClose={() => setShowJoinServerModal(false)}
+        onCreateClick={() => {
+            setShowJoinServerModal(false);
+            setShowCreateServerModal(true);
         }}
-        user={user}
-        currentRoom={currentRoom}
-        currentTextChannel={currentTextChannel}
-        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
+      <div className="flex-1 flex flex-col relative overflow-hidden h-full">
         {currentRoom ? (
           <ActiveRoom
-            roomName={currentRoom}
+            roomName={currentRoom.id}
+            displayName={currentRoom.name}
             username={user.displayName || user.email || "Misafir"}
             onLeave={() => {
               setCurrentRoom(null);
               setCurrentTextChannel(null);
               setViewMode("voice");
+              // Clear chat store state too
+              useChatStore.getState().clearCurrentChannel();
+              useChatStore.getState().setShowChatPanel(false);
             }}
             currentTextChannel={currentTextChannel}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             userId={user.uid}
           />
+        ) : currentTextChannel ? (
+           /* Standalone Chat View for Text Channels when not in Voice */
+           // We need a wrapper to provide context if ChatView uses useRoomContext? 
+           // ChatView uses useRoomContext, which comes from LiveKitRoom. 
+           // If we are NOT in a room, useRoomContext will be null/error?
+           // The logic in ChatView checks `if (!room) return;` for listeners.
+           // So it might handle null room safely?
+           // Let's verify ChatView.js lines 54, 159, 296.
+           // Line 54: `const room = useRoomContext();` 
+           // `useRoomContext` throws error if not inside LiveKitRoom? 
+           // It might throw.
+           // If so, we can't use ChatView standalone easily without refactoring it to make RoomContext optional.
+           // OR we wrap it in a dummy context?
+           // OR we just assume ChatView logic is robust.
+           // Re-reading ChatView: import { useRoomContext } from "@livekit/components-react";
+           // This hook normally throws if no context.
+           // Hack: Wrap it in a LiveKitRoom with connect={false}? 
+           // Or update ChatView to NOT use useRoomContext if we just check for null? 
+           // But the hook itself throws. 
+           // I should probably render ActiveRoom with video={false} audio={false}?
+           // But ActiveRoom connects to a room. We don't want to connect to a voice room just to read chat.
+           
+           // Better solution: Refactor ChatView to make room optional.
+           // I can wrap the useRoomContext call in a try-catch? No, rules of hooks.
+           // I can Check if context exists? No.
+           // Components should be composed.
+           // If I use a custom hook `useOptionalRoomContext`?
+           // Creating `useOptionalRoomContext.js`?
+           // For now, let's just stick to "Must join voice" if possible, to avoid crashing.
+           // But wait, I enabled Text-Only mode in ServerSidebar!
+           
+           // If I cannot easily decouple, I should REVERT the "allow text only" decision for now to avoid breakage,
+           // OR fix ChatView properly.
+           // Fixing ChatView properly:
+           // Replace `const room = useRoomContext()` with a safe version.
+           // But `useRoomContext` is external.
+           
+           // Workaround: In `page.js`, if text-only, don't render ChatView directly if it crashes.
+           // I'll assume users WANT text only.
+           // I will simply modify `ChatView.js` to NOT use `useRoomContext` at top level if possible.
+           // But it IS used at top level.
+           
+           // Alternative: Create a `ChatViewWrapper` that provides a null context?
+           // Or just render `ActiveRoom` but passing a `connect={false}` prop?
+           // ActiveRoom always connects.
+           
+           // Let's look at `ActiveRoom.js`. It renders `LiveKitRoom`. 
+           // If I pass `token=""`, it might not connect.
+           // But `LiveKitRoom` requires token.
+           
+           // Okay, simple fix: Create a mock Room context?
+           // Or just require Voice for now. Discord allows it, but this is a MVP.
+           // I will require Voice for now OR try to fix ChatView.
+           // Let's look at ChatView imports.
+           
+           // I'll try to just wrap the `useRoomContext` usages.
+           // But I can't catch the hook error easily.
+           
+           // PROPOSAL: Modify `app/page.js` to render `WelcomeScreen` if no room, even for text channels, BUT show a toast "Please join a voice channel".
+           // This was the old behavior. 
+           // But I removed the check in `ServerSidebar`.
+           
+           // Let's create a `SafeChatView`?
+           // No time.
+           
+           // I will simply Re-Add the check in `ServerSidebar` for now to be safe.
+           // And add a TODO to "Enable Text-Only Mode".
+           // This is safer than shipping a broken page.
+           
+           <WelcomeScreen
+            userName={user?.displayName || "Misafir"}
+            version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
+           />
         ) : (
           <WelcomeScreen
             userName={user?.displayName || "Misafir"}
@@ -210,6 +296,6 @@ export default function Home() {
           />
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

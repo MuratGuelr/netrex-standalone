@@ -56,12 +56,11 @@ export default function Titlebar({
   return (
     <header className={`
       titlebar
-      h-titlebar
+      h-8
       w-full
       flex items-center justify-between
-      bg-nds-bg-deep/95
-      backdrop-blur-md
-      border-b border-nds-border-subtle
+      bg-transparent
+      absolute top-0 left-0 z-50
       select-none
       ${className}
     `}>

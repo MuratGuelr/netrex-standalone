@@ -127,7 +127,7 @@ const Button = forwardRef(function Button({
 
       {/* Content */}
       {children && (
-        <span className={loading ? "opacity-70" : ""}>{children}</span>
+        <span className={`inline-flex items-center ${loading ? "opacity-70" : ""}`}>{children}</span>
       )}
 
       {/* Right Icon */}

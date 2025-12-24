@@ -11,7 +11,9 @@
  * - Keyboard shortcuts hint
  */
 
-import { Radio, Mic, Headphones, Sparkles, Zap, Users, MessageSquare, Settings, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { Radio, Mic, Headphones, Sparkles, Zap, Users, MessageSquare, Settings, ArrowRight, X, Keyboard } from "lucide-react";
 
 export default function WelcomeScreen({ 
   userName = "Kullanıcı",
@@ -19,9 +21,11 @@ export default function WelcomeScreen({
   shortcuts = [],
   className = "" 
 }) {
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   const defaultShortcuts = shortcuts.length > 0 ? shortcuts : [
-    { icon: <Mic size={18} />, label: "Sustur", hint: "Kısayol Tuşu", color: "indigo" },
-    { icon: <Headphones size={18} />, label: "Sağırlaştır", hint: "Kısayol Tuşu", color: "purple" },
+    { icon: <Mic size={18} />, label: "Mikrofonu Sustur", hint: "CTRL + M", color: "indigo" },
+    { icon: <Headphones size={18} />, label: "Sağırlaştır", hint: "CTRL + D", color: "purple" },
   ];
 
   const features = [
@@ -41,7 +45,6 @@ export default function WelcomeScreen({
       overflow-hidden
       ${className}
     `}>
-      {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Gradient Orbs */}
         <div className="absolute top-1/4 right-1/4 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse-slow" />
@@ -55,6 +58,17 @@ export default function WelcomeScreen({
         <div className="absolute top-20 left-1/4 w-2 h-2 bg-indigo-400/30 rounded-full animate-float" />
         <div className="absolute top-40 right-1/3 w-1.5 h-1.5 bg-purple-400/30 rounded-full animate-float-slow" style={{ animationDelay: '1s' }} />
         <div className="absolute bottom-32 left-1/3 w-2 h-2 bg-cyan-400/30 rounded-full animate-float" style={{ animationDelay: '2s' }} />
+      </div>
+
+     {/* Header - Absolute Top Right Shortcuts Button */}
+      <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-3">
+          <button 
+             onClick={() => setShowShortcuts(true)}
+             className="w-10 h-10 rounded-xl bg-[#1e1f22]/80 backdrop-blur-md border border-white/5 flex items-center justify-center text-[#949ba4] hover:text-white hover:border-indigo-500/30 hover:bg-white/5 transition-all duration-300 shadow-lg group" 
+             title="Klavye Kısayolları"
+          >
+              <div className="border-2 border-current rounded-full w-5 h-5 flex items-center justify-center text-[11px] font-extrabold opacity-70 group-hover:opacity-100 transition-opacity">?</div>
+          </button>
       </div>
 
       {/* Main Content */}
@@ -142,39 +156,6 @@ export default function WelcomeScreen({
           ))}
         </div>
 
-        {/* Shortcuts Hint */}
-        <div className="
-          relative
-          flex items-center gap-6 
-          bg-gradient-to-br from-[#1e1f22]/95 to-[#25272a]/95
-          backdrop-blur-xl
-          px-8 py-5 
-          rounded-2xl 
-          border border-white/10
-          shadow-[0_20px_60px_rgba(0,0,0,0.3)]
-          hover:border-indigo-500/30
-          hover:shadow-[0_20px_60px_rgba(99,102,241,0.15)]
-          transition-all duration-300
-          group/shortcuts
-        ">
-          {/* Background shimmer */}
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/shortcuts:opacity-100 transition-opacity duration-500 rounded-2xl" />
-          
-          {defaultShortcuts.map((shortcut, index) => (
-            <div key={index} className="flex items-center gap-6 relative z-10">
-              {index > 0 && (
-                <div className="w-px h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-              )}
-              <ShortcutHint 
-                icon={shortcut.icon} 
-                label={shortcut.label} 
-                hint={shortcut.hint}
-                color={shortcut.color}
-              />
-            </div>
-          ))}
-        </div>
-
         {/* Quick Tip */}
         <div className="mt-8 flex items-center gap-2 text-xs text-[#5c5e66]">
           <Settings size={12} />
@@ -196,6 +177,13 @@ export default function WelcomeScreen({
           </span>
         </div>
       </div>
+      
+      {showShortcuts && (
+        <ShortcutsModal 
+          onClose={() => setShowShortcuts(false)} 
+          shortcuts={defaultShortcuts}
+        />
+      )}
     </div>
   );
 }
@@ -234,3 +222,66 @@ function ShortcutHint({ icon, label, hint, color = "indigo" }) {
     </div>
   );
 }
+
+/**
+ * 🪟 ShortcutsModal - Premium modal for listing all shortcuts
+ */
+function ShortcutsModal({ onClose, shortcuts }) {
+    if (typeof document === 'undefined') return null;
+  
+    return createPortal(
+      <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-nds-fade-in" onClick={onClose}>
+         {/* Animated background gradient */}
+         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
+  
+         <div className="glass-modal w-full max-w-lg flex flex-col animate-nds-scale-in rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214] shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Top glow effect */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-20 bg-indigo-500/10 blur-[50px] pointer-events-none"></div>
+  
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 relative z-10">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                        <Keyboard size={20} />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-white">Kısayol Tuşları</h2>
+                        <p className="text-xs text-gray-400">Uygulama içi hızlı işlemler</p>
+                    </div>
+                </div>
+                
+                <button 
+                    onClick={onClose}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all duration-200 group"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+  
+            <div className="p-8 relative z-10 space-y-4">
+                {shortcuts.map((shortcut, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/[0.07] transition-all group">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 text-gray-400 group-hover:text-white group-hover:border-indigo-500/30 transition-colors">
+                                {shortcut.icon}
+                            </div>
+                            <span className="font-medium text-gray-300 group-hover:text-white transition-colors">{shortcut.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <kbd className="px-2.5 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono font-bold text-gray-400 shadow-inner min-w-[32px] text-center">
+                                {shortcut.hint}
+                            </kbd>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            
+            <div className="px-8 py-4 bg-black/20 border-t border-white/5 text-center text-xs text-gray-500">
+                Kısayollar işletim sisteminize göre değişiklik gösterebilir.
+            </div>
+         </div>
+      </div>,
+      document.body
+    );
+  }

@@ -16,18 +16,19 @@ const CONFIG = {
 
   // KRISP BENZERİ TEPKİ AYARLARI
   RELEASE_TIME: 350,
-  RELEASE_TIME_RNNOISE: 500,
-  ATTACK_TIME: 1,      // Hemen aç
-  ATTACK_TIME_RNNOISE: 1,
-  MIN_VOICE_DURATION: 10,
-  MIN_VOICE_DURATION_RNNOISE: 10,
+  RELEASE_TIME_RNNOISE: 600, // Biraz daha uzun release (yarım kelime arası kesilmesin)
+  ATTACK_TIME: 0,      // Hemen aç
+  ATTACK_TIME_RNNOISE: 0,
+  MIN_VOICE_DURATION: 1,
+  MIN_VOICE_DURATION_RNNOISE: 1,
   MAX_SHORT_NOISE_DURATION: 50,
   // ÖNEMLİ DÜZELTME: Interval buffer boyutundan (21ms) büyük olmamalı yoksa veri kaybı olur!
   CHECK_INTERVAL: 20,  // 80 -> 20 (FFT_SIZE ile uyumlu, kör nokta yok)
 
   // Smoothing (Dengeli)
-  RMS_SMOOTHING: 0.05,  // 0.1 -> 0.05 (Çok daha hızlı tepki)
-  SPECTRAL_SMOOTHING: 0.1, // 0.2 -> 0.1 (Spektrum analizi daha hassas)
+  RMS_ATTACK: 0.25,     // 0.05 -> 0.25 (5 kat daha hızlı ses açılışı)
+  RMS_RELEASE: 0.05,    // Release yavaş kalsın ki ses titremesin
+  SPECTRAL_SMOOTHING: 0.05, // 0.1 -> 0.05 (Spektrum analizi daha hassas)
   THRESHOLD_SMOOTHING: 0.05,
 
   // KRISP BENZERİ EŞİK DEĞERLERİ
@@ -53,9 +54,9 @@ const CONFIG = {
   IMPACT_HIGH_FREQ_END: 16000,
   IMPACT_TRANSIENT_RATIO: 2.5,
   IMPACT_MIN_RMS_FACTOR: 1.2,
-  IMPACT_ZCR_THRESHOLD: 0.25,
-  IMPACT_HOLD_MS: 85,
-  IMPACT_WEAK_VOICE_RATIO: 0.45,
+  IMPACT_ZCR_THRESHOLD: 0.35, // Daha yüksek ZCR (daha az konuşmayı klik sanır)
+  IMPACT_HOLD_MS: 40,        // 85 -> 40 (Daha kısa kesinti)
+  IMPACT_WEAK_VOICE_RATIO: 0.3, // Daha katı (ses varsa klik değildir)
   IMPACT_MIN_DURATION: 5,
 
   // Zero-Crossing Rate
@@ -1058,10 +1059,14 @@ export function useVoiceProcessor() {
             rawRms = calculateRMS(rawTimeData);
           }
 
-          // RMS Yumuşatma
+          // RMS Yumuşatma - ASİMETRİK (Hızlı açılış, yavaş kapanış)
+          const rmsSmoothingFactor = rms > smoothedRmsRef.current 
+            ? CONFIG.RMS_ATTACK 
+            : CONFIG.RMS_RELEASE;
+          
           smoothedRmsRef.current =
-            smoothedRmsRef.current * (1 - CONFIG.RMS_SMOOTHING) +
-            rms * CONFIG.RMS_SMOOTHING;
+            smoothedRmsRef.current * (1 - rmsSmoothingFactor) +
+            rms * rmsSmoothingFactor;
 
           // 2. Zero-Crossing Rate
           const zcr = calculateZCR(timeDataArray);
@@ -1136,8 +1141,13 @@ export function useVoiceProcessor() {
             now - impactBlockTimestampRef.current < CONFIG.IMPACT_HOLD_MS;
 
           // 8. Voice Activity Detection (Çok Katı - Krisp Benzeri)
+          // ÖNEMLİ: Krisp modunda trigger için rawRms kullanarak RNNoise gecikmesini bypass et
+          const vadRmsInput = noiseSuppressionMode === "krisp" 
+            ? Math.max(smoothedRmsRef.current, rawRms) 
+            : smoothedRmsRef.current;
+
           const isSpeaking = !impactActive && detectVoiceActivity(
-            smoothedRmsRef.current,
+            vadRmsInput,
             zcr,
             voicePower,
             windPower,
@@ -1197,7 +1207,8 @@ export function useVoiceProcessor() {
               // RNNoise modunda: Ses algılandığında HEMEN aç (ilk harfi kaçırmamak için)
               // Sadece çok düşük sesler için bekle
               // Raw RMS ile kontrol et (RNNoise gecikmesini bypass et)
-              if (rawRms > threshold * 0.5 || smoothedRmsRef.current > threshold * 0.7 || hasVoiceCharacteristics || hasAttackTime) {
+              // Threshold %40'ı geçince veya karakteristikler varsa hemen aç
+              if (rawRms > threshold * 0.4 || smoothedRmsRef.current > threshold * 0.6 || hasVoiceCharacteristics || hasAttackTime) {
                 if (!originalStreamTrack.enabled) {
                   originalStreamTrack.enabled = true;
                 }

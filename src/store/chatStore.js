@@ -182,11 +182,11 @@ export const useChatStore = create((set, get) => ({
   },
 
   // Kanal mesajlarını yükle
-  loadChannelMessages: async (channelId) => {
-    // Hemen currentChannel'ı güncelle (UI'da hemen görünsün, race condition'ı önlemek için)
+  loadChannelMessages: async (channelId, serverId = null) => {
+    // Hemen currentChannel'ı güncelle
     const channel = get().textChannels.find(ch => ch.id === channelId);
     set({
-      currentChannel: channel ? { id: channelId, ...channel } : { id: channelId },
+      currentChannel: channel ? { id: channelId, serverId, ...channel } : { id: channelId, serverId },
       isLoading: true,
       error: null,
       messages: [],
@@ -197,8 +197,17 @@ export const useChatStore = create((set, get) => ({
     get().markAsRead(channelId);
 
     try {
-      const channelDoc = await getDoc(doc(db, "text_channels", channelId));
-      if (!channelDoc.exists()) {
+      const collectionPath = serverId 
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+      
+      const channelPath = serverId
+        ? doc(db, "servers", serverId, "channels", channelId)
+        : doc(db, "text_channels", channelId);
+
+      const channelDoc = await getDoc(channelPath);
+      // Global kanallar için kontrol, server kanalları için serverStore zaten yüklüyor
+      if (!serverId && !channelDoc.exists()) {
         set({
           error: "Kanal bulunamadı",
           isLoading: false,
@@ -211,9 +220,9 @@ export const useChatStore = create((set, get) => ({
         return;
       }
 
-      const channelData = channelDoc.data();
+      const channelData = channelDoc.exists() ? channelDoc.data() : {};
       const messagesQuery = query(
-        collection(db, "text_channels", channelId, "messages"),
+        collectionPath,
         orderBy("timestamp", "desc"),
         limit(MESSAGE_PAGE_SIZE)
       );
@@ -235,7 +244,7 @@ export const useChatStore = create((set, get) => ({
 
       set({
         messages,
-        currentChannel: { id: channelId, ...channelData },
+        currentChannel: { id: channelId, serverId, ...channelData },
         isLoading: false,
         hasMoreMessages: hasMore,
       });
@@ -252,10 +261,17 @@ export const useChatStore = create((set, get) => ({
       return { success: false, error: "Daha fazla mesaj yok." };
     }
 
+    const currentChannel = get().currentChannel;
+    const serverId = currentChannel?.serverId;
+
     set({ isLoadingOlderMessages: true });
     try {
+      const collectionPath = serverId
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+
       const olderMessagesQuery = query(
-        collection(db, "text_channels", channelId, "messages"),
+        collectionPath,
         orderBy("timestamp", "desc"),
         startAfter(lastDoc),
         limit(MESSAGE_PAGE_SIZE)
@@ -297,7 +313,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   // Mesaj Gönder
-  sendMessage: async (channelId, messageText, userId, username, room) => {
+  sendMessage: async (channelId, messageText, userId, username, room, serverId = null) => {
     const cleanedText = messageText.trim();
     if (!cleanedText)
       return { success: false, error: "Mesaj boş olamaz" };
@@ -369,7 +385,9 @@ export const useChatStore = create((set, get) => ({
       });
 
       const messageRef = doc(
-        collection(db, "text_channels", channelId, "messages"),
+        serverId 
+          ? collection(db, "servers", serverId, "channels", channelId, "messages")
+          : collection(db, "text_channels", channelId, "messages"),
         message.id
       );
 
@@ -426,17 +444,17 @@ export const useChatStore = create((set, get) => ({
 
   deleteMessage: async (channelId, messageId) => {
     try {
+      const currentChannel = get().currentChannel;
+      const serverId = currentChannel?.serverId;
       const currentMessages = get().messages;
       const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
       set({ messages: updatedMessages });
 
-      const messageRef = doc(
-        db,
-        "text_channels",
-        channelId,
-        "messages",
-        messageId
-      );
+      const collectionPath = serverId
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+
+      const messageRef = doc(collectionPath, messageId);
       await deleteDoc(messageRef);
 
       return { success: true };
@@ -519,14 +537,14 @@ export const useChatStore = create((set, get) => ({
       set({ messages: updatedMessages });
 
       // Firestore'dan sil
+      const currentChannel = get().currentChannel;
+      const serverId = currentChannel?.serverId;
+      const collectionPath = serverId
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+
       const deletePromises = sequenceMessages.map((msg) => {
-        const messageRef = doc(
-          db,
-          "text_channels",
-          channelId,
-          "messages",
-          msg.id
-        );
+        const messageRef = doc(collectionPath, msg.id);
         return deleteDoc(messageRef);
       });
 

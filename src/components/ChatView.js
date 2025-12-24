@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
+
 export default function ChatView({ channelId, username, userId }) {
   const {
     messages,
@@ -216,7 +217,10 @@ export default function ChatView({ channelId, username, userId }) {
         textToSend,
         userId,
         username,
-        room
+        userId,
+        username,
+        room,
+        currentChannel?.serverId
       );
       if (!result?.success) {
         setMessageInput(textToSend);
@@ -560,64 +564,68 @@ export default function ChatView({ channelId, username, userId }) {
         </div>
       )}
 
-      {/* Mesaj Alanı */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-auto scrollbar-thin flex flex-col min-h-0 px-4 relative z-10"
-      >
-        {isLoading ? (
-          <div className="flex-1 flex items-center justify-center text-white/60 text-sm gap-3 flex-col">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center backdrop-blur-sm">
-              <Loader2 className="animate-spin text-indigo-400" size={24} />
+      {/* Mesaj Alanı ve Member List Container */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative z-10">
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto scrollbar-thin flex flex-col px-4 relative"
+        >
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center text-white/60 text-sm gap-3 flex-col">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center backdrop-blur-sm">
+                <Loader2 className="animate-spin text-indigo-400" size={24} />
+              </div>
+              <span className="font-medium">Mesajlar yükleniyor...</span>
             </div>
-            <span className="font-medium">Mesajlar yükleniyor...</span>
-          </div>
-        ) : messages.length === 0 ? (
-          /* BOŞ KANAL KARŞILAMA EKRANI */
-          <div className="flex-1 flex flex-col justify-end pb-12 select-none animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 shadow-[0_8px_32px_rgba(99,102,241,0.15)] border border-white/10 backdrop-blur-sm">
-              <Hash size={44} className="text-white/90" />
+          ) : messages.length === 0 ? (
+            /* BOŞ KANAL KARŞILAMA EKRANI */
+            <div className="flex-1 flex flex-col justify-end pb-12 select-none animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 shadow-[0_8px_32px_rgba(99,102,241,0.15)] border border-white/10 backdrop-blur-sm">
+                <Hash size={44} className="text-white/90" />
+              </div>
+              <h1 className="text-3xl font-extrabold text-white mb-3 tracking-tight">
+                {currentChannel?.name || "sohbet"} kanalına hoş geldin!
+              </h1>
+              <p className="text-white/60 text-base max-w-lg leading-relaxed">
+                Bu kanalın başlangıcı. Arkadaşlarına bir "Merhaba" diyerek sohbeti
+                başlatabilirsin.
+              </p>
             </div>
-            <h1 className="text-3xl font-extrabold text-white mb-3 tracking-tight">
-              {currentChannel?.name || "sohbet"} kanalına hoş geldin!
-            </h1>
-            <p className="text-white/60 text-base max-w-lg leading-relaxed">
-              Bu kanalın başlangıcı. Arkadaşlarına bir "Merhaba" diyerek sohbeti
-              başlatabilirsin.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col justify-end min-h-0 pb-4 pt-6">
-            {hasMoreMessages && (
-              <button
-                onClick={handleLoadOlderMessages}
-                disabled={isLoadingOlderMessages}
-                className="mx-auto mb-4 px-4 py-1.5 text-caption font-semibold text-nds-text-secondary bg-nds-bg-deep rounded-full border border-nds-border-light hover:border-nds-info hover:text-nds-text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isLoadingOlderMessages && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                )}
-                {isLoadingOlderMessages
-                  ? "Daha fazla mesaj yükleniyor..."
-                  : "Daha eski mesajları göster"}
-              </button>
-            )}
-            {messages.map((message, index) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                prevMessage={messages[index - 1]}
-                messageIndex={index}
-                onContextMenu={handleContextMenu}
-                renderText={renderMessageText}
-                formatTime={formatTime}
-                formatDateHeader={formatDateHeader}
-                isInSequence={isMessageInSequence(message, index)}
-              />
-            ))}
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          ) : (
+            <div className="flex flex-col justify-end min-h-0 pb-4 pt-6">
+              {hasMoreMessages && (
+                <button
+                  onClick={handleLoadOlderMessages}
+                  disabled={isLoadingOlderMessages}
+                  className="mx-auto mb-4 px-4 py-1.5 text-caption font-semibold text-nds-text-secondary bg-nds-bg-deep rounded-full border border-nds-border-light hover:border-nds-info hover:text-nds-text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isLoadingOlderMessages && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {isLoadingOlderMessages
+                    ? "Daha fazla mesaj yükleniyor..."
+                    : "Daha eski mesajları göster"}
+                </button>
+              )}
+              {messages.map((message, index) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  prevMessage={messages[index - 1]}
+                  messageIndex={index}
+                  onContextMenu={handleContextMenu}
+                  renderText={renderMessageText}
+                  formatTime={formatTime}
+                  formatDateHeader={formatDateHeader}
+                  isInSequence={isMessageInSequence(message, index)}
+                />
+              ))}
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        
+        {/* Right Sidebar: Member List removed */}
       </div>
 
       {/* INPUT ALANI */}

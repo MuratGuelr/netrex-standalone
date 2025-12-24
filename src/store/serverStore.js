@@ -1,0 +1,670 @@
+import { create } from "zustand";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  doc,
+  getDoc,
+  deleteDoc,
+  updateDoc,
+  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  arrayUnion,
+  arrayRemove,
+  setDoc,
+  documentId
+} from "firebase/firestore";
+import { db } from "@/src/lib/firebase";
+import { 
+  DEFAULT_ROLE_NAME, 
+  DEFAULT_ROLE_COLOR,
+  SERVER_NAME_MIN_LENGTH,
+  SERVER_NAME_MAX_LENGTH
+} from "@/src/constants/appConfig";
+
+export const useServerStore = create((set, get) => ({
+  servers: [], // List of servers user is in
+  currentServer: null,
+  channels: [], // Channels of current server
+  roles: [], // Roles of current server
+  members: [], // Members of current server
+  isLoading: false,
+  error: null,
+
+  voiceStates: {}, // Map of channelId -> list of users in that channel
+  
+  // Listeners that need cleanup
+  _serverListener: null,
+  _channelListener: null,
+  _roleListener: null,
+  _memberListener: null,
+  _voiceStateListener: null,
+  _lastVoiceIds: "",
+
+  // --- Actions ---
+
+  // 1. Initialize: Listen to user's servers
+  fetchUserServers: (userId) => {
+    if (!userId) return;
+    
+    // Cleanup old listener
+    if (get()._serverListener) get()._serverListener();
+
+    set({ isLoading: true });
+    
+    // Query servers where this user is a member
+    // Note: We need to ensure 'memberIds' array exists on server docs
+    const q = query(
+      collection(db, "servers"),
+      where("memberIds", "array-contains", userId),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const userServers = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      set({ servers: userServers, isLoading: false });
+    }, (error) => {
+      console.error("Error fetching servers:", error);
+      set({ error: error.message, isLoading: false });
+    });
+
+    set({ _serverListener: unsubscribe });
+  },
+
+  // 2. Select a server (and listen to its subcollections)
+  selectServer: async (serverId) => {
+    const prevServerId = get().currentServer?.id;
+    if (prevServerId === serverId) return;
+
+    // Cleanup previous server listeners
+    const { _channelListener, _roleListener, _memberListener, _inviteListener, _voiceStateListener } = get();
+    if (_channelListener) _channelListener();
+    if (_roleListener) _roleListener();
+    if (_memberListener) _memberListener();
+    if (_inviteListener) _inviteListener();
+    if (_voiceStateListener) _voiceStateListener();
+
+    // Reset current server data
+    // Optimistic update: Attempt to find server in cache to prevent UI flash (Home screen)
+    let nextServer = null;
+    if (serverId) {
+        nextServer = get().servers.find(s => s.id === serverId) || null;
+    }
+
+    set({ 
+      currentServer: nextServer, 
+      channels: [], 
+      roles: [], 
+      members: [],
+      voiceStates: {},
+      activeInvites: [],
+      isLoading: true 
+    });
+
+    if (!serverId) {
+      set({ isLoading: false });
+      return; // "Home" state
+    }
+
+    try {
+      // Fetch Server Details
+      const serverDoc = await getDoc(doc(db, "servers", serverId));
+      if (!serverDoc.exists()) {
+        set({ error: "Server not found", isLoading: false });
+        // Don't leave loading true
+        return; 
+      }
+      set({ currentServer: { id: serverDoc.id, ...serverDoc.data() } });
+
+      // Start Listeners concurrently
+      
+      // Channels Listener
+      const channelsQ = query(
+        collection(db, "servers", serverId, "channels")
+      );
+      const unsubChannels = onSnapshot(channelsQ, (snapshot) => {
+        const channels = snapshot.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (a.position || 0) - (b.position || 0));
+        set({ channels });
+
+        // --- Voice States Listener ---
+        const voiceChannels = channels.filter(c => c.type === 'voice');
+        const voiceIds = voiceChannels.map(c => c.id);
+        
+        // Check if voice channel IDs changed (to avoid unnecessary re-subscription)
+        const sortedIds = [...voiceIds].sort().join(',');
+        const prevIds = get()._lastVoiceIds; 
+        
+        if (sortedIds !== prevIds) {
+             const currentVoiceListener = get()._voiceStateListener;
+             if (currentVoiceListener) currentVoiceListener();
+             
+             if (voiceIds.length > 0) {
+                 // Firestore 'in' query supports up to 30 items
+                 // If > 30, we slice to 30 for safety (MVP)
+                 const idsToQuery = voiceIds.slice(0, 30);
+                 
+                 const q = query(
+                    collection(db, "room_presence"),
+                    where(documentId(), 'in', idsToQuery) 
+                 );
+                 
+                 const unsubVoice = onSnapshot(q, (snap) => {
+                     const voiceStates = {};
+                     snap.docs.forEach(doc => {
+                         voiceStates[doc.id] = doc.data().users || [];
+                     });
+                     set({ voiceStates });
+                 }, (error) => {
+                     console.error("Voice state listener error:", error);
+                 });
+                 
+                 set({ _voiceStateListener: unsubVoice, _lastVoiceIds: sortedIds });
+             } else {
+                 set({ voiceStates: {}, _voiceStateListener: null, _lastVoiceIds: "" });
+             }
+        }
+      }, (error) => {
+        console.error("Channels listener error:", error);
+        set({ error: "Channels could not be loaded: " + error.message });
+      });
+
+      // Roles Listener
+      const rolesQ = query(
+        collection(db, "servers", serverId, "roles")
+      );
+      const unsubRoles = onSnapshot(rolesQ, (snapshot) => {
+        const roles = snapshot.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (b.position || 0) - (a.position || 0)); // Descending for roles
+        set({ roles });
+      }, (error) => {
+        console.error("Roles listener error:", error);
+      });
+
+      // Members Listener - with auto-repair for missing user data
+      const membersQ = query(collection(db, "servers", serverId, "members"));
+      const unsubMembers = onSnapshot(membersQ, async (snapshot) => {
+        const members = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // Auto-repair: Check for members missing displayName OR having default "User" name and fetch from users collection
+        for (const member of members) {
+          if (!member.displayName || member.displayName === "User") {
+            try {
+              const userId = member.id || member.userId;
+              if (userId) {
+                const userDoc = await getDoc(doc(db, "users", userId));
+                if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  // Update the member document with user info
+                  await updateDoc(doc(db, "servers", serverId, "members", member.id), {
+                    displayName: userData.displayName || userData.name || "User",
+                    photoURL: userData.photoURL || null
+                  });
+                }
+              }
+            } catch (e) {
+              console.warn("Could not auto-repair member data:", e);
+            }
+          }
+        }
+        
+        set({ members });
+      }, (error) => {
+        console.error("Members listener error:", error);
+      });
+
+      set({
+        isLoading: false,
+        _channelListener: unsubChannels,
+        _roleListener: unsubRoles,
+        _memberListener: unsubMembers
+      });
+
+    } catch (error) {
+      console.error("Error selecting server:", error);
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  // 3. Create a Server
+  createServer: async (name, userId, iconUrl = null) => {
+    if (!name || name.length < SERVER_NAME_MIN_LENGTH) {
+      return { success: false, error: "Server name too short." };
+    }
+    
+    set({ isLoading: true });
+    try {
+      // Get user data first for member document
+      const userDoc = await getDoc(doc(db, "users", userId));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+
+      // 1. Create Server Doc
+      const serverData = {
+        name: name.trim(),
+        ownerId: userId,
+        iconUrl,
+        createdAt: serverTimestamp(),
+        memberIds: [userId],
+      };
+      
+      const serverRef = await addDoc(collection(db, "servers"), serverData);
+      const serverId = serverRef.id;
+
+      // 2. Create Default Role (@everyone)
+      const roleRef = await addDoc(collection(db, "servers", serverId, "roles"), {
+        name: DEFAULT_ROLE_NAME,
+        color: DEFAULT_ROLE_COLOR,
+        permissions: [],
+        position: 0,
+        isDefault: true
+      });
+
+      // 3. Update Server with defaultRoleId
+      await updateDoc(serverRef, { defaultRoleId: roleRef.id });
+
+      // 4. Add Creator as Member (with displayName and photoURL)
+      await setDoc(doc(db, "servers", serverId, "members", userId), {
+        id: userId,
+        userId,
+        displayName: userData.displayName || userData.name || "User",
+        photoURL: userData.photoURL || null,
+        joinedAt: serverTimestamp(),
+        roles: [roleRef.id], // Give default role
+        nickname: null
+      });
+
+      // 5. Create Default Channels
+      await addDoc(collection(db, "servers", serverId, "channels"), {
+        name: "genel",
+        type: "text",
+        position: 0
+      });
+      
+      await addDoc(collection(db, "servers", serverId, "channels"), {
+        name: "genel-sohbet",
+        type: "voice",
+        position: 1
+      });
+
+      set({ isLoading: false });
+      return { success: true, serverId };
+
+    } catch (error) {
+      console.error("Error creating server:", error);
+      set({ error: error.message, isLoading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // 4. Create Channel
+  createChannel: async (serverId, name, type = "text") => {
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      const channelData = {
+        name: name.trim().toLowerCase().replace(/\s+/g, "-"),
+        type,
+        createdAt: serverTimestamp(),
+        position: get().channels.length
+      };
+      
+      await addDoc(collection(db, "servers", serverId, "channels"), channelData);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  deleteChannel: async (serverId, channelId) => {
+      try {
+          await deleteDoc(doc(db, "servers", serverId, "channels", channelId));
+          return { success: true };
+      } catch (error) {
+          console.error("Delete channel failed:", error);
+          return { success: false, error: error.message };
+      }
+  },
+
+  // Update Channel (name, type, permissions)
+  updateChannel: async (channelId, data) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      await updateDoc(doc(db, "servers", serverId, "channels", channelId), data);
+      return { success: true };
+    } catch (error) {
+      console.error("Update channel failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Set channel permission overwrites
+  // permissionOverwrites: { [roleId]: { view: boolean, connect: boolean, speak: boolean } }
+  setChannelPermissions: async (channelId, permissionOverwrites) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      await updateDoc(doc(db, "servers", serverId, "channels", channelId), {
+        permissionOverwrites
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Set channel permissions failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Check if user can view a channel based on their roles
+  canUserViewChannel: (channel, userRoles) => {
+    // 1. If no permission overwrites, everyone can see it
+    if (!channel.permissionOverwrites || Object.keys(channel.permissionOverwrites).length === 0) {
+      return true;
+    }
+    
+    const server = get().currentServer;
+    const defaultRoleId = server?.defaultRoleId;
+    
+    // Ensure we check default role even if not in userRoles list
+    const allUserRoles = new Set(userRoles);
+    if (defaultRoleId) allUserRoles.add(defaultRoleId);
+    
+    let explicitAllow = false;
+    let explicitDeny = false;
+    
+    // Check specific role permissions
+    for (const roleId of allUserRoles) {
+      const perm = channel.permissionOverwrites[roleId];
+      if (perm?.view === true) explicitAllow = true;
+      if (perm?.view === false) explicitDeny = true;
+    }
+    
+    // Allow wins over Deny (standard permission model)
+    if (explicitAllow) return true;
+    if (explicitDeny) return false;
+    
+    // If we are here, all user's roles are Neutral (undefined view permission).
+    
+    // Check for "Implicit Privacy" (Whitelist)
+    // If ANY role in the overwrites is explicitly Allowed, then it's a private channel 
+    // and since we weren't allowed above, we can't see it.
+    const hasAnyAllow = Object.values(channel.permissionOverwrites).some(p => p.view === true);
+    
+    // If someone is allowed (Private), we are blocked.
+    // If nobody is allowed (Public with only some Denies elsewhere), we are passed.
+    if (hasAnyAllow) return false;
+    
+    return true;
+  },
+
+  // 5. Create Role
+  createRole: async (name, color, permissions = []) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+
+    try {
+      const roleData = {
+        name,
+        color,
+        permissions,
+        position: get().roles.length, 
+        isDefault: false
+      };
+      await addDoc(collection(db, "servers", serverId, "roles"), roleData);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  updateRole: async (roleId, data) => {
+      const serverId = get().currentServer?.id;
+      if (!serverId) return;
+      try {
+          await updateDoc(doc(db, "servers", serverId, "roles", roleId), data);
+      } catch (error) {
+          console.error("Update role failed:", error);
+      }
+  },
+
+  deleteRole: async (roleId) => {
+      const serverId = get().currentServer?.id;
+      if (!serverId) return;
+      try {
+          await deleteDoc(doc(db, "servers", serverId, "roles", roleId));
+      } catch (error) {
+          console.error("Delete role failed:", error);
+      }
+  },
+
+  updateServer: async (serverId, data) => {
+      try {
+          await updateDoc(doc(db, "servers", serverId), data);
+      } catch (error) {
+          console.error("Update server failed:", error);
+      }
+  },
+
+  deleteServer: async (serverId) => {
+      try {
+          await deleteDoc(doc(db, "servers", serverId));
+          if (get().currentServer?.id === serverId) {
+              get().selectServer(null);
+          }
+      } catch (error) {
+          console.error("Delete server failed:", error);
+      }
+  },
+
+  leaveServer: async (serverId, userId) => {
+      try {
+          if (!serverId || !userId) return;
+
+          // Remove user from 'members' subcollection
+          await deleteDoc(doc(db, "servers", serverId, "members", userId));
+
+          // Remove user from 'memberIds' array in server doc
+          await updateDoc(doc(db, "servers", serverId), {
+              memberIds: arrayRemove(userId)
+          });
+          
+          if (get().currentServer?.id === serverId) {
+              get().selectServer(null);
+          }
+          return { success: true };
+      } catch (error) {
+          console.error("Leave server failed:", error);
+          return { success: false, error: error.message };
+      }
+  },
+
+  createInvite: async (serverId, options = {}) => {
+      try {
+          const inviteCode = Math.random().toString(36).substring(2, 10);
+          const inviteData = {
+              code: inviteCode,
+              serverId,
+              creatorId: options.userId,
+              createdAt: serverTimestamp(),
+              uses: 0,
+              maxUses: options.maxUses || 0, // 0 = infinite
+              expiresAt: options.expiresAt || null
+          };
+          
+          await setDoc(doc(db, "invites", inviteCode), inviteData);
+          await setDoc(doc(db, "servers", serverId, "invites", inviteCode), inviteData);
+          
+          if (get().currentServer?.id === serverId) {
+             set(state => ({ activeInvites: [...(state.activeInvites || []), inviteData] }));
+          }
+          
+          return { success: true, code: inviteCode };
+      } catch (error) {
+          console.error("Create invite failed:", error);
+          return { success: false, error: error.message };
+      }
+  },
+
+  deleteInvite: async (inviteCode, serverId) => {
+      try {
+          // Delete from global invites
+          await deleteDoc(doc(db, "invites", inviteCode));
+          // Delete from server subcollection
+          await deleteDoc(doc(db, "servers", serverId, "invites", inviteCode));
+          
+          if (get().currentServer?.id === serverId) {
+             set(state => ({ 
+                 activeInvites: state.activeInvites.filter(i => i.code !== inviteCode) 
+             }));
+          }
+          return { success: true };
+      } catch (error) {
+          console.error("Delete invite failed:", error);
+          return { success: false, error: error.message };
+      }
+  },
+
+  fetchServerInvites: async (serverId) => {
+      try {
+          const q = query(collection(db, "servers", serverId, "invites"));
+          const snapshot = await getDocs(q);
+          const invites = snapshot.docs.map(d => d.data());
+          set({ activeInvites: invites });
+      } catch (error) {
+           console.error("Fetch invites failed:", error);
+      }
+  },
+
+  joinServer: async (inviteCode, userId) => {
+    try {
+       // Sanitize invite code to prevent invalid path segments
+       const cleanCode = inviteCode.trim().replace(/^netrex:\/\//, "");
+       
+       const inviteRef = doc(db, "invites", cleanCode);
+       const inviteDoc = await getDoc(inviteRef);
+       
+       if (!inviteDoc.exists()) {
+           return { success: false, error: "Geçersiz davet kodu." };
+       }
+       
+       const invite = inviteDoc.data();
+       
+       if (invite.expiresAt && invite.expiresAt.toMillis() < Date.now()) {
+           return { success: false, error: "Davet kodunun süresi dolmuş." };
+       }
+       
+       if (invite.maxUses > 0 && invite.uses >= invite.maxUses) {
+           return { success: false, error: "Davet limiti dolmuş." };
+       }
+       
+       const serverId = invite.serverId;
+       
+       const memberRef = doc(db, "servers", serverId, "members", userId);
+       const memberDoc = await getDoc(memberRef);
+       if (memberDoc.exists()) {
+           get().selectServer(serverId);
+           return { success: true, serverId, message: "Zaten bu sunucunun üyesisin! Sunucuya geçiş yapıldı." }; 
+       }
+       
+       const userDoc = await getDoc(doc(db, "users", userId));
+       const userData = userDoc.exists() ? userDoc.data() : { displayName: "User" };
+       
+       const serverDoc = await getDoc(doc(db, "servers", serverId));
+       const defaultRoleId = serverDoc.data()?.defaultRoleId;
+
+       await setDoc(memberRef, {
+           id: userId,
+           displayName: userData.displayName || "User",
+           photoURL: userData.photoURL || null,
+           roles: defaultRoleId ? [defaultRoleId] : [],
+           joinedAt: serverTimestamp()
+       });
+       
+       await updateDoc(inviteRef, { uses: invite.uses + 1 });
+       try { 
+         await updateDoc(doc(db, "servers", serverId, "invites", cleanCode), { uses: invite.uses + 1 }); 
+       } catch(e) {}
+       
+       await updateDoc(doc(db, "servers", serverId), {
+           memberIds: arrayUnion(userId)
+       });
+       
+       get().selectServer(serverId);
+       return { success: true, serverId };
+    } catch (error) {
+        console.error("Join server failed:", error);
+        return { success: false, error: error.message };
+    }
+  },
+
+  // Assign role to member
+  assignRoleToMember: async (memberId, roleId) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      const memberRef = doc(db, "servers", serverId, "members", memberId);
+      await updateDoc(memberRef, {
+        roles: arrayUnion(roleId)
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Assign role failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Remove role from member
+  removeRoleFromMember: async (memberId, roleId) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      const memberRef = doc(db, "servers", serverId, "members", memberId);
+      await updateDoc(memberRef, {
+        roles: arrayRemove(roleId)
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Remove role failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Set member roles (replace all)
+  setMemberRoles: async (memberId, roleIds) => {
+    const serverId = get().currentServer?.id;
+    if (!serverId) return { success: false, error: "No server selected" };
+    
+    try {
+      const memberRef = doc(db, "servers", serverId, "members", memberId);
+      await updateDoc(memberRef, {
+        roles: roleIds
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Set member roles failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Cleanup
+  reset: () => {
+    const { _serverListener, _channelListener, _roleListener, _memberListener, _voiceStateListener } = get();
+    if (_serverListener) _serverListener();
+    if (_channelListener) _channelListener();
+    if (_roleListener) _roleListener();
+    if (_memberListener) _memberListener();
+    if (_voiceStateListener) _voiceStateListener();
+    set({ servers: [], currentServer: null, channels: [], roles: [], members: [], voiceStates: {} });
+  }
+}));

@@ -9,7 +9,8 @@ import {
   deleteUser,
   updateProfile,
 } from "firebase/auth";
-import { auth } from "@/src/lib/firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/src/lib/firebase"; // Added db
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -17,8 +18,21 @@ export const useAuthStore = create((set) => ({
   isLoading: true,
 
   initializeAuth: () => {
-    return onAuthStateChanged(auth, (user) => {
+    return onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Sync user data to Firestore
+        try {
+          await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            displayName: user.displayName || "User",
+            email: user.email,
+            photoURL: user.photoURL,
+            lastSeen: serverTimestamp()
+          }, { merge: true });
+        } catch (error) {
+          console.error("Error syncing user to Firestore:", error);
+        }
+
         set({ user, isAuth: true, isLoading: false });
       } else {
         set({ user: null, isAuth: false, isLoading: false });
