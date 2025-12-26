@@ -1978,10 +1978,14 @@ function createWindow() {
     // Admin değilse context menu gösterme
   });
 
-  const startUrl = !app.isPackaged
-    ? "http://localhost:3000"
-    : `http://localhost:3000${path.join(__dirname, "../out/index.html")}`;
-  mainWindow.loadURL(startUrl);
+  if (!app.isPackaged) {
+    // Development mode - Next.js dev server
+    mainWindow.loadURL("http://localhost:3000");
+  } else {
+    // Production mode - Load static HTML from out folder
+    const indexPath = path.join(__dirname, "../out/index.html");
+    mainWindow.loadFile(indexPath);
+  }
 
   // --- KAPATMA DAVRANIŞI (TRAY) ---
   mainWindow.on("close", (event) => {
