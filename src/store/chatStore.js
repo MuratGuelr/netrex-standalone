@@ -16,6 +16,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
+import { deleteImageFromCloudinary } from "@/src/utils/imageUpload";
 import {
   MAX_TEXT_CHANNELS_PER_USER,
   MESSAGE_MAX_LENGTH,
@@ -313,9 +314,10 @@ export const useChatStore = create((set, get) => ({
   },
 
   // Mesaj Gönder
-  sendMessage: async (channelId, messageText, userId, username, room, serverId = null) => {
+  sendMessage: async (channelId, messageText, userId, username, room, serverId = null, extraData = {}) => {
     const cleanedText = messageText.trim();
-    if (!cleanedText)
+    // Resim varsa metin boş olabilir
+    if (!cleanedText && !extraData?.imageUrl)
       return { success: false, error: "Mesaj boş olamaz" };
 
     if (cleanedText.length > MESSAGE_MAX_LENGTH) {
@@ -356,11 +358,12 @@ export const useChatStore = create((set, get) => ({
       userId,
       username,
       timestamp: Date.now(),
+      ...(extraData || {})
     };
 
     try {
       // LiveKit Data Channel ile gönder
-      if (room) {
+      if (room && room.localParticipant) {
         const encoder = new TextEncoder();
         const data = encoder.encode(
           JSON.stringify({
@@ -391,10 +394,17 @@ export const useChatStore = create((set, get) => ({
         message.id
       );
 
-      await setDoc(messageRef, {
+      const finalMessage = {
         ...message,
         createdAt: serverTimestamp(),
-      });
+      };
+
+      // Filter out undefined values to prevent Firestore errors
+      const cleanMessage = Object.fromEntries(
+        Object.entries(finalMessage).filter(([_, v]) => v !== undefined)
+      );
+
+      await setDoc(messageRef, cleanMessage);
 
       lastMessageSentAt = Date.now();
 
@@ -447,6 +457,14 @@ export const useChatStore = create((set, get) => ({
       const currentChannel = get().currentChannel;
       const serverId = currentChannel?.serverId;
       const currentMessages = get().messages;
+      
+      const targetMessage = currentMessages.find((m) => m.id === messageId);
+      if (targetMessage?.imageUrl) {
+        deleteImageFromCloudinary(targetMessage.imageUrl).catch(err => 
+            console.error("Resim silinirken hata:", err)
+        );
+      }
+
       const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
       set({ messages: updatedMessages });
 
@@ -542,6 +560,15 @@ export const useChatStore = create((set, get) => ({
       const collectionPath = serverId
         ? collection(db, "servers", serverId, "channels", channelId, "messages")
         : collection(db, "text_channels", channelId, "messages");
+
+      // Cloudinary'den resimleri sil
+      sequenceMessages.forEach(msg => {
+        if (msg.imageUrl) {
+          deleteImageFromCloudinary(msg.imageUrl).catch(err => 
+            console.error("Sequence resim silme hatası:", err)
+          );
+        }
+      });
 
       const deletePromises = sequenceMessages.map((msg) => {
         const messageRef = doc(collectionPath, msg.id);

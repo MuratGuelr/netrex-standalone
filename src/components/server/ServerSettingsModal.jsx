@@ -19,14 +19,21 @@ import {
   Check,
   Copy,
   Calendar,
-  Infinity
+  Infinity,
+  Ban,
+  Smile,
+  Image,
+  Loader2,
+  Upload
 } from "lucide-react";
 import { toast } from "sonner";
+import EmojiPicker from 'emoji-picker-react';
+import { uploadServerIconToCloudinary, deleteImageFromCloudinary } from "@/src/utils/imageUpload";
 
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 
 export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
-  const { currentServer, updateServer, deleteServer, roles, createRole, updateRole, deleteRole, members, createInvite, activeInvites, fetchServerInvites } = useServerStore();
+  const { currentServer, updateServer, deleteServer, roles, createRole, updateRole, deleteRole, members, createInvite, activeInvites, fetchServerInvites, kickMember, banMember, unbanMember, fetchBans } = useServerStore();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState(initialTab || "overview");
   const [showCreateRoleModal, setShowCreateRoleModal] = useState(false);
@@ -88,6 +95,8 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
         return canViewMembers ? <MembersTab members={members} roles={roles} /> : null;
       case "invites":
         return <InvitesTab invites={activeInvites} onCreate={createInvite} serverId={currentServer.id} userId={user.uid} fetchInvites={fetchServerInvites} />;
+      case "bans":
+        return canBanMembers ? <BansTab serverId={currentServer.id} fetchBans={fetchBans} unbanMember={unbanMember} /> : null;
       default:
         return null;
     }
@@ -182,6 +191,16 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
               onClick={() => setActiveTab("invites")}
               color="orange"
             />
+            
+            {canBanMembers && (
+              <SidebarItem
+                label="Yasaklılar"
+                icon={<Ban size={16} />}
+                active={activeTab === "bans"}
+                onClick={() => setActiveTab("bans")}
+                color="red"
+              />
+            )}
           </div>
 
           {/* Footer */}
@@ -272,6 +291,12 @@ function SidebarItem({ label, icon, active, onClick, color = "indigo" }) {
       activeIcon: "text-orange-400",
       activeDot: "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.6)]",
     },
+    red: {
+      activeBg: "from-red-500/20 to-red-600/10",
+      activeBorder: "border-red-500/40",
+      activeIcon: "text-red-400",
+      activeDot: "bg-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]",
+    },
   };
 
   const colors = colorClasses[color] || colorClasses.indigo;
@@ -313,23 +338,127 @@ function SidebarItem({ label, icon, active, onClick, color = "indigo" }) {
 
 // Overview Tab
 function OverviewTab({ server, onUpdate, onDelete, isOwner, onClose }) {
-  const [name, setName] = useState(server.name);
+  // Read current server from store for live updates
+  const { currentServer } = useServerStore();
+  const liveServer = currentServer || server;
+  
+  const [name, setName] = useState(liveServer.name);
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  // Icon editing states
+  const [iconType, setIconType] = useState("emoji");
+  const [selectedEmoji, setSelectedEmoji] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Determine current icon type from live server data
+  const currentIconUrl = liveServer.iconUrl;
+  const isCurrentEmoji = currentIconUrl && !currentIconUrl.startsWith("http") && !currentIconUrl.startsWith("data:");
+  const isCurrentImage = currentIconUrl && (currentIconUrl.startsWith("http") || currentIconUrl.startsWith("data:"));
 
   const handleUpdate = async () => {
-    if (!name.trim() || name === server.name) return;
+    if (!name.trim() || name === liveServer.name) return;
     setIsLoading(true);
-    await onUpdate(server.id, { name });
+    await onUpdate(liveServer.id, { name });
     setIsLoading(false);
     toast.success("Sunucu güncellendi");
   };
 
   const handleDelete = async () => {
-    await onDelete(server.id);
+    await onDelete(liveServer.id);
     toast.success("Sunucu silindi");
     onClose();
   };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Lütfen geçerli bir resim dosyası seçin.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Resim boyutu 5MB'dan küçük olmalı.");
+      return;
+    }
+
+    setSelectedImage(file);
+    setSelectedEmoji("");
+    setIconType("image");
+
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleEmojiClick = (emojiData) => {
+    setSelectedEmoji(emojiData.emoji);
+    setSelectedImage(null);
+    setImagePreview(null);
+    setIconType("emoji");
+    setShowEmojiPicker(false);
+  };
+
+  const handleClearNewIcon = () => {
+    setSelectedEmoji("");
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  const handleSaveIcon = async () => {
+    let newIconUrl = null;
+
+    if (iconType === "image" && selectedImage) {
+      try {
+        setIsUploadingIcon(true);
+        newIconUrl = await uploadServerIconToCloudinary(selectedImage);
+        setIsUploadingIcon(false);
+      } catch (err) {
+        setIsUploadingIcon(false);
+        toast.error("Resim yüklenemedi: " + err.message);
+        return;
+      }
+    } else if (iconType === "emoji" && selectedEmoji) {
+      newIconUrl = selectedEmoji;
+    }
+
+    if (newIconUrl) {
+      // Delete old Cloudinary image if exists
+      const oldIconUrl = liveServer.iconUrl;
+      if (oldIconUrl && oldIconUrl.includes('cloudinary.com')) {
+        console.log("🗑️ Eski sunucu ikonu siliniyor...");
+        deleteImageFromCloudinary(oldIconUrl).catch(err => 
+          console.warn("Eski ikon silinemedi:", err)
+        );
+      }
+      
+      await onUpdate(liveServer.id, { iconUrl: newIconUrl });
+      toast.success("Sunucu ikonu güncellendi! 🎉");
+      handleClearNewIcon();
+    }
+  };
+
+  const handleRemoveIcon = async () => {
+    // Delete from Cloudinary if it's a Cloudinary image
+    const oldIconUrl = liveServer.iconUrl;
+    if (oldIconUrl && oldIconUrl.includes('cloudinary.com')) {
+      console.log("🗑️ Cloudinary'den sunucu ikonu siliniyor...");
+      deleteImageFromCloudinary(oldIconUrl).catch(err => 
+        console.warn("Cloudinary'den silinemedi:", err)
+      );
+    }
+    
+    await onUpdate(liveServer.id, { iconUrl: null });
+    toast.success("Sunucu ikonu kaldırıldı");
+  };
+
+  const hasNewIcon = selectedEmoji || selectedImage;
 
   return (
     <div className="space-y-6">
@@ -337,6 +466,150 @@ function OverviewTab({ server, onUpdate, onDelete, isOwner, onClose }) {
         <Settings size={20} className="text-indigo-400" />
         Genel Bakış
       </h3>
+
+      {/* Server Icon */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2">
+          <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
+          Sunucu İkonu
+        </h4>
+        
+        <div className="flex items-start gap-6">
+          {/* Current Icon Preview */}
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Mevcut</span>
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#2b2d31] to-[#1e1f22] border border-white/10 flex items-center justify-center overflow-hidden">
+              {isCurrentImage ? (
+                <img src={currentIconUrl} alt="Server Icon" className="w-full h-full object-cover" />
+              ) : isCurrentEmoji ? (
+                <span className="text-4xl">{currentIconUrl}</span>
+              ) : (
+                <span className="text-2xl font-bold text-gray-400">{liveServer.name?.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            {currentIconUrl && (
+              <button 
+                onClick={handleRemoveIcon}
+                className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+              >
+                Kaldır
+              </button>
+            )}
+          </div>
+
+          {/* Arrow */}
+          <div className="flex items-center pt-8">
+            <ChevronRight size={20} className="text-gray-600" />
+          </div>
+
+          {/* New Icon Selector */}
+          <div className="flex-1">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Yeni İkon</span>
+            
+            {/* Icon Type Tabs */}
+            <div className="flex gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setIconType("emoji")}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  iconType === "emoji" 
+                    ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40" 
+                    : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                }`}
+              >
+                <Smile size={12} className="inline mr-1" />
+                Emoji
+              </button>
+              <button
+                type="button"
+                onClick={() => setIconType("image")}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  iconType === "image" 
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/40" 
+                    : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                }`}
+              >
+                <Image size={12} className="inline mr-1" />
+                Resim
+              </button>
+            </div>
+
+            {/* Icon Selector */}
+            <div className="flex items-center gap-3">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleImageSelect} 
+                accept="image/*" 
+                className="hidden" 
+              />
+              
+              <div 
+                onClick={() => iconType === "emoji" ? setShowEmojiPicker(true) : fileInputRef.current?.click()}
+                className={`w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all hover:scale-105 ${
+                  iconType === "image" 
+                    ? "border-purple-500/30 bg-purple-500/5 hover:border-purple-500/50" 
+                    : "border-indigo-500/30 bg-indigo-500/5 hover:border-indigo-500/50"
+                } ${isUploadingIcon ? "pointer-events-none opacity-50" : ""}`}
+              >
+                {isUploadingIcon ? (
+                  <Loader2 size={24} className="text-purple-400 animate-spin" />
+                ) : imagePreview ? (
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl" />
+                ) : selectedEmoji ? (
+                  <span className="text-4xl">{selectedEmoji}</span>
+                ) : (
+                  <div className="flex flex-col items-center gap-1 text-gray-500">
+                    {iconType === "image" ? <Upload size={20} /> : <Smile size={20} />}
+                    <span className="text-[9px] uppercase">Seç</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2">
+                {hasNewIcon && (
+                  <>
+                    <Button 
+                      onClick={handleSaveIcon}
+                      loading={isUploadingIcon}
+                      disabled={isUploadingIcon}
+                      size="sm"
+                      className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs"
+                    >
+                      <Save size={14} className="mr-1" />
+                      Kaydet
+                    </Button>
+                    <button 
+                      onClick={handleClearNewIcon}
+                      className="text-[10px] text-gray-400 hover:text-white transition-colors"
+                    >
+                      Temizle
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Emoji Picker Modal */}
+        {showEmojiPicker && createPortal(
+          <div 
+            className="fixed inset-0 z-[10100] flex items-center justify-center bg-black/80 backdrop-blur-sm" 
+            onClick={() => setShowEmojiPicker(false)}
+          >
+            <div className="relative shadow-2xl rounded-xl" onClick={(e) => e.stopPropagation()}>
+              <EmojiPicker 
+                onEmojiClick={handleEmojiClick}
+                theme="dark"
+                lazyLoadEmojis={true}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
 
       {/* Server Name */}
       <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg">
@@ -354,7 +627,7 @@ function OverviewTab({ server, onUpdate, onDelete, isOwner, onClose }) {
           <Button 
             onClick={handleUpdate} 
             loading={isLoading} 
-            disabled={name === server.name}
+            disabled={name === liveServer.name}
             className="px-4"
           >
             <Save size={16} />
@@ -402,7 +675,7 @@ function OverviewTab({ server, onUpdate, onDelete, isOwner, onClose }) {
                 <h3 className="text-2xl font-bold text-white mb-3">Sunucuyu Sil</h3>
                 
                 <p className="text-gray-400 text-base mb-8 leading-relaxed">
-                   <span className="text-white font-bold">{server.name}</span> sunucusunu silmek istediğinize emin misiniz? <br/>
+                   <span className="text-white font-bold">{liveServer.name}</span> sunucusunu silmek istediğinize emin misiniz? <br/>
                    <span className="text-red-400/80 text-sm mt-2 block">Bu işlem geri alınamaz ve tüm kanal/mesaj verileri silinir.</span>
                 </p>
                 
@@ -433,6 +706,17 @@ function OverviewTab({ server, onUpdate, onDelete, isOwner, onClose }) {
 // Members Tab
 function MembersTab({ members, roles }) {
   const { user: currentUser } = useAuthStore();
+  const { currentServer, kickMember, banMember } = useServerStore();
+  
+  // Modal States
+  const [banModal, setBanModal] = useState({ isOpen: false, member: null });
+  const [kickModal, setKickModal] = useState({ isOpen: false, member: null });
+  const [banReason, setBanReason] = useState("");
+
+  // Permissions
+  const canKickMembers = useServerPermission("KICK_MEMBERS");
+  const canBanMembers = useServerPermission("BAN_MEMBERS");
+  const isOwner = currentServer?.ownerId === currentUser?.uid;
   
   // Enrich members with fallback data
   const enrichedMembers = members.map(member => {
@@ -450,6 +734,31 @@ function MembersTab({ members, roles }) {
     };
   });
 
+  // Kick Handlers
+  const handleKickClick = (member) => {
+    setKickModal({ isOpen: true, member });
+  };
+
+  const confirmKick = async () => {
+      if (!kickModal.member) return;
+      await kickMember(currentServer.id, kickModal.member.id || kickModal.member.userId);
+      toast.success("Kullanıcı atıldı");
+      setKickModal({ isOpen: false, member: null });
+  };
+
+  // Ban Handlers
+  const handleBanClick = (member) => {
+      setBanModal({ isOpen: true, member });
+      setBanReason("");
+  };
+
+  const confirmBan = async () => {
+      if (!banModal.member) return;
+      await banMember(currentServer.id, banModal.member.id || banModal.member.userId, banModal.member.displayName, banReason);
+      toast.success("Kullanıcı yasaklandı");
+      setBanModal({ isOpen: false, member: null });
+  };
+
   return (
     <div className="space-y-6">
       <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -459,7 +768,14 @@ function MembersTab({ members, roles }) {
 
       <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg">
         <div className="space-y-2">
-          {enrichedMembers.map(member => (
+          {enrichedMembers.map(member => {
+             const isSelf = member.id === currentUser?.uid || member.userId === currentUser?.uid;
+             const isMemberOwner = member.id === currentServer.ownerId || member.userId === currentServer.ownerId;
+             
+             // Can manage this user? (Owner can manage all except self, others depend on perms and hierarchy - simplified here)
+             const canManage = !isSelf && !isMemberOwner && (isOwner || canKickMembers || canBanMembers);
+
+             return (
             <div key={member.id} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-xl transition-colors group">
               <div className="flex items-center gap-3">
                 {member.photoURL ? (
@@ -491,12 +807,251 @@ function MembersTab({ members, roles }) {
                   </div>
                 </div>
               </div>
+
+              {/* Actions */}
+              {canManage && (
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {(isOwner || canKickMembers) && (
+                          <Button 
+                            size="xs" 
+                            variant="ghost" 
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border-red-500/20"
+                            onClick={() => handleKickClick(member)}
+                            title="At"
+                          >
+                             At
+                          </Button>
+                      )}
+                      {(isOwner || canBanMembers) && (
+                          <Button 
+                            size="xs" 
+                            variant="ghost" 
+                            className="bg-red-500/20 hover:bg-red-500/30 text-red-500 hover:text-red-400 border-red-500/30 font-bold"
+                            onClick={() => handleBanClick(member)}
+                            title="Yasakla"
+                          >
+                             <Ban size={14} className="mr-1" />
+                             Yasakla
+                          </Button>
+                      )}
+                  </div>
+              )}
             </div>
-          ))}
+          )})} 
         </div>
       </div>
+
+      {/* Kick Confirmation Modal */}
+      {kickModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-nds-fade-in" onClick={() => setKickModal({isOpen: false, member: null})}></div>
+           <div className="relative w-full max-w-md rounded-3xl border border-red-500/30 shadow-[0_0_50px_rgba(239,68,68,0.2)] overflow-hidden animate-nds-scale-in bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214]">
+                {/* Top Glow */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent z-10"></div>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-red-500/10 blur-[50px] pointer-events-none"></div>
+
+                <div className="p-8 text-center relative z-10">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-900/10 flex items-center justify-center mx-auto mb-6 text-red-500 shadow-[0_0_25px_rgba(239,68,68,0.15)] border border-red-500/20 group">
+                        <div className="animate-nds-bounce-subtle">
+                           <Users size={40} className="group-hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                        </div>
+                    </div>
+                    
+                    <h3 className="text-2xl font-bold text-white mb-3">Kullanıcıyı At</h3>
+                    
+                    <p className="text-gray-400 text-base mb-8 leading-relaxed">
+                        <span className="text-white font-bold">{kickModal.member?.displayName}</span> adlı kullanıcıyı sunucudan atmak istediğinize emin misiniz? <br/>
+                        <span className="text-gray-500 text-sm mt-2 block">Kullanıcı tekrar davet kodu ile katılabilir.</span>
+                    </p>
+                    
+                    <div className="flex gap-4 justify-center">
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => setKickModal({isOpen: false, member: null})}
+                          className="hover:bg-white/5 text-gray-400 hover:text-white px-6 h-11"
+                        >
+                          İptal
+                        </Button>
+                        <Button 
+                          onClick={confirmKick}
+                          className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25 px-8 h-11 border-0"
+                        >
+                          Kullanıcıyı At
+                        </Button>
+                    </div>
+                </div>
+           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Ban Confirmation Modal */}
+      {banModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-nds-fade-in" onClick={() => setBanModal({isOpen: false, member: null})}></div>
+           <div className="relative w-full max-w-md rounded-3xl border border-red-500/30 shadow-[0_0_50px_rgba(239,68,68,0.2)] overflow-hidden animate-nds-scale-in bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214]">
+                {/* Top Glow */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent z-10"></div>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-red-500/10 blur-[50px] pointer-events-none"></div>
+
+                <div className="p-6 relative z-10">
+                    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                        <Ban size={24} className="text-red-500" />
+                        Kullanıcıyı Yasakla
+                    </h3>
+                    <p className="text-gray-400 mb-6">
+                        <span className="text-white font-bold">{banModal.member?.displayName}</span> adlı kullanıcıyı sunucudan yasaklamak üzeresiniz.
+                    </p>
+                    
+                    <div className="mb-6">
+                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Yasaklama Sebebi</label>
+                        <Input 
+                            value={banReason}
+                            onChange={(e) => setBanReason(e.target.value)}
+                            placeholder="Örn: Spam, Küfür..."
+                            autoFocus
+                            className="bg-black/20 border-red-500/20 focus:border-red-500/50"
+                        />
+                    </div>
+
+                    <div className="flex gap-3 justify-end">
+                        <Button variant="ghost" onClick={() => setBanModal({isOpen: false, member: null})}>İptal</Button>
+                        <Button 
+                            onClick={confirmBan}
+                            className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25 border-0"
+                        >
+                            Yasakla
+                        </Button>
+                    </div>
+                </div>
+           </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
+}
+
+// Bans Tab
+function BansTab({ serverId, fetchBans, unbanMember }) {
+    const [bannedUsers, setBannedUsers] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [unbanModal, setUnbanModal] = useState({ isOpen: false, userId: null });
+
+    useEffect(() => {
+        loadBans();
+    }, [serverId]);
+
+    const loadBans = async () => {
+        setIsLoading(true);
+        const bans = await fetchBans(serverId);
+        setBannedUsers(bans || []);
+        setIsLoading(false);
+    };
+
+    const handleUnbanClick = (userId) => {
+        setUnbanModal({ isOpen: true, userId });
+    };
+
+    const confirmUnban = async () => {
+        if (!unbanModal.userId) return;
+        await unbanMember(serverId, unbanModal.userId);
+        toast.success("Yasak kaldırıldı");
+        setUnbanModal({ isOpen: false, userId: null });
+        loadBans(); // Refresh list
+    };
+
+    return (
+        <div className="space-y-6">
+           <div className="flex justify-between items-center mb-4">
+               <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                   <Ban size={20} className="text-red-500" />
+                   Yasaklılar ({bannedUsers.length})
+               </h3>
+               <Button size="xs" variant="ghost" onClick={loadBans}>Yenile</Button>
+           </div>
+
+           <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg min-h-[300px]">
+               {isLoading ? (
+                   <div className="flex items-center justify-center h-40 text-gray-500">Yükleniyor...</div>
+               ) : bannedUsers.length === 0 ? (
+                   <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
+                       <Shield size={32} className="opacity-20" />
+                       <p>Yasaklı kullanıcı bulunmamaktadır.</p>
+                   </div>
+               ) : (
+                   <div className="space-y-2">
+                       {bannedUsers.map(ban => (
+                           <div key={ban.id} className="flex items-center justify-between p-3 bg-[#1e1f22] rounded-xl border border-white/5 hover:bg-[#2b2d31] transition-colors group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-900 to-red-600 flex items-center justify-center text-white font-bold text-sm">
+                                        {ban.displayName?.charAt(0).toUpperCase() || "U"}
+                                    </div>
+                                    <div>
+                                        <div className="text-white font-medium">{ban.displayName}</div>
+                                        <div className="text-xs text-red-400">Sebep: {ban.reason}</div>
+                                    </div>
+                                </div>
+                                <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-gray-400 hover:text-green-400 hover:bg-green-500/10 border-transparent hover:border-green-500/20 opacity-0 group-hover:opacity-100 transition-all"
+                                    onClick={() => handleUnbanClick(ban.userId)}
+                                >
+                                    Yasağı Kaldır
+                                </Button>
+                           </div>
+                       ))}
+                   </div>
+               )}
+           </div>
+
+           {/* Unban Confirmation Modal */}
+           {unbanModal.isOpen && createPortal(
+                <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-nds-fade-in" onClick={() => setUnbanModal({isOpen: false, userId: null})}></div>
+                
+                <div className="relative w-full max-w-md rounded-3xl border border-green-500/30 shadow-[0_0_50px_rgba(34,197,94,0.15)] overflow-hidden animate-nds-scale-in bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214]">
+                    {/* Top Glow & Effects */}
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/50 to-transparent z-10"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-green-500/10 blur-[50px] pointer-events-none"></div>
+
+                    <div className="p-8 text-center relative z-10">
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500/20 to-green-900/10 flex items-center justify-center mx-auto mb-6 text-green-500 shadow-[0_0_25px_rgba(34,197,94,0.15)] border border-green-500/20 group">
+                            <div className="animate-nds-bounce-subtle">
+                                <Shield size={40} className="group-hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                            </div>
+                        </div>
+                        
+                        <h3 className="text-2xl font-bold text-white mb-3">Yasağı Kaldır</h3>
+                        
+                        <p className="text-gray-400 text-base mb-8 leading-relaxed">
+                            Bu kullanıcının sunucu yasağını kaldırmak istediğinize emin misiniz? <br/>
+                            <span className="text-green-400/80 text-sm mt-2 block">Kullanıcı tekrar sunucuya katılabilir.</span>
+                        </p>
+                        
+                        <div className="flex gap-4 justify-center">
+                            <Button 
+                                variant="ghost" 
+                                onClick={() => setUnbanModal({isOpen: false, userId: null})}
+                                className="hover:bg-white/5 text-gray-400 hover:text-white px-6 h-11"
+                            >
+                                İptal
+                            </Button>
+                            <Button 
+                                onClick={confirmUnban}
+                                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg shadow-green-500/25 px-8 h-11 border-0"
+                            >
+                                Yasağı Kaldır
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+                </div>,
+                document.body
+           )}
+        </div>
+    );
 }
 
 const PERMISSIONS = [
@@ -505,6 +1060,8 @@ const PERMISSIONS = [
   { id: "MANAGE_ROLES", label: "Rolleri Yönet" },
   { id: "KICK_MEMBERS", label: "Üyeleri At" },
   { id: "BAN_MEMBERS", label: "Üyeleri Yasakla" },
+  { id: "MUTE_MEMBERS", label: "Üyeleri Sustur" },
+  { id: "DEAFEN_MEMBERS", label: "Üyeleri Sağırlaştır" },
 ];
 
 const ROLE_COLOR_PRESETS = [

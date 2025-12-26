@@ -34,9 +34,9 @@ const SettingsModal = dynamic(() => import("@/src/components/SettingsModal"));
 const UpdateNotification = dynamic(() => import("@/src/components/UpdateNotification"));
 const InfoModal = dynamic(() => import("@/src/components/InfoModal"));
 
-import ServerMemberList from "@/src/components/server/ServerMemberList"; // Added import
-
-// ... imports remain ...
+import ServerMemberList from "@/src/components/server/ServerMemberList";
+import { usePresence } from "@/src/hooks/usePresence";
+import { useIdleDetection } from "@/src/hooks/useIdleDetection";
 
 export default function Home() {
   const {
@@ -55,8 +55,9 @@ export default function Home() {
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true); // Splash screen visibility
   const [showMemberList, setShowMemberList] = useState(true); // Added state
-const { showSettingsModal, setSettingsOpen } = useSettingsStore();
-const [infoModal, setInfoModal] = useState({
+  const { showSettingsModal, setSettingsOpen } = useSettingsStore();
+
+  const [infoModal, setInfoModal] = useState({
     isOpen: false,
     title: "",
     message: "",
@@ -64,6 +65,11 @@ const [infoModal, setInfoModal] = useState({
 
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [showJoinServerModal, setShowJoinServerModal] = useState(false);
+
+  // Initialize presence tracking (online/idle/offline status)
+  usePresence();
+  // Initialize auto-idle detection
+  useIdleDetection();
 
   // Initialize Authentication
   useEffect(() => {
@@ -88,12 +94,12 @@ const [infoModal, setInfoModal] = useState({
     return (
       <LoginPage
         onGoogleLogin={async () => {
-          if (window.netrex?.googleLogin) {
+          if (window.netrex?.startOAuth) {
             try {
-              const result = await window.netrex.googleLogin();
-              if (result?.idToken) {
-                await loginWithGoogleToken(result.idToken);
-              }
+              // Start OAuth flow - this opens browser and local auth server handles the rest
+              await window.netrex.startOAuth();
+              // The auth success will be handled by onOAuthSuccess callback
+              // which is set up in authStore's initializeAuth
             } catch (error) {
               console.error("Google login failed:", error);
               toast.error("Google ile giriş başarısız oldu");

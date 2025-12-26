@@ -1,8 +1,9 @@
+"use client";
+
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import Button from "@/src/components/ui/Button";
 import Avatar from "@/src/components/ui/Avatar";
 import { 
   Hash, 
@@ -13,73 +14,53 @@ import {
   UserPlus,
   Trash2,
   LogOut,
-  Mic,
+  Lock,
+  MoreVertical,
+  Signal,
+  MessageSquare,
   MicOff,
-  Headphones,
-  Circle,
-  CircleOff,
-  EyeOff,
-  Loader2,
-  Users,
-  Lock
+  Headphones
 } from "lucide-react";
 import { useChatStore } from "@/src/store/chatStore";
 import ServerSettingsModal from "./ServerSettingsModal";
 import CreateChannelModal from "./CreateChannelModal";
 import ChannelContextMenu from "./ChannelContextMenu";
 import ChannelSettingsModal from "./ChannelSettingsModal";
-import { ConfirmModal } from "@/src/components/ui/Modal";
 import { useSettingsStore } from "@/src/store/settingsStore";
-
-import { toast } from "sonner";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 
-export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showMemberList }) {
-  const { currentServer, channels, createChannel, deleteServer, members, canUserViewChannel, voiceStates } = useServerStore();
+export default function ServerSidebar({ onJoinChannel }) {
+  const { currentServer, channels, deleteServer, members, canUserViewChannel, voiceStates } = useServerStore();
   const { user } = useAuthStore();
-  const { isMuted, isDeafened, toggleMute, toggleDeaf, userStatus, setUserStatus } = useSettingsStore();
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
 
-  // Reset local state when server changes to ensure no ghost highlights
-  useEffect(() => {
-    // Note: currentChannel and showChatPanel are handled globally by chatStore
-  }, [currentServer?.id]);
-
-  const [collapsedCategories, setCollapsedCategories] = useState({});
+  // State
   const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview' });
   const [showMenu, setShowMenu] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [hoveredChannel, setHoveredChannel] = useState(null);
   const [createChannelModal, setCreateChannelModal] = useState({ isOpen: false, type: 'text' });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, data: null });
-  
-  // Channel context menu & settings state
   const [channelContextMenu, setChannelContextMenu] = useState(null);
   const [channelSettings, setChannelSettings] = useState({ isOpen: false, channel: null, initialTab: "overview" });
   
   const menuRef = useRef(null);
-  const userMenuRef = useRef(null);
 
+  // Click Outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setShowMenu(false);
-      }
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target) && !event.target.closest('[data-user-menu]')) {
-        setShowUserMenu(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Get current user's roles for permission filtering
+  // Filter Channels
   const currentUserMember = members.find(m => m.id === user?.uid || m.userId === user?.uid);
   const userRoles = currentUserMember?.roles || [];
   const isOwner = currentServer?.ownerId === user?.uid;
 
-  // Filter channels based on user permissions (owners and admins see all)
   const visibleChannels = useMemo(() => {
     if (!currentServer) return [];
     if (isOwner || canManageChannels) return channels;
@@ -91,40 +72,19 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
   const textChannels = visibleChannels.filter(c => c.type === 'text');
   const voiceChannels = visibleChannels.filter(c => c.type === 'voice');
   
-  // Check if a channel has permission restrictions
   const hasRestrictions = (channel) => {
     return channel.permissionOverwrites && Object.keys(channel.permissionOverwrites).length > 0;
   };
-  
-  // Handle channel right-click
+
+  // Actions
   const handleChannelContextMenu = (e, channel) => {
     e.preventDefault();
-    setChannelContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      channel
-    });
+    setChannelContextMenu({ x: e.clientX, y: e.clientY, channel });
   };
 
-  const handleCreateChannel = (type) => {
-    setCreateChannelModal({ isOpen: true, type });
-  };
-  
-  const handleDeleteServer = () => {
-    setDeleteModal({
-        isOpen: true,
-        type: 'server',
-        data: currentServer
-    });
-  };
-
-  const handleDeleteChannel = (channelId, channelName) => {
-    setDeleteModal({
-        isOpen: true,
-        type: 'channel',
-        data: { id: channelId, name: channelName }
-    });
-  };
+  const handleCreateChannel = (type) => setCreateChannelModal({ isOpen: true, type });
+  const handleDeleteServer = () => setDeleteModal({ isOpen: true, type: 'server', data: currentServer });
+  const handleDeleteChannel = (channelId, channelName) => setDeleteModal({ isOpen: true, type: 'channel', data: { id: channelId, name: channelName } });
 
   const onConfirmDelete = async () => {
       if (deleteModal.type === 'server') {
@@ -135,348 +95,245 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
       setDeleteModal({ isOpen: false, type: null, data: null });
   };
 
-  const getProfileColor = (userId) => {
-    if (!userId) return "#6366f1";
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = hash % 360;
-    return `hsl(${hue}, 70%, 50%)`;
-  };
-
-  const profileColor = getProfileColor(user?.uid);
-
   return (
-    <div className="w-sidebar h-full flex flex-col flex-shrink-0 select-none relative overflow-hidden bg-[#1e1f22]">
-       {/* Background gradient */}
-       <div className="absolute inset-0 bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214] pointer-events-none" />
-      
-      {/* Subtle glow effects */}
-      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-purple-500/3 to-transparent pointer-events-none" />
-      
-      {/* Right border */}
-      <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-white/10 via-white/5 to-white/10" />
+    <div className="w-sidebar h-full flex flex-col shrink-0 relative bg-[#0a0a0c] border-r border-white/5 overflow-hidden">
+       {/* Background Effects (Void Theme) */}
+       <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03] pointer-events-none" />
+       <div className="absolute -top-20 -left-20 w-60 h-60 bg-indigo-600/10 blur-[100px] pointer-events-none" />
+       <div className="absolute top-1/2 -right-20 w-40 h-40 bg-purple-600/10 blur-[80px] pointer-events-none" />
 
-      {/* 1. HEADER - Server Dropdown */}
-      <div className="relative z-20 px-3 py-4" ref={menuRef}>
-        <div className="flex items-center gap-2">
-          {/* Server Info Button - Left Side */}
-          <button 
-              onClick={() => setShowMenu(!showMenu)}
-              className={`
-                flex-1 flex items-center justify-between 
-                px-4 py-3 rounded-2xl 
-                cursor-pointer 
-                border transition-all duration-300 group 
-                min-w-0 relative overflow-hidden
-                ${showMenu 
-                  ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-500/30' 
-                  : 'bg-gradient-to-br from-white/5 to-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/10'
-                }
-              `}
-          >
-              <div className="flex flex-col min-w-0 items-start relative z-10">
-                  <h1 className="font-bold text-white text-[15px] tracking-tight leading-none truncate w-full text-left drop-shadow-sm">
-                    {currentServer.name}
-                  </h1>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${showMenu ? 'bg-indigo-400 shadow-[0_0_5px_currentColor]' : 'bg-emerald-500 shadow-[0_0_5px_currentColor]'}`}></span>
-                    <span className="text-[10px] text-gray-400 font-medium group-hover:text-gray-300 transition-colors uppercase tracking-wider">
-                      {showMenu ? 'Menü Açık' : 'Çevrimiçi'}
+      {/* 1. DASHBOARD HEADER (Not a dropdown bar anymore) */}
+      <div className="relative z-30 p-4 pb-2" ref={menuRef}>
+        <div 
+          onClick={() => setShowMenu(!showMenu)}
+          className={`
+            relative overflow-hidden
+            group flex flex-col justify-between 
+            p-4 rounded-3xl cursor-pointer 
+            border transition-all duration-300
+            ${showMenu 
+              ? 'bg-[#1a1b1e] border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.15)]' 
+              : 'bg-gradient-to-br from-[#16171a] to-[#111214] border-white/10 hover:border-white/20 hover:shadow-lg'
+            }
+          `}
+        >
+            {/* Header Glow */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-2xl -translate-y-10 translate-x-10 group-hover:translate-x-5 transition-transform duration-500" />
+            
+            <div className="flex items-start justify-between relative z-10">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg overflow-hidden">
+                    {currentServer.iconUrl ? (
+                        <img 
+                            src={currentServer.iconUrl} 
+                            alt={currentServer.name}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        currentServer.name.charAt(0).toUpperCase()
+                    )}
+                </div>
+                <div className={`p-2 rounded-xl transition-colors ${showMenu ? 'bg-white/10 text-white' : 'text-[#5c5e66] group-hover:text-white'}`}>
+                    <MoreVertical size={18} />
+                </div>
+            </div>
+            
+            <div className="mt-3 relative z-10">
+                <h1 className="font-bold text-lg text-white tracking-tight truncate">
+                  {currentServer.name}
+                </h1>
+                <div className="flex items-center gap-2 mt-1">
+                    <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                    <span className="text-xs text-[#949ba4] font-medium">
+                        {voiceStates ? Object.values(voiceStates).flat().length : 0} Sesli • {members.length} Üye
                     </span>
-                  </div>
-              </div>
-              
-              <div className={`
-                 w-7 h-7 rounded-lg flex items-center justify-center
-                 transition-all duration-300 flex-shrink-0 ml-1
-                 ${showMenu ? 'bg-indigo-500 text-white rotate-180 shadow-lg' : 'bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-white'}
-              `}>
-                <ChevronDown size={14} strokeWidth={2.5} />
-              </div>
-
-              {/* Hover Glow Effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none"></div>
-          </button>
-          
+                </div>
+            </div>
         </div>
 
-         {/* Dropdown Menu */}
+         {/* Modern Dropdown Menu */}
          {showMenu && (
-             <div className="absolute top-full left-4 right-4 mt-2 bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214] rounded-2xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-white/10 z-50 animate-in fade-in zoom-in-95 duration-200 p-2 space-y-1 backdrop-blur-2xl ring-1 ring-black/50">
-                 
-                 {/* Invite Button - Prominent */}
-                 <button 
-                      onClick={() => {
-                          setServerSettings({ isOpen: true, initialTab: 'invites' });
-                          setShowMenu(false);
-                      }}
-                      className="group flex items-center justify-between w-full px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 bg-indigo-500/10 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/20 border border-indigo-500/20 hover:border-indigo-500"
-                 >
-                     <span className="text-sm font-bold text-indigo-400 group-hover:text-white transition-colors">İnsanları Davet Et</span>
-                     <UserPlus size={16} className="text-indigo-400 group-hover:text-white transition-colors" />
+             <div className="absolute top-[calc(100%)] left-4 right-4 mt-2 bg-[#111214]/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 p-2 space-y-1">
+                 <button onClick={() => { setServerSettings({ isOpen: true, initialTab: 'invites' }); setShowMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500 hover:text-white transition-all">
+                     <UserPlus size={18} />
+                     <span className="text-sm font-semibold">Davet Et</span>
                  </button>
 
-                 <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-1.5 mx-2"></div>
+                 <div className="h-px bg-white/10 my-1 mx-2" />
 
-                 {isOwner && (
+                 {isOwner ? (
                      <>
-                         <button 
-                             onClick={() => {
-                                 setServerSettings({ isOpen: true, initialTab: 'overview' });
-                                 setShowMenu(false);
-                             }}
-                             className="group flex items-center justify-between w-full px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-white/5 border border-transparent hover:border-white/5"
-                         >
-                             <span className="text-sm font-medium text-gray-400 group-hover:text-white transition-colors">Sunucu Ayarları</span>
-                             <Settings size={16} className="text-gray-500 group-hover:text-white transition-colors" />
-                         </button>
-                         
-                         <button 
-                             onClick={() => {
-                                 handleCreateChannel('text');
-                                 setShowMenu(false);
-                             }}
-                             className="group flex items-center justify-between w-full px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-white/5 border border-transparent hover:border-white/5"
-                         >
-                             <span className="text-sm font-medium text-gray-400 group-hover:text-white transition-colors">Kanal Oluştur</span>
-                             <Plus size={16} className="text-gray-500 group-hover:text-white transition-colors" />
-                         </button>
-                         
-                         <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-1.5 mx-2"></div>
-
-                         <button 
-                             onClick={handleDeleteServer}
-                             className="group flex items-center justify-between w-full px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
-                         >
-                             <span className="text-sm font-medium text-red-400 group-hover:text-red-300 transition-colors">Sunucuyu Sil</span>
-                             <Trash2 size={16} className="text-red-400 group-hover:text-red-300 group-hover:scale-110 transition-transform" />
-                         </button>
+                         <MenuButton icon={<Settings size={18} />} label="Ayarlar" onClick={() => { setServerSettings({ isOpen: true, initialTab: 'overview' }); setShowMenu(false); }} />
+                         <MenuButton icon={<Plus size={18} />} label="Kanal Ekle" onClick={() => { handleCreateChannel('text'); setShowMenu(false); }} />
+                         <MenuButton icon={<Trash2 size={18} />} label="Sunucuyu Sil" danger onClick={handleDeleteServer} />
                      </>
-                 )}
-                 
-                 {!isOwner && (
-                      <button 
-                         className="group flex items-center justify-between w-full px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
-                         onClick={async () => {
-                             if(confirm("Sunucudan ayrılmak istediğinize emin misiniz?")) {
-                                 const { leaveServer } = useServerStore.getState();
-                                 await leaveServer(currentServer.id, user.uid);
-                                 setShowMenu(false);
-                             }
-                         }}
-                     >
-                         <span className="text-sm font-medium text-red-400 group-hover:text-red-300 transition-colors">Sunucudan Ayrıl</span>
-                         <LogOut size={16} className="text-red-400 group-hover:text-red-300 group-hover:translate-x-1 transition-transform" />
-                     </button>
+                 ) : (
+                     <MenuButton icon={<LogOut size={18} />} label="Ayrıl" danger onClick={async () => { if(confirm("Ayrıl?")) { await useServerStore.getState().leaveServer(currentServer.id, user.uid); setShowMenu(false); }}} />
                  )}
              </div>
          )}
       </div>
 
-       {/* Divider */}
-       <div className="relative z-10 mx-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-      {/* 2. KANALLAR LİSTESİ */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-3 space-y-4 pt-4 relative z-10">
+      {/* 2. CHANNELS SCROLL AREA */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
         
-        {/* METİN KANALLARI */}
+        {/* --- TEXT CHANNELS (Compact & Clean) --- */}
         <div>
-           <div className="flex items-center justify-between px-1 mb-2 group">
-             <div className="flex items-center gap-2 cursor-pointer" onClick={() => {}}>
-               <div className="w-1 h-3 rounded-full bg-gradient-to-b from-purple-400 to-pink-500" />
-               <span className="text-[10px] font-bold text-[#5c5e66] group-hover:text-[#949ba4] uppercase tracking-wider transition-colors">Metin Kanalları</span>
-             </div>
-              {canManageChannels && (
-                <button onClick={() => handleCreateChannel('text')} className="w-6 h-6 flex items-center justify-center rounded-lg text-[#5c5e66] hover:text-white hover:bg-white/10 transition-all duration-200">
-                  <Plus size={14} strokeWidth={2} />
-                </button>
-              )}
+           <div className="flex items-center justify-between px-2 mb-3">
+             <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">Sohbet</span>
+             {canManageChannels && (
+               <button onClick={() => handleCreateChannel('text')} className="text-[#5c5e66] hover:text-white transition-colors">
+                 <Plus size={14} />
+               </button>
+             )}
            </div>
 
            <div className="space-y-1">
              {textChannels.map(channel => {
                 const hasUnread = unreadCounts[channel.id] > 0;
-                // Check if this channel is the current active text channel and the chat panel is visible
                 const isActive = currentChannel?.id === channel.id && showChatPanel;
                 
                 return (
                  <div
                    key={channel.id}
                    onClick={() => {
+                        const isUserInVoice = Object.values(voiceStates || {}).some(cp => cp?.some(p => p.userId === user?.uid));
+                        if (!isUserInVoice) { onJoinChannel(channel); return; }
                         const { loadChannelMessages, setShowChatPanel, showChatPanel, currentChannel } = useChatStore.getState();
-                        
-                        if (currentChannel?.id === channel.id && showChatPanel) {
-                          // If already active and panel is open, toggle it off
-                          setShowChatPanel(false);
-                        } else {
-                          // Otherwise, activate it
-                          loadChannelMessages(channel.id, currentServer.id);
-                          setShowChatPanel(true);
-                          onJoinChannel(channel);
-                        }
+                        if (currentChannel?.id === channel.id && showChatPanel) { setShowChatPanel(false); } 
+                        else { loadChannelMessages(channel.id, currentServer.id); setShowChatPanel(true); onJoinChannel(channel); }
                    }}
                    onContextMenu={(e) => handleChannelContextMenu(e, channel)}
-                   onMouseEnter={() => setHoveredChannel(`text-${channel.id}`)}
-                   onMouseLeave={() => setHoveredChannel(null)}
-                   className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden ${
-                       isActive
-                       ? "bg-gradient-to-r from-purple-500/20 to-pink-500/10 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                       : "hover:bg-white/5 border border-transparent"
-                   }`}
+                   className={`
+                     group relative flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200
+                     ${isActive ? "bg-white/[0.08]" : "hover:bg-white/[0.04]"}
+                   `}
                  >
-                    {isActive && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent pointer-events-none" />
-                    )}
+                    {/* Active Pill Indicator */}
+                    {isActive && <div className="absolute left-0 h-6 w-1 bg-purple-500 rounded-r-full shadow-[0_0_10px_rgba(168,85,247,0.8)]" />}
+
+                    <MessageSquare size={18} className={`${isActive ? "text-purple-400" : "text-[#5c5e66] group-hover:text-[#949ba4]"} transition-colors`} />
                     
-                    <div className="flex items-center gap-3 min-w-0 relative z-10">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                            isActive
-                            ? "bg-purple-500/20 text-purple-400"
-                            : hasUnread
-                              ? "bg-indigo-500/20 text-indigo-400"
-                              : "bg-white/5 text-[#5c5e66] group-hover:bg-white/10 group-hover:text-[#949ba4]"
-                        }`}>
-                           <Hash size={16} />
-                        </div>
-                        <span className={`truncate text-sm ${
-                           isActive ? "font-semibold text-white" : 
-                           hasUnread ? "font-semibold text-white" : 
-                           "font-medium text-[#949ba4] group-hover:text-white"
-                        }`}>
-                          {channel.name}
-                        </span>
-                        {hasRestrictions(channel) && (
-                          <Lock size={12} className="text-[#5c5e66] flex-shrink-0" title="Bu kanal belirli rollere kısıtlı" />
-                        )}
-                    </div>
+                    <span className={`flex-1 truncate text-sm font-medium ${isActive ? "text-white" : "text-[#949ba4] group-hover:text-[#dbdee1]"}`}>
+                      {channel.name}
+                    </span>
 
-                    {hasUnread && !isActive && (
-                      <div className="px-2 py-0.5 rounded-full bg-indigo-500 text-[10px] font-bold text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]">
-                         {unreadCounts[channel.id]}
-                      </div>
-                    )}
-
-                    {canManageChannels && (
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteChannel(channel.id, channel.name);
-                            }}
-                            className={`absolute right-2 text-gray-400 hover:text-red-400 p-1 rounded hover:bg-black/20 transition-all ${
-                                hoveredChannel === `text-${channel.id}` ? 'opacity-100' : 'opacity-0'
-                            }`}
-                        >
-                            <Trash2 size={14} />
-                        </button>
-                    )}
+                    {hasUnread && <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_5px_currentColor]" />}
+                    {hasRestrictions(channel) && <Lock size={12} className="text-[#5c5e66]" />}
                  </div>
                 );
              })}
            </div>
         </div>
 
-        {/* SES KANALLARI */}
-        <div className="mt-4">
-           <div className="flex items-center justify-between px-1 mb-2 group">
-             <div className="flex items-center gap-2">
-               <div className="w-1 h-3 rounded-full bg-gradient-to-b from-cyan-400 to-blue-500" />
-               <span className="text-[10px] font-bold text-[#5c5e66] group-hover:text-[#949ba4] uppercase tracking-wider transition-colors">Ses Kanalları</span>
-             </div>
+        {/* --- VOICE CHANNELS (Cards / Pods Layout with User List) --- */}
+        <div>
+           <div className="flex items-center justify-between px-2 mb-3">
+             <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">Ses Odaları</span>
              {canManageChannels && (
-               <button onClick={() => handleCreateChannel('voice')} className="w-6 h-6 flex items-center justify-center rounded-lg text-[#5c5e66] hover:text-white hover:bg-white/10 transition-all duration-200">
-                 <Plus size={14} strokeWidth={2} />
+               <button onClick={() => handleCreateChannel('voice')} className="text-[#5c5e66] hover:text-white transition-colors">
+                 <Plus size={14} />
                </button>
              )}
            </div>
-           <div className="space-y-1">
+           
+           <div className="space-y-3">
              {voiceChannels.map(channel => {
-                 // Check if current user is in this voice channel
                  const isActive = voiceStates?.[channel.id]?.some(u => u.userId === user?.uid) || false;
+                 const participants = voiceStates?.[channel.id] || [];
                  
                  return (
-                 <div key={channel.id} className="flex flex-col mb-0.5">
-                   <div
-                     onClick={() => onJoinChannel(channel)}
-                     onContextMenu={(e) => handleChannelContextMenu(e, channel)}
-                     onMouseEnter={() => setHoveredChannel(`voice-${channel.id}`)}
-                     onMouseLeave={() => setHoveredChannel(null)}
-                     className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden border border-transparent ${
-                        isActive 
-                        ? "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
-                        : "hover:bg-white/5"
-                     }`}
-                   >
-                       {isActive && (
-                         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent pointer-events-none" />
-                       )}
-                      <div className="flex items-center gap-3 min-w-0 flex-1 relative z-10">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                              isActive
-                              ? "bg-cyan-500/20 text-cyan-400"
-                              : "bg-white/5 text-[#5c5e66] group-hover:bg-white/10 group-hover:text-[#949ba4]"
-                          }`}>
-                             <Volume2 size={16} />
-                          </div>
-                          <span className={`truncate text-sm ${
-                              isActive
-                              ? "font-semibold text-white"
-                              : "font-medium text-[#949ba4] group-hover:text-white"
-                          }`}>
-                              {channel.name}
-                          </span>
-                          {hasRestrictions(channel) && (
-                            <Lock size={12} className="text-[#5c5e66] flex-shrink-0" title="Bu kanal belirli rollere kısıtlı" />
-                          )}
-                      </div>
+                   <div key={channel.id} className="flex flex-col">
+                     {/* Voice Channel Card */}
+                     <div 
+                        onClick={() => onJoinChannel(channel)}
+                        onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                        className={`
+                            group relative p-3 rounded-2xl cursor-pointer border transition-all duration-300
+                            ${isActive 
+                               ? "bg-gradient-to-br from-[#1a1b1e] to-[#111214] border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.1)]" 
+                               : "bg-[#111214] border-white/5 hover:border-white/10 hover:bg-[#16171a]"
+                            }
+                        `}
+                     >
+                        {/* Channel Info Row */}
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <div className={`
+                                    p-1.5 rounded-lg transition-colors
+                                    ${isActive ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'}
+                                `}>
+                                    {isActive ? <Signal size={14} className="animate-pulse" /> : <Volume2 size={14} />}
+                                </div>
+                                <span className={`truncate font-semibold text-sm ${isActive ? 'text-white' : 'text-[#949ba4] group-hover:text-white'}`}>
+                                    {channel.name}
+                                </span>
+                            </div>
+                            {hasRestrictions(channel) && <Lock size={12} className="text-[#5c5e66]" />}
+                        </div>
 
-                      {canManageChannels && (
-                          <button 
-                              onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteChannel(channel.id, channel.name);
-                              }}
-                              className={`absolute right-2 text-gray-400 hover:text-red-400 p-1 rounded hover:bg-black/20 transition-all ${
-                                  hoveredChannel === `voice-${channel.id}` ? 'opacity-100' : 'opacity-0'
-                              }`}
-                          >
-                              <Trash2 size={14} />
-                          </button>
-                      )}
+                        {/* Participants Count Badge */}
+                        <div className="flex items-center justify-between">
+                            {participants.length > 0 ? (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-cyan-400 font-semibold">{participants.length} kişi bağlı</span>
+                                </div>
+                            ) : (
+                                <span className="text-[10px] text-[#5c5e66] italic group-hover:text-[#80848e] transition-colors">
+                                    Boş oda
+                                </span>
+                            )}
+                            
+                            {/* Active Dot if connected */}
+                            {isActive && <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />}
+                        </div>
+                     </div>
+                     
+                     {/* Participants List (Under Channel Card) */}
+                     {participants.length > 0 && (
+                         <div className="mt-1 ml-3 space-y-0.5">
+                             {participants.map((u) => (
+                                 <div 
+                                     key={u.userId} 
+                                     className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-default"
+                                 >
+                                     {/* Avatar */}
+                                     <div className="relative flex-shrink-0">
+                                         <div className="w-6 h-6 rounded-full bg-[#2b2d31] flex items-center justify-center overflow-hidden ring-1 ring-white/10">
+                                             {u.photoURL ? (
+                                                 <img src={u.photoURL} alt={u.username} className="w-full h-full object-cover" />
+                                             ) : (
+                                                 <span className="text-[9px] text-white font-bold">{u.username?.charAt(0).toUpperCase()}</span>
+                                             )}
+                                         </div>
+                                         {/* Mic/Deaf Indicators */}
+                                         {(u.isMuted || u.isDeafened) && (
+                                             <div className="absolute -bottom-0.5 -right-0.5 bg-[#111214] rounded-full p-[2px]">
+                                                 {u.isDeafened ? <Headphones size={8} className="text-red-400"/> : <MicOff size={8} className="text-red-400"/>}
+                                             </div>
+                                         )}
+                                     </div>
+                                     
+                                     {/* Username */}
+                                     <span className="text-xs text-[#949ba4] font-medium truncate flex-1">
+                                         {u.username || "Kullanıcı"}
+                                     </span>
+                                     
+                                     {/* Speaking Indicator (Optional Visual) */}
+                                     {!u.isMuted && !u.isDeafened && (
+                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.6)]" />
+                                     )}
+                                 </div>
+                             ))}
+                         </div>
+                     )}
                    </div>
-                   
-                   {/* Connected Users List */}
-                   {voiceStates?.[channel.id] && voiceStates[channel.id].length > 0 && (
-                       <div className="pl-5 pr-2 pb-1 space-y-1">
-                           {voiceStates[channel.id].map((u) => (
-                               <div key={u.userId} className="group/user flex items-center gap-2.5 py-1 px-1 rounded-xl transition-all duration-200 hover:bg-gradient-to-r hover:from-white/10 hover:to-transparent border border-transparent hover:border-white/5 cursor-default relative overflow-hidden">
-                                   {/* Hover Glow */}
-                                   <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/user:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                                   
-                                   <div className="relative">
-                                     <Avatar 
-                                         src={u.photoURL} 
-                                         fallback={u.username?.substring(0, 2).toUpperCase() || "??"}
-                                         className="w-6 h-6 rounded-full border border-white/10 shadow-sm group-hover/user:scale-105 transition-transform duration-200 mr-2"
-                                     />
-                                   </div>
-
-                                   <span className="relative text-[13px] font-medium text-gray-400 group-hover/user:text-white truncate transition-colors duration-200">
-                                       {u.username || "Kullanıcı"}
-                                   </span>
-                               </div>
-                           ))}
-                       </div>
-                   )}
-                 </div>
-             )})}
+                 );
+             })}
            </div>
         </div>
-
       </div>
 
+      {/* --- MODALS (Reused Logic) --- */}
       {serverSettings.isOpen && (
         <ServerSettingsModal 
           isOpen={serverSettings.isOpen} 
@@ -485,7 +342,6 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
         />
       )}
 
-      {/* Create Channel Modal */}
       <CreateChannelModal 
         isOpen={createChannelModal.isOpen}
         onClose={() => setCreateChannelModal({ ...createChannelModal, isOpen: false })}
@@ -493,55 +349,24 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
         serverId={currentServer.id}
       />
 
-      {/* Custom Delete Confirmation Modal */}
       {deleteModal.isOpen && createPortal(
         <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-nds-fade-in" onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}></div>
-          
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-nds-scale-in bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214]">
-             {/* Top Glow & Effects */}
-             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent z-10"></div>
-             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-red-500/10 blur-[50px] pointer-events-none"></div>
-
-             <div className="p-8 text-center relative z-10">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-900/10 flex items-center justify-center mx-auto mb-6 text-red-500 shadow-[0_0_25px_rgba(239,68,68,0.15)] border border-red-500/20 group">
-                    <div className="animate-nds-bounce-subtle">
-                      <Trash2 size={40} className="group-hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
-                    </div>
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}></div>
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 shadow-2xl bg-[#111214] overflow-hidden animate-in zoom-in-95">
+             <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+             <div className="p-8 text-center">
+                <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 text-red-500">
+                   <Trash2 size={32} />
                 </div>
-                
-                <h3 className="text-2xl font-bold text-white mb-3">
-                  {deleteModal.type === 'server' ? "Sunucuyu Sil" : "Kanalı Sil"}
+                <h3 className="text-xl font-bold text-white mb-2">
+                  {deleteModal.type === 'server' ? "Sunucuyu Yok Et" : "Kanalı Sil"}
                 </h3>
-                
-                <p className="text-gray-400 text-base mb-8 leading-relaxed">
-                   {deleteModal.type === 'server' ? (
-                     <>
-                       <span className="text-white font-bold">{deleteModal.data?.name}</span> sunucusunu silmek istediğinize emin misiniz? <br/>
-                       <span className="text-red-400/80 text-sm mt-2 block">Bu işlem geri alınamaz ve tüm veriler silinir.</span>
-                     </>
-                   ) : (
-                     <>
-                       <span className="text-white font-bold">#{deleteModal.data?.name}</span> kanalını silmek istediğinize emin misiniz? <br/>
-                       <span className="text-red-400/80 text-sm mt-2 block">Bu işlem geri alınamaz.</span>
-                     </>
-                   )}
+                <p className="text-[#949ba4] mb-6">
+                   <span className="text-white font-bold">{deleteModal.data?.name}</span> kalıcı olarak silinecek. Bu işlem geri alınamaz.
                 </p>
-                
-                <div className="flex gap-4 justify-center">
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}
-                      className="hover:bg-white/5 text-gray-400 hover:text-white px-6 h-11"
-                    >
-                      İptal
-                    </Button>
-                    <Button 
-                      onClick={onConfirmDelete}
-                      className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25 px-8 h-11 border-0"
-                    >
-                      {deleteModal.type === 'server' ? "Sunucuyu Sil" : "Kanalı Sil"}
-                    </Button>
+                <div className="flex gap-3 justify-center">
+                    <button onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })} className="px-5 py-2.5 rounded-xl text-[#dbdee1] hover:bg-white/5 transition-colors">Vazgeç</button>
+                    <button onClick={onConfirmDelete} className="px-6 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20">Sil ve Onayla</button>
                 </div>
              </div>
           </div>
@@ -549,7 +374,6 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
         document.body
       )}
 
-      {/* Channel Context Menu */}
       {channelContextMenu && (
         <ChannelContextMenu
           x={channelContextMenu.x}
@@ -560,7 +384,6 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
         />
       )}
 
-      {/* Channel Settings Modal */}
       <ChannelSettingsModal
         isOpen={channelSettings.isOpen}
         onClose={() => setChannelSettings({ isOpen: false, channel: null })}
@@ -569,4 +392,23 @@ export default function ServerSidebar({ onJoinChannel, onToggleMemberList, showM
       />
     </div>
   );
+}
+
+// Yardımcı Menü Butonu Bileşeni
+function MenuButton({ icon, label, onClick, danger }) {
+    return (
+        <button 
+            onClick={onClick}
+            className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all
+                ${danger 
+                    ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300' 
+                    : 'text-[#949ba4] hover:bg-white/5 hover:text-white'
+                }
+            `}
+        >
+            {icon}
+            <span className="text-sm font-medium">{label}</span>
+        </button>
+    )
 }

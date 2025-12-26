@@ -4,16 +4,14 @@ import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { Home, Plus, Upload, RefreshCw, Settings, UserPlus, LogOut, Trash2 } from "lucide-react";
+import { Home, Plus, Upload, RefreshCw, Settings, UserPlus, LogOut, Compass } from "lucide-react";
 import Tooltip from "@/src/components/ui/Tooltip";
-import { useSettingsStore } from "@/src/store/settingsStore"; // If needed for theme/colors
 import RailUserPanel from "./RailUserPanel";
 import ServerSettingsModal from "@/src/components/server/ServerSettingsModal";
-import { useServerPermission } from "@/src/hooks/useServerPermission";
 
 /**
- * 🚆 ServerRail - Leftmost navigation rail
- * Displays joined servers and home button
+ * 🚆 ServerRail - Netrex Premium Navigation Rail
+ * Logic: Code 1 | Design: Code 2
  */
 export default function ServerRail({ onOpenCreateModal }) {
   const { user } = useAuthStore();
@@ -23,6 +21,8 @@ export default function ServerRail({ onOpenCreateModal }) {
     selectServer, 
     fetchUserServers
   } = useServerStore();
+  
+  const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview', serverId: null });
 
   useEffect(() => {
     if (user?.uid) {
@@ -30,21 +30,14 @@ export default function ServerRail({ onOpenCreateModal }) {
     }
   }, [user?.uid, fetchUserServers]);
 
-  const handleHomeClick = () => {
-    selectServer(null); // Select Home
-  };
-
-  const handleServerClick = (serverId) => {
-    selectServer(serverId);
-  };
+  const handleHomeClick = () => selectServer(null);
+  const handleServerClick = (serverId) => selectServer(serverId);
   
-  const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview', serverId: null });
-
   const handleOpenSettings = (serverId, tab = 'overview') => {
       setServerSettings({ isOpen: true, initialTab: tab, serverId });
   };
   
-  const { deleteServer, leaveServer } = useServerStore();
+  const { leaveServer } = useServerStore();
 
   const handleLeaveServer = async (server) => {
       if(confirm(`"${server.name}" sunucusundan ayrılmak istediğinize emin misiniz?`)) {
@@ -52,35 +45,25 @@ export default function ServerRail({ onOpenCreateModal }) {
           selectServer(null);
       }
   };
-  
-  const handleDeleteServer = async (server) => {
-     // Usually handled in settings, but if we add it here, we should probably just open settings
-     // or use a confirmation. Let's redirect to settings "Danger Zone" effectively.
-     setServerSettings({ isOpen: true, initialTab: 'overview', serverId: server.id });
-  };
 
   return (
     <nav className="
-      w-[72px] 
-      h-full 
+      w-[72px] h-full 
       bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214]
       flex flex-col items-center 
-      py-4
-      gap-2.5
-      overflow-y-auto 
-      scrollbar-none
-      flex-shrink-0
-      select-none
+      py-4 gap-2.5
+      overflow-y-auto scrollbar-none
+      flex-shrink-0 select-none
       border-r border-white/5
     ">
+      
       {/* Home Button */}
       <RailItem 
         label="Ana Sayfa" 
         active={!currentServer}
         onClick={handleHomeClick}
-      >
-        <Home size={24} />
-      </RailItem>
+        icon={<Home size={24} />}
+      />
 
       <Separator />
 
@@ -93,7 +76,6 @@ export default function ServerRail({ onOpenCreateModal }) {
           active={currentServer?.id === server.id}
           onClick={() => handleServerClick(server.id)}
           iconUrl={server.iconUrl}
-          server={server}
           isOwner={server.ownerId === user?.uid}
           onOpenSettings={handleOpenSettings}
           onLeave={() => handleLeaveServer(server)}
@@ -106,48 +88,47 @@ export default function ServerRail({ onOpenCreateModal }) {
         active={false}
         onClick={onOpenCreateModal}
         variant="success"
-      >
-        <Plus size={24} className="text-emerald-400 group-hover:text-white transition-colors duration-300" />
-      </RailItem>
+        icon={<Plus size={24} />}
+      />
+      
+      {/* User Panel (Fixed at Bottom with margin auto to push it down) */}
+      <div className="mt-auto w-full flex justify-center pb-2">
+         <RailUserPanel />
+      </div>
 
-      {/* User Panel */}
-      <RailUserPanel />
-
+      {/* Modals */}
       {serverSettings.isOpen && (
         <ServerSettingsModal 
           isOpen={serverSettings.isOpen} 
           onClose={() => setServerSettings({ ...serverSettings, isOpen: false })} 
           initialTab={serverSettings.initialTab}
-          // We need to ensure the modal knows WHICH server if we are not editing currentServer?
-          // ServerSettingsModal typically uses 'currentServer' from store. 
-          // If we right click a server that is NOT active, we might need to select it first?
-          // Let's assume user wants to edit the selected server or we select it.
-          // Ideally we select it when opening settings.
         />
       )}
     </nav>
   );
 }
 
+/**
+ * 🎨 RailItem - Tasarım 2. koddaki yapıya uyarlandı
+ */
 function RailItem({ 
   label, 
   active, 
   onClick, 
-  children, 
+  icon = null, 
   iconUrl = null, 
-  variant = "default",
+  variant = "default", // default | success | explore
   serverId = null,
-  server = null,
   isOwner = false,
   onOpenSettings,
   onLeave
 }) {
   const [localIcon, setLocalIcon] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const fileInputRef = useRef(null);
 
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
-
+  // Local Storage Icon Logic
   useEffect(() => {
     if (serverId) {
       const stored = localStorage.getItem(`server_icon_${serverId}`);
@@ -159,12 +140,9 @@ function RailItem({
     if (!serverId) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    // Adjust position if too low
     let top = rect.top;
-    if (top + 300 > window.innerHeight) {
-        top = window.innerHeight - 300;
-    }
-    setMenuPos({ top: top, left: rect.right + 10 });
+    if (top + 300 > window.innerHeight) top = window.innerHeight - 300;
+    setMenuPos({ top, left: rect.right + 12 });
     setShowMenu(true);
   };
 
@@ -173,129 +151,52 @@ function RailItem({
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const result = ev.target.result;
         try {
-            localStorage.setItem(`server_icon_${serverId}`, result);
-            setLocalIcon(result);
-        } catch (err) {
-            console.error("Local storage limit reached?", err);
-            alert("Resim çok büyük, kaydedilemedi.");
-        }
+            localStorage.setItem(`server_icon_${serverId}`, ev.target.result);
+            setLocalIcon(ev.target.result);
+        } catch (err) { alert("Resim çok büyük."); }
       };
       reader.readAsDataURL(file);
     }
     setShowMenu(false);
   };
 
-  const clearLocalIcon = () => {
-    localStorage.removeItem(`server_icon_${serverId}`);
-    setLocalIcon(null);
-    setShowMenu(false);
-    setShowMenu(false);
-  };
-
   const effectiveIcon = localIcon || iconUrl;
-  const isEmoji = effectiveIcon && !effectiveIcon.startsWith("http") && !effectiveIcon.startsWith("data:");
+  
+  // Icon Content Logic
+  const renderIcon = () => {
+    if (effectiveIcon) {
+       return <img src={effectiveIcon} alt={label} className="w-full h-full object-cover" />;
+    }
+    
+    // Variant specific text colors for non-image icons
+    let iconClass = "transition-colors duration-300 ";
+    if (variant === "success") iconClass += "text-emerald-400 group-hover:text-white";
+    else if (variant === "explore") iconClass += "text-amber-400 group-hover:text-white";
+    else iconClass += active ? "text-white" : "text-indigo-200/80 group-hover:text-white";
 
-  const MenuPortal = () => {
-      if (typeof document === 'undefined') return null;
-      return createPortal(
-        <>
-          <div 
-             className="fixed inset-0 z-[9999]" 
-             onClick={(e) => {
-                 e.stopPropagation();
-                 setShowMenu(false);
-             }}
-             onContextMenu={(e) => {
-                 e.preventDefault();
-                 setShowMenu(false);
-             }}
-          ></div>
-          <div 
-             className="fixed z-[10000] w-64 bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214] rounded-2xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-white/10 p-2 space-y-1 backdrop-blur-2xl ring-1 ring-black/50 animate-in fade-in zoom-in-95 duration-200 origin-top-left"
-             style={{ top: menuPos.top, left: menuPos.left }}
-          >
-            <div className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 border-b border-white/5 mx-1">
-              Sunucu
-            </div>
-            
-            <button 
-                onClick={() => { setShowMenu(false); onOpenSettings(serverId, 'invites'); }}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-indigo-300 hover:bg-indigo-500/10 transition-all flex items-center gap-2.5 group"
-            >
-                <UserPlus size={14} className="text-indigo-400 group-hover:text-indigo-300 transition-colors" />
-                İnsanları Davet Et
-            </button>
-            <div className="h-px bg-white/5 my-1 mx-2" />
-
-             {isOwner && (
-                 <button 
-                    onClick={() => { setShowMenu(false); onOpenSettings(serverId, 'overview'); }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/5 hover:text-white transition-all flex items-center gap-2.5 group"
-                >
-                    <Settings size={14} className="text-gray-400 group-hover:text-white transition-colors" />
-                    Sunucu Ayarları
-                </button>
-             )}
-             
-            {!isOwner && (
-                <button 
-                    onClick={() => { setShowMenu(false); onLeave(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-2.5"
-                >
-                    <LogOut size={14} />
-                    Sunucudan Ayrıl
-                </button>
-            )}
-
-            <div className="h-px bg-white/5 my-1 mx-2" />
-            <div className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 border-b border-white/5 mx-1">
-              Simge Yönetimi
-            </div>
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/5 hover:text-white transition-all flex items-center gap-2.5 group"
-            >
-                <Upload size={14} className="group-hover:text-indigo-400 transition-colors" />
-                Simge Değiştir
-            </button>
-            {localIcon && (
-                <button 
-                    onClick={clearLocalIcon}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-2.5"
-                >
-                    <RefreshCw size={14} />
-                    Varsayılanı Geri Yükle
-                </button>
-            )}
-          </div>
-        </>,
-        document.body
-      );
+    return (
+      <div className={`${iconClass} font-bold text-sm tracking-wide`}>
+         {icon ? icon : label.substring(0, 2).toUpperCase()}
+      </div>
+    );
   };
 
   return (
     <div className="relative group w-full flex justify-center py-0.5" onContextMenu={handleContextMenu}>
-      {/* Context Menu */}
-      {showMenu && <MenuPortal />}
       
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        accept="image/*" 
-        className="hidden" 
-      />
-
-      {/* Active Indicator (Pill) */}
+      {/* 1. Active Indicator (Pill) - Tasarım 2 stili */}
       <div className={`
         absolute left-0 top-1/2 -translate-y-1/2
         w-[4px] bg-white rounded-r-md
         transition-all duration-300 ease-out z-20 shadow-[0_0_10px_rgba(255,255,255,0.5)]
-        ${active ? 'h-9 opacity-100 translate-x-0' : 'h-2 opacity-0 -translate-x-full group-hover:h-5 group-hover:opacity-100 group-hover:translate-x-0'}
+        ${active 
+            ? 'h-9 opacity-100 translate-x-0' 
+            : 'h-2 opacity-0 -translate-x-full group-hover:h-5 group-hover:opacity-100 group-hover:translate-x-0'
+        }
       `} />
 
+      {/* 2. Main Icon Container - Tasarım 2 stili (Squircle Animation) */}
       <Tooltip content={label} position="right" delay={0}>
         <button
           onClick={onClick}
@@ -304,47 +205,132 @@ function RailItem({
             w-12 h-12 
             rounded-[24px] 
             hover:rounded-[15px] 
+            flex items-center justify-center
+            transition-all duration-300 ease-out
+            overflow-hidden
+            group
+            z-10
             ${active 
                 ? 'rounded-[15px] bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-[0_4px_12px_rgba(99,102,241,0.4)] ring-1 ring-white/10' 
                 : 'bg-[#313338] hover:bg-gradient-to-br hover:from-indigo-500 hover:to-indigo-600 hover:shadow-lg'
             }
-            ${variant === 'success' && !active 
-                ? 'bg-[#313338] hover:from-emerald-500 hover:to-green-500' 
-                : ''
-            }
-            flex items-center justify-center
-            transition-all duration-300 ease-out
-            group
-            overflow-hidden
-            z-10
-            ${isEmoji ? 'bg-[#2b2d31]' : ''}
+            ${variant === 'success' && !active ? '!bg-[#313338] hover:!from-emerald-500 hover:!to-emerald-600' : ''}
+            ${variant === 'explore' && !active ? '!bg-[#313338] hover:!from-amber-500 hover:!to-amber-600' : ''}
           `}
         >
-          {effectiveIcon ? (
-            isEmoji ? (
-                 <span className="text-2xl select-none filter group-hover:drop-shadow-md transition-all">{effectiveIcon}</span>
-            ) : (
-                 <img src={effectiveIcon} alt={label} className="w-full h-full object-cover" />
-            )
-          ) : (
-            <div className={`
-              text-indigo-200/80 
-              ${active ? 'text-white' : 'group-hover:text-white'}
-              ${variant === 'success' ? 'text-emerald-400 group-hover:text-white' : ''}
-              transition-colors duration-300
-              font-bold text-sm tracking-wide
-            `}>
-              {children || label.substring(0, 2).toUpperCase()}
-            </div>
-          )}
+          {renderIcon()}
         </button>
       </Tooltip>
+
+      {/* 3. Context Menu Portal */}
+      {showMenu && <ContextMenu 
+         menuPos={menuPos} 
+         onClose={() => setShowMenu(false)}
+         isOwner={isOwner}
+         serverId={serverId}
+         onOpenSettings={onOpenSettings}
+         onLeave={onLeave}
+         fileInputRef={fileInputRef}
+         handleFileChange={handleFileChange}
+         hasLocalIcon={!!localIcon}
+         clearLocalIcon={() => { localStorage.removeItem(`server_icon_${serverId}`); setLocalIcon(null); setShowMenu(false); }}
+      />}
     </div>
   );
 }
 
+/**
+ * ➖ Separator - Tasarım 2
+ */
 function Separator() {
   return (
     <div className="w-8 h-[2px] bg-white/5 rounded-full my-1.5 flex-shrink-0" />
   );
+}
+
+/**
+ * 🖱️ Context Menu (Portal) - Tasarım 2 Görünümü ile
+ */
+function ContextMenu({ menuPos, onClose, isOwner, serverId, onOpenSettings, onLeave, fileInputRef, handleFileChange, hasLocalIcon, clearLocalIcon }) {
+    if (typeof document === 'undefined') return null;
+    
+    return createPortal(
+      <>
+        {/* Backdrop */}
+        <div 
+            className="fixed inset-0 z-[9999]" 
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onContextMenu={(e) => { e.preventDefault(); onClose(); }}
+        />
+        
+        {/* Menu - Void Theme / Premium Dark Style */}
+        <div 
+           className="
+             fixed z-[10000] w-56
+             bg-[#0d0e10]/95
+             backdrop-blur-xl
+             rounded-xl overflow-hidden 
+             shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)]
+             border border-white/[0.08]
+             p-1.5 space-y-0.5
+             animate-in fade-in zoom-in-95 duration-150 origin-top-left
+           "
+           style={{ top: menuPos.top, left: menuPos.left }}
+        >
+           {/* Section 1: Actions */}
+           <div className="px-2.5 py-1.5 text-[10px] font-semibold text-[#5c5e66] uppercase tracking-wider">
+             Sunucu
+           </div>
+           
+           <MenuBtn icon={<UserPlus size={14}/>} label="İnsanları Davet Et" onClick={() => { onClose(); onOpenSettings(serverId, 'invites'); }} color="indigo" />
+           
+           <div className="h-px bg-white/[0.06] my-1" />
+
+           {isOwner ? (
+               <MenuBtn icon={<Settings size={14}/>} label="Sunucu Ayarları" onClick={() => { onClose(); onOpenSettings(serverId, 'overview'); }} />
+           ) : (
+               <MenuBtn icon={<LogOut size={14}/>} label="Sunucudan Ayrıl" onClick={() => { onClose(); onLeave(); }} color="red" />
+           )}
+
+           {/* Section 2: Customization */}
+           <div className="h-px bg-white/[0.06] my-1" />
+           <div className="px-2.5 py-1.5 text-[10px] font-semibold text-[#5c5e66] uppercase tracking-wider">
+             Simge Yönetimi
+           </div>
+           
+           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+           <MenuBtn icon={<Upload size={14}/>} label="Simge Değiştir" onClick={() => fileInputRef.current?.click()} />
+           
+           {hasLocalIcon && (
+               <MenuBtn icon={<RefreshCw size={14}/>} label="Varsayılanı Geri Yükle" onClick={clearLocalIcon} color="red" />
+           )}
+        </div>
+      </>,
+      document.body
+    );
+}
+
+// Void Theme Menu Button
+function MenuBtn({ icon, label, onClick, color = "default" }) {
+    const colors = {
+        default: "text-[#b5bac1] hover:bg-white/[0.06] hover:text-white",
+        indigo: "text-indigo-400 hover:bg-indigo-500/15 hover:text-indigo-300",
+        red: "text-red-400 hover:bg-red-500/15 hover:text-red-300",
+    };
+
+    return (
+        <button 
+            onClick={onClick}
+            className={`
+                w-full text-left px-2.5 py-2 rounded-lg text-[13px] font-medium 
+                transition-all duration-150 flex items-center gap-2.5 group
+                ${colors[color]}
+            `}
+        >
+            <span className="opacity-70 group-hover:opacity-100 transition-opacity">
+                {icon}
+            </span>
+            {label}
+        </button>
+    )
 }

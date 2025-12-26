@@ -449,9 +449,7 @@ const getSplashHtml = (logoPath) => `
     </div>
   </div>
   
-  <!-- Version -->
-  <div class="version">v3.0.0</div>
-  
+  <!-- Version -->  
   <script>
     // Dynamic loading text
     const messages = [
@@ -1277,10 +1275,6 @@ const getLoginHtml = (apiKey, authDomain) => `
       
       <div class="footer">
         Giriş yaparak <a href="#">Kullanım Şartları</a>'nı kabul etmiş olursunuz.
-        <div class="version-badge">
-          <span class="version-dot"></span>
-          <span class="version-text">Netrex Client • v3.0.0</span>
-        </div>
       </div>
     </div>
   </div>
@@ -1986,7 +1980,7 @@ function createWindow() {
 
   const startUrl = !app.isPackaged
     ? "http://localhost:3000"
-    : `file://${path.join(__dirname, "../out/index.html")}`;
+    : `http://localhost:3000${path.join(__dirname, "../out/index.html")}`;
   mainWindow.loadURL(startUrl);
 
   // --- KAPATMA DAVRANIŞI (TRAY) ---

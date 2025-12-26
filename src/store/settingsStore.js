@@ -67,7 +67,9 @@ export const useSettingsStore = create(
       videoFrameRate: 30, // 5 | 30 | 60
 
       // Online/Offline durumu
-      userStatus: "online", // "online" | "offline" | "invisible"
+      userStatus: "online", // "online" | "idle" | "offline" | "invisible"
+      isAutoIdle: false, // Otomatik idle modu mu (pencere arka planda veya inaktivite)?
+      idleTimeout: 5 * 60 * 1000, // 5 dakika inaktivite sonrası idle (ms)
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
@@ -185,7 +187,26 @@ export const useSettingsStore = create(
       setVideoFrameRate: (fps) => set({ videoFrameRate: fps }),
 
       // Online/Offline ayarları
-      setUserStatus: (status) => set({ userStatus: status }),
+      // Online/Offline ayarları
+      setUserStatus: (status) => set({ userStatus: status, isAutoIdle: false }), // Manuel statüs değişimi otomatik modu kapatır
+      setIsAutoIdle: (isIdle) => set((state) => {
+        // IDLE OLMA DURUMU:
+        if (isIdle) {
+            // Sadece 'online' isek otomatik idle olabiliriz. 
+            // 'invisible' veya 'offline' isek dokunma.
+            if (state.userStatus === 'online') {
+                return { userStatus: 'idle', isAutoIdle: true };
+            }
+        } 
+        // AKTİF OLMA DURUMU:
+        else {
+            // Sadece otomatik olarak idle olduysak geri 'online' yaparız.
+            if (state.userStatus === 'idle' && state.isAutoIdle) {
+                return { userStatus: 'online', isAutoIdle: false };
+            }
+        }
+        return {};
+      }),
 
       syncWithElectron: async () => {
         if (window.netrex) {

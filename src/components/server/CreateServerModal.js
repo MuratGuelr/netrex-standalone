@@ -1,44 +1,109 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Smile, Upload } from "lucide-react";
+import { X, Smile, Upload, Image, Loader2 } from "lucide-react";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import Input from "@/src/components/ui/Input";
 import Button from "@/src/components/ui/Button";
 import EmojiPicker from 'emoji-picker-react';
+import { uploadServerIconToCloudinary } from "@/src/utils/imageUpload";
+import { toast } from "sonner";
 
 export default function CreateServerModal({ isOpen, onClose, onJoinClick }) {
   const [serverName, setServerName] = useState("");
   const [selectedEmoji, setSelectedEmoji] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null); // File object
+  const [imagePreview, setImagePreview] = useState(null); // Data URL for preview
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [iconType, setIconType] = useState("emoji"); // "emoji" or "image"
+  const fileInputRef = useRef(null);
   const { createServer } = useServerStore();
   const { user } = useAuthStore();
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Lütfen geçerli bir resim dosyası seçin.");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Resim boyutu 5MB'dan küçük olmalı.");
+      return;
+    }
+
+    setSelectedImage(file);
+    setSelectedEmoji(""); // Clear emoji if image selected
+    setIconType("image");
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImagePreview(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!serverName.trim()) return;
 
     setIsLoading(true);
-    // Use selectedEmoji as the iconUrl. If no emoji selected, it sends null/empty which serverStore will handle (initials)
-    const result = await createServer(serverName, user?.uid, selectedEmoji);
+    
+    let iconUrl = null;
+
+    // Upload image to Cloudinary if selected
+    if (iconType === "image" && selectedImage) {
+      try {
+        setIsUploading(true);
+        iconUrl = await uploadServerIconToCloudinary(selectedImage);
+        setIsUploading(false);
+      } catch (err) {
+        setIsUploading(false);
+        setIsLoading(false);
+        toast.error("Resim yüklenemedi: " + err.message);
+        return;
+      }
+    } else if (iconType === "emoji" && selectedEmoji) {
+      iconUrl = selectedEmoji;
+    }
+
+    const result = await createServer(serverName, user?.uid, iconUrl);
     setIsLoading(false);
 
     if (result.success) {
       setServerName("");
       setSelectedEmoji("");
+      setSelectedImage(null);
+      setImagePreview(null);
+      setIconType("emoji");
       setShowEmojiPicker(false);
+      toast.success("Sunucu başarıyla oluşturuldu! 🎉");
       onClose();
     } else {
-      console.error(result.error);
+      toast.error(result.error || "Sunucu oluşturulamadı.");
     }
   };
 
   const handleEmojiClick = (emojiData) => {
       setSelectedEmoji(emojiData.emoji);
+      setSelectedImage(null);
+      setImagePreview(null);
+      setIconType("emoji");
       setShowEmojiPicker(false);
   };
 
+  const handleClearIcon = () => {
+    setSelectedEmoji("");
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
 
   if (!isOpen) return null;
   if (typeof document === 'undefined') return null;
@@ -48,68 +113,146 @@ export default function CreateServerModal({ isOpen, onClose, onJoinClick }) {
        {/* Animated background gradient */}
        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
 
-       <div className="glass-modal w-full max-w-md flex flex-col animate-nds-scale-in rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214] shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+       <div className="glass-modal w-full max-w-md flex flex-col animate-nds-scale-in rounded-3xl border border-nds-border-medium bg-gradient-to-br from-nds-bg-deep/95 via-nds-bg-secondary/95 to-nds-bg-tertiary/95 shadow-nds-elevated relative overflow-hidden backdrop-blur-2xl">
           {/* Top glow effect */}
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-20 bg-indigo-500/10 blur-[50px] pointer-events-none"></div>
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-indigo-500/10 blur-[60px] pointer-events-none"></div>
           
-          {/* Particles */}
+          {/* Animated Particles */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-10 left-10 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl animate-pulse-slow"></div>
-            <div className="absolute bottom-10 right-10 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
+            <div className="absolute top-10 left-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
+            <div className="absolute bottom-10 right-10 w-40 h-40 bg-purple-500/5 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
+          </div>
+
+          {/* ESC Close Button - Premium Style */}
+          <div
+            className="absolute top-5 right-5 flex flex-col items-center group cursor-pointer z-[10000]"
+            onClick={onClose}
+          >
+            <div className="w-9 h-9 rounded-xl glass-strong border border-nds-border-light flex items-center justify-center text-nds-text-tertiary group-hover:bg-gradient-to-br group-hover:from-nds-danger/20 group-hover:to-nds-danger/30 group-hover:text-nds-danger group-hover:border-nds-danger/30 transition-all duration-medium hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative group/close">
+              <X
+                size={18}
+                strokeWidth={2.5}
+                className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
+              />
+            </div>
+            <span className="text-[9px] font-bold text-nds-text-tertiary mt-1 group-hover:text-nds-text-secondary transition-colors">
+              ESC
+            </span>
           </div>
 
           <div className="relative z-10">
               {/* Header */}
               <div className="px-8 pt-8 pb-4 text-center">
                   <h2 className="text-2xl font-bold text-white mb-2">Sunucunu Oluştur</h2>
-                  <p className="text-gray-400 text-sm leading-relaxed">
+                  <p className="text-[#949ba4] text-sm leading-relaxed">
                     Sunucun senin ve arkadaşların için bir buluşma noktasıdır. <br/>İsmini koy ve bir simge ekle.
                   </p>
-                  
-                  {/* Close Button */}
-                  <div
-                    className="absolute top-5 right-5 flex flex-col items-center group cursor-pointer z-[10000]"
-                    onClick={onClose}
-                  >
-                    <div className="w-8 h-8 rounded-lg glass-strong border border-white/5 flex items-center justify-center text-gray-400 group-hover:bg-white/10 group-hover:text-white transition-all duration-200">
-                      <X size={18} />
-                    </div>
-                  </div>
               </div>
 
               <div className="p-8 pt-2">
                   <form onSubmit={handleSubmit} className="space-y-6">
                     
-                    {/* Emoji Selector */}
+                    {/* Icon Type Selector */}
+                    <div className="flex justify-center gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setIconType("emoji")}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                          iconType === "emoji" 
+                            ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40" 
+                            : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <Smile size={14} className="inline mr-1.5" />
+                        Emoji
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIconType("image")}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                          iconType === "image" 
+                            ? "bg-purple-500/20 text-purple-300 border border-purple-500/40" 
+                            : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <Image size={14} className="inline mr-1.5" />
+                        Resim
+                      </button>
+                    </div>
+
+                    {/* Icon Selector */}
                     <div className="flex justify-center py-4">
                       <div className="relative group/emoji">
                         {/* Ring Animation */}
-                        <div className="absolute -inset-1 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full opacity-0 group-hover/emoji:opacity-100 blur transition-opacity duration-500"></div>
+                        <div className={`absolute -inset-1 rounded-full opacity-0 group-hover/emoji:opacity-100 blur transition-opacity duration-500 ${
+                          iconType === "image" ? "bg-gradient-to-br from-purple-500 to-pink-500" : "bg-gradient-to-br from-indigo-500 to-purple-500"
+                        }`}></div>
+                        
+                        {/* Hidden file input */}
+                        <input 
+                          type="file" 
+                          ref={fileInputRef} 
+                          onChange={handleImageSelect} 
+                          accept="image/*" 
+                          className="hidden" 
+                        />
                         
                         <div 
-                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                           className="w-24 h-24 rounded-full border-2 border-dashed border-white/10 flex items-center justify-center flex-col text-gray-400 hover:border-white/30 hover:text-white transition-all cursor-pointer bg-black/20 overflow-hidden relative z-10 group-hover/emoji:scale-105 duration-300"
+                           onClick={() => iconType === "emoji" ? setShowEmojiPicker(!showEmojiPicker) : fileInputRef.current?.click()}
+                           className={`w-24 h-24 rounded-full border-2 border-dashed flex items-center justify-center flex-col text-gray-400 hover:border-white/30 hover:text-white transition-all cursor-pointer bg-black/20 overflow-hidden relative z-10 group-hover/emoji:scale-105 duration-300 ${
+                             isUploading ? "pointer-events-none" : ""
+                           } ${iconType === "image" ? "border-purple-500/20" : "border-white/10"}`}
                         >
-                          {selectedEmoji ? (
+                          {isUploading ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 size={28} className="text-purple-400 animate-spin" />
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-purple-300/80">Yükleniyor...</span>
+                            </div>
+                          ) : imagePreview ? (
+                              <img src={imagePreview} alt="Önizleme" className="w-full h-full object-cover" />
+                          ) : selectedEmoji ? (
                               <span className="text-5xl drop-shadow-lg scale-110 transition-transform">{selectedEmoji}</span>
                           ) : (
                               <>
-                                  <div className="mb-1 p-2 bg-indigo-500/10 rounded-full">
-                                      <Upload size={20} className="text-indigo-400" />
+                                  <div className={`mb-1 p-2 rounded-full ${iconType === "image" ? "bg-purple-500/10" : "bg-indigo-500/10"}`}>
+                                      {iconType === "image" ? (
+                                        <Image size={20} className="text-purple-400" />
+                                      ) : (
+                                        <Smile size={20} className="text-indigo-400" />
+                                      )}
                                   </div>
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/80">Yükle</span>
+                                  <span className={`text-[10px] font-bold uppercase tracking-widest ${iconType === "image" ? "text-purple-300/80" : "text-indigo-300/80"}`}>
+                                    {iconType === "image" ? "Resim Seç" : "Emoji Seç"}
+                                  </span>
                               </>
                           )}
                            
-                           {/* Upload Overlay */}
-                           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 hover:opacity-100 transition-opacity backdrop-blur-sm">
-                             <Smile size={24} className="text-white mb-1" />
-                             <span className="text-[9px] font-bold text-white uppercase tracking-wider">Değiştir</span>
-                           </div>
+                           {/* Overlay on Hover */}
+                           {(imagePreview || selectedEmoji) && !isUploading && (
+                             <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 hover:opacity-100 transition-opacity backdrop-blur-sm">
+                               {iconType === "image" ? (
+                                 <Image size={24} className="text-white mb-1" />
+                               ) : (
+                                 <Smile size={24} className="text-white mb-1" />
+                               )}
+                               <span className="text-[9px] font-bold text-white uppercase tracking-wider">Değiştir</span>
+                             </div>
+                           )}
                         </div>
                         
-                        {showEmojiPicker && (
+                        {/* Clear Button */}
+                        {(imagePreview || selectedEmoji) && !isUploading && (
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleClearIcon(); }}
+                            className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center z-20 hover:bg-red-600 transition-colors shadow-lg"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                        
+                        {showEmojiPicker && iconType === "emoji" && (
                             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowEmojiPicker(false)}>
                                 <div className="relative shadow-2xl rounded-xl animate-in zoom-in-95 duration-200 scale-110" onClick={(e) => e.stopPropagation()}>
                                   <EmojiPicker 
@@ -152,11 +295,11 @@ export default function CreateServerModal({ isOpen, onClose, onJoinClick }) {
                        </Button>
                        <Button 
                             type="submit" 
-                            loading={isLoading} 
-                            disabled={!serverName.trim()}
+                            loading={isLoading || isUploading} 
+                            disabled={!serverName.trim() || isUploading}
                             className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/20 px-8 flex-1 ml-4 h-12 rounded-xl"
                        >
-                         Oluştur
+                         {isUploading ? "Resim Yükleniyor..." : "Oluştur"}
                        </Button>
                     </div>
                   </form>

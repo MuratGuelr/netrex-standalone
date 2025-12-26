@@ -570,50 +570,44 @@
 }
 
 
-/* Page Enter Animation - Premium staggered entrance */
+/* Page Enter Animation - Clean fade in (no slide) */
 @keyframes ndsPageEnter {
   0% {
     opacity: 0;
-    transform: translateY(30px) scale(0.97);
-    filter: blur(4px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 
 /* Settings page transition wrapper */
 .animate-page-enter {
-  animation: ndsPageEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: ndsPageEnter 0.3s ease-out forwards;
 }
 
-/* Staggered children animations for settings cards */
+/* Staggered children animations for settings cards - fade only */
 .animate-page-enter > div {
   opacity: 0;
-  animation: ndsStaggerIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: ndsStaggerIn 0.35s ease-out forwards;
 }
 
-.animate-page-enter > div:nth-child(1) { animation-delay: 0.05s; }
-.animate-page-enter > div:nth-child(2) { animation-delay: 0.1s; }
-.animate-page-enter > div:nth-child(3) { animation-delay: 0.15s; }
-.animate-page-enter > div:nth-child(4) { animation-delay: 0.2s; }
-.animate-page-enter > div:nth-child(5) { animation-delay: 0.25s; }
-.animate-page-enter > div:nth-child(6) { animation-delay: 0.3s; }
-.animate-page-enter > div:nth-child(7) { animation-delay: 0.35s; }
-.animate-page-enter > div:nth-child(8) { animation-delay: 0.4s; }
-.animate-page-enter > div:nth-child(9) { animation-delay: 0.45s; }
-.animate-page-enter > div:nth-child(10) { animation-delay: 0.5s; }
+.animate-page-enter > div:nth-child(1) { animation-delay: 0.03s; }
+.animate-page-enter > div:nth-child(2) { animation-delay: 0.06s; }
+.animate-page-enter > div:nth-child(3) { animation-delay: 0.09s; }
+.animate-page-enter > div:nth-child(4) { animation-delay: 0.12s; }
+.animate-page-enter > div:nth-child(5) { animation-delay: 0.15s; }
+.animate-page-enter > div:nth-child(6) { animation-delay: 0.18s; }
+.animate-page-enter > div:nth-child(7) { animation-delay: 0.21s; }
+.animate-page-enter > div:nth-child(8) { animation-delay: 0.24s; }
+.animate-page-enter > div:nth-child(9) { animation-delay: 0.27s; }
+.animate-page-enter > div:nth-child(10) { animation-delay: 0.3s; }
 
 @keyframes ndsStaggerIn {
   0% {
     opacity: 0;
-    transform: translateY(25px) scale(0.96);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 

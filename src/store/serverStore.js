@@ -17,7 +17,7 @@ import {
   setDoc,
   documentId
 } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { auth, db } from "@/src/lib/firebase";
 import { 
   DEFAULT_ROLE_NAME, 
   DEFAULT_ROLE_COLOR,
@@ -449,6 +449,19 @@ export const useServerStore = create((set, get) => ({
   updateServer: async (serverId, data) => {
       try {
           await updateDoc(doc(db, "servers", serverId), data);
+          
+          // Update local currentServer state for immediate reactivity
+          const currentServer = get().currentServer;
+          if (currentServer?.id === serverId) {
+              set({ currentServer: { ...currentServer, ...data } });
+          }
+          
+          // Also update in servers list
+          set(state => ({
+              servers: state.servers.map(s => 
+                  s.id === serverId ? { ...s, ...data } : s
+              )
+          }));
       } catch (error) {
           console.error("Update server failed:", error);
       }
@@ -456,12 +469,32 @@ export const useServerStore = create((set, get) => ({
 
   deleteServer: async (serverId) => {
       try {
+          // 1. Delete Subcollections (Manual cleanup for client-side)
+          // Note: Ideally this should be done via a Cloud Function for reliability and cleaner client code.
+          const subcollections = ["channels", "roles", "members", "invites", "bans"];
+          
+          for (const sub of subcollections) {
+              try {
+                  const q = query(collection(db, "servers", serverId, sub));
+                  const snapshot = await getDocs(q);
+                  // Delete in batches or parallel
+                  const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+                  await Promise.all(deletePromises);
+              } catch (subError) {
+                  console.warn(`Could not delete subcollection ${sub}:`, subError);
+              }
+          }
+
+          // 2. Delete Main Doc
           await deleteDoc(doc(db, "servers", serverId));
+          
           if (get().currentServer?.id === serverId) {
               get().selectServer(null);
           }
+          return { success: true };
       } catch (error) {
           console.error("Delete server failed:", error);
+          return { success: false, error: error.message };
       }
   },
 
@@ -567,6 +600,13 @@ export const useServerStore = create((set, get) => ({
        }
        
        const serverId = invite.serverId;
+
+       // Check if user is banned
+       const banDoc = await getDoc(doc(db, "servers", serverId, "bans", userId));
+       if (banDoc.exists()) {
+           const banData = banDoc.data();
+           return { success: false, error: `Bu sunucudan yasaklandınız! Sebep: ${banData.reason || "Belirtilmedi"}` };
+       }
        
        const memberRef = doc(db, "servers", serverId, "members", userId);
        const memberDoc = await getDoc(memberRef);
@@ -655,6 +695,73 @@ export const useServerStore = create((set, get) => ({
       console.error("Set member roles failed:", error);
       return { success: false, error: error.message };
     }
+  },
+
+  // --- MODERATION ---
+
+  kickMember: async (serverId, userId) => {
+    try {
+        if (!serverId || !userId) return;
+
+        // Remove from members
+        await deleteDoc(doc(db, "servers", serverId, "members", userId));
+
+        // Remove from memberIds array
+        await updateDoc(doc(db, "servers", serverId), {
+            memberIds: arrayRemove(userId)
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Kick failed:", error);
+        return { success: false, error: error.message };
+    }
+  },
+
+  banMember: async (serverId, userId, displayName, reason = "Belirtilmedi") => {
+    try {
+        if (!serverId || !userId) return;
+
+        // 1. Add to Bans Collection
+        await setDoc(doc(db, "servers", serverId, "bans", userId), {
+            userId,
+            displayName: displayName || "Kullanıcı",
+            reason,
+            bannedAt: serverTimestamp(),
+            bannedBy: auth.currentUser?.uid
+        });
+
+        // 2. Remove from members (Kick)
+        await deleteDoc(doc(db, "servers", serverId, "members", userId));
+        await updateDoc(doc(db, "servers", serverId), {
+            memberIds: arrayRemove(userId)
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error("Ban failed:", error);
+        return { success: false, error: error.message };
+    }
+  },
+
+  unbanMember: async (serverId, userId) => {
+      try {
+          await deleteDoc(doc(db, "servers", serverId, "bans", userId));
+          return { success: true };
+      } catch (error) {
+          console.error("Unban failed:", error);
+          return { success: false, error: error.message };
+      }
+  },
+
+  fetchBans: async (serverId) => {
+      try {
+          const snapshot = await getDocs(collection(db, "servers", serverId, "bans"));
+          return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (error) {
+          console.error("Fetch bans failed:", error);
+          return [];
+      }
   },
 
   // Cleanup

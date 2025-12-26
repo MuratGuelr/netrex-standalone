@@ -402,7 +402,6 @@ export default function SplashScreen({
             animate={{ opacity: 1 }}
             transition={{ delay: 1 }}
           >
-            Netrex v{process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
           </motion.div>
         </motion.div>
       )}

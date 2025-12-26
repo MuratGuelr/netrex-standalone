@@ -66,6 +66,8 @@
     "@livekit/components-react": "latest",
     "@livekit/components-styles": "latest",
     "@livekit/track-processors": "^0.6.1",
+    "browser-image-compression": "^2.0.2",
+    "cloudinary": "^2.8.0",
     "dotenv": "^16.3.1",
     "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",

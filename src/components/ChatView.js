@@ -15,11 +15,125 @@ import {
   Hash,
   Loader2,
   Bell,
+  Paperclip,
+  Image as ImageIcon,
+  X,
+  ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  RefreshCw,
+  Minus,
+  Plus,
+  Download
 } from "lucide-react";
 import { toast } from "sonner";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { uploadImageToCloudinary } from "@/src/utils/imageUpload";
 
+// --- MESAJ ÖĞESİ BİLEŞENİ ---
+const MessageItem = memo(({ 
+  message, 
+  prevMessage, 
+  messageIndex, 
+  onContextMenu, 
+  renderText, 
+  formatTime, 
+  formatDateHeader, 
+  isInSequence, 
+  onImageClick 
+}) => {
+  const isSequence =
+    prevMessage &&
+    prevMessage.userId === message.userId &&
+    message.timestamp - prevMessage.timestamp < MESSAGE_SEQUENCE_THRESHOLD;
+  const showDateSeparator =
+    !prevMessage ||
+    new Date(message.timestamp).toDateString() !==
+      new Date(prevMessage.timestamp).toDateString();
+
+  return (
+    <div className="relative group/message">
+      {/* TARİH AYIRICI */}
+      {showDateSeparator && (
+        <div className="relative flex items-center justify-center my-6 select-none animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/[0.05]"></div>
+          </div>
+          <span className="relative bg-[#1e1f22] px-3 py-1 rounded-full text-[11px] font-bold text-[#949ba4] border border-white/[0.05] shadow-sm uppercase tracking-wider">
+            {formatDateHeader(message.timestamp)}
+          </span>
+        </div>
+      )}
+
+      {/* MESAJ KARTI */}
+      <div
+        className={`
+          group flex pr-4 pl-[72px] relative w-full
+          ${!isSequence ? "mt-[17px]" : "mt-[2px]"}
+          hover:bg-white/[0.03] -mx-4 px-4 py-0.5 transition-all duration-75
+        `}
+        onContextMenu={(e) => onContextMenu(e, message, isInSequence)}
+      >
+        {/* SOL TARA: AVATAR VEYA SAAT */}
+        <div className="absolute left-4 w-[50px] flex justify-start select-none">
+          {!isSequence || showDateSeparator ? (
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-lg shadow-sm group-hover:scale-105 transition-transform">
+              {message.username?.charAt(0).toUpperCase()}
+            </div>
+          ) : (
+            <span className="text-[10px] text-[#949ba4] hidden group-hover:inline-block w-full text-left pl-2 mt-1.5 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+              {formatTime(message.timestamp)}
+            </span>
+          )}
+        </div>
+
+        {/* SAĞ TARA: İÇERİK */}
+        <div className="flex-1 min-w-0">
+          {(!isSequence || showDateSeparator) && (
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[15px] font-bold text-white hover:underline cursor-pointer tracking-tight">
+                {message.username}
+              </span>
+              <span className="text-[11px] text-[#949ba4] font-bold ml-1 select-none uppercase tracking-tighter opacity-60">
+                {formatTime(message.timestamp)}
+              </span>
+            </div>
+          )}
+          
+          {message.type === 'image' && message.imageUrl && (
+              <div className="mt-1.5 mb-2 max-w-[320px] sm:max-w-[450px] overflow-hidden rounded-2xl shadow-xl border border-white/10 bg-black/20 group/image relative">
+                  <img 
+                    src={message.imageUrl} 
+                    alt="Uploaded content" 
+                    className="w-full h-auto max-h-[300px] sm:max-h-[450px] object-cover hover:scale-[1.01] transition-transform duration-500 cursor-zoom-in"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onImageClick(message.imageUrl);
+                    }}
+                    loading="lazy"
+                  />
+                  {/* Subtle hover overlay for image */}
+                  <div className="absolute inset-0 bg-black/0 group-hover/image:bg-black/5 transition-colors pointer-events-none" />
+              </div>
+          )}
+          
+          {message.text && (
+            <p
+              className={`
+                text-[14px] leading-[1.4] whitespace-pre-wrap break-words font-medium
+                ${isSequence ? "text-[#dbdee1]" : "text-[#dcddde]"}
+              `}
+            >
+              {renderText(message.text)}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default function ChatView({ channelId, username, userId }) {
   const {
@@ -55,6 +169,112 @@ export default function ChatView({ channelId, username, userId }) {
   const room = useRoomContext();
   const containerRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [pendingImage, setPendingImage] = useState(null);
+  const [pendingImageFile, setPendingImageFile] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  
+  // Image Viewer Manipulation States
+  const [imgZoom, setImgZoom] = useState(1);
+  const [imgRotation, setImgRotation] = useState(0);
+  const [imgIsDragging, setImgIsDragging] = useState(false);
+  const [imgPosition, setImgPosition] = useState({ x: 0, y: 0 });
+  const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+
+  const handleImgZoomIn = useCallback(() => setImgZoom(prev => Math.min(prev + 0.25, 5)), []);
+  const handleImgZoomOut = useCallback(() => setImgZoom(prev => Math.max(prev - 0.25, 0.5)), []);
+  const handleImgRotate = useCallback(() => setImgRotation(prev => (prev + 90) % 360), []);
+  const handleImgReset = useCallback(() => {
+    setImgZoom(1);
+    setImgRotation(0);
+    setImgPosition({ x: 0, y: 0 });
+    setIsSpacePressed(false);
+  }, []);
+
+  const handleImgMouseDown = (e) => {
+    if (imgZoom > 1 || isSpacePressed) {
+      setImgIsDragging(true);
+      setImgDragStart({ x: e.clientX - imgPosition.x, y: e.clientY - imgPosition.y });
+    }
+  };
+
+  const handleImgMouseMove = useCallback((e) => {
+    if (imgIsDragging && (imgZoom > 1 || isSpacePressed)) {
+      const newX = e.clientX - imgDragStart.x;
+      const newY = e.clientY - imgDragStart.y;
+      
+      // Boundaries: Prevent dragging too far off screen (limit to 80% of window size)
+      const limitX = window.innerWidth * 0.8;
+      const limitY = window.innerHeight * 0.8;
+
+      setImgPosition({
+        x: Math.max(Math.min(newX, limitX), -limitX),
+        y: Math.max(Math.min(newY, limitY), -limitY)
+      });
+    }
+  }, [imgIsDragging, imgZoom, isSpacePressed, imgDragStart]);
+
+  const handleImgMouseUp = () => setImgIsDragging(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === "Space" && selectedImage) {
+        if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+            e.preventDefault();
+            setIsSpacePressed(true);
+        }
+      }
+      if (e.key === "Escape" && selectedImage) {
+        setSelectedImage(null);
+      }
+    };
+    const handleKeyUp = (e) => {
+      if (e.code === "Space") {
+        setIsSpacePressed(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [selectedImage]);
+
+  useEffect(() => {
+    if (!selectedImage) {
+      handleImgReset();
+    }
+  }, [selectedImage, handleImgReset]);
+
+  useEffect(() => {
+    if (selectedImage) {
+      const handleWheel = (e) => {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          if (e.deltaY < 0) setImgZoom(prev => Math.min(prev + 0.2, 5));
+          else setImgZoom(prev => Math.max(prev - 0.2, 0.5));
+        } else {
+          // Pan with wheel
+          setImgPosition(prev => {
+            const newX = prev.x - e.deltaX;
+            const newY = prev.y - e.deltaY;
+            const limitX = window.innerWidth * 0.8;
+            const limitY = window.innerHeight * 0.8;
+            
+            return {
+              x: Math.max(Math.min(newX, limitX), -limitX),
+              y: Math.max(Math.min(newY, limitY), -limitY)
+            };
+          });
+        }
+      };
+      window.addEventListener('wheel', handleWheel, { passive: false });
+      return () => window.removeEventListener('wheel', handleWheel);
+    }
+  }, [selectedImage]);
 
   useEffect(() => {
     if (channelId) loadChannelMessages(channelId);
@@ -205,26 +425,50 @@ export default function ChatView({ channelId, username, userId }) {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!messageInput.trim() || isSending || cooldownRemaining > 0) return;
+    if ((!messageInput.trim() && !pendingImageFile) || isSending || cooldownRemaining > 0) return;
 
     const textToSend = messageInput;
+    const fileToSend = pendingImageFile;
+
     setMessageInput("");
+    setPendingImage(null);
+    setPendingImageFile(null);
     setIsSending(true);
 
     try {
+      let imageUrl = null;
+      if (fileToSend) {
+         const toastId = toast.loading("Resim yükleniyor...");
+         try {
+            imageUrl = await uploadImageToCloudinary(fileToSend);
+            toast.dismiss(toastId);
+         } catch(err) {
+            toast.error("Resim yüklenemedi: " + err.message, { id: toastId });
+            setIsSending(false);
+            setPendingImage(URL.createObjectURL(fileToSend));
+            setPendingImageFile(fileToSend);
+            setMessageInput(textToSend);
+            return;
+         }
+      }
+
       const result = await sendMessage(
         channelId,
         textToSend,
         userId,
         username,
-        userId,
-        username,
         room,
-        currentChannel?.serverId
+        currentChannel?.serverId,
+        { type: imageUrl ? 'image' : 'text', imageUrl }
       );
+      
       if (!result?.success) {
         setMessageInput(textToSend);
-        // Cooldown hatası varsa geri sayımı başlat
+        if (fileToSend) {
+            setPendingImage(URL.createObjectURL(fileToSend));
+            setPendingImageFile(fileToSend);
+        }
+
         if (result?.cooldownRemaining) {
           setCooldownRemaining(result.cooldownRemaining);
         } else {
@@ -234,6 +478,10 @@ export default function ChatView({ channelId, username, userId }) {
     } catch (error) {
       console.error("Message send error:", error);
       setMessageInput(textToSend);
+      if (fileToSend) {
+          setPendingImage(URL.createObjectURL(fileToSend));
+          setPendingImageFile(fileToSend);
+      }
       toast.error("Mesaj gönderilemedi.");
     } finally {
       setIsSending(false);
@@ -299,6 +547,57 @@ export default function ChatView({ channelId, username, userId }) {
   const handleCopyText = () => {
     if (contextMenu?.message?.text)
       navigator.clipboard.writeText(contextMenu.message.text);
+    setContextMenu(null);
+  };
+
+  const handleCopyImageLink = () => {
+    if (contextMenu?.message?.imageUrl) {
+      navigator.clipboard.writeText(contextMenu.message.imageUrl);
+      toast.success("Resim linki kopyalandı.");
+    }
+    setContextMenu(null);
+  };
+
+  const handleCopyImage = async () => {
+    if (contextMenu?.message?.imageUrl) {
+      const toastId = toast.loading("Resim hazırlanıyor...");
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = contextMenu.message.imageUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            toast.error("Resim oluşturulamadı.", { id: toastId });
+            return;
+          }
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            toast.success("Resim kopyalandı.", { id: toastId });
+          } catch (err) {
+            console.error("Clipboard write error:", err);
+            toast.error("Panoya yazılamadı.", { id: toastId });
+          }
+        }, 'image/png');
+
+      } catch (error) {
+        console.error("Resim kopyalama hatası:", error);
+        toast.error("Resim kopyalanamadı.", { id: toastId });
+      }
+    }
     setContextMenu(null);
   };
 
@@ -440,6 +739,51 @@ export default function ChatView({ channelId, username, userId }) {
     });
   }, [openLinkModal]);
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+        toast.error("Lütfen geçerli bir resim dosyası seçin.");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        setPendingImage(ev.target.result);
+        setPendingImageFile(file);
+    };
+    reader.readAsDataURL(file);
+    // Reset input value to allow selecting same file again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handlePaste = useCallback((e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+             setPendingImage(ev.target.result);
+             setPendingImageFile(file);
+          };
+          reader.readAsDataURL(file);
+          e.preventDefault(); 
+        }
+      }
+    }
+  }, []);
+
+  const removePendingImage = useCallback(() => {
+    setPendingImage(null);
+    setPendingImageFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
   // Format fonksiyonlarını useCallback ile memoize et
   const formatTime = useCallback((timestamp) => {
     if (!timestamp) return "";
@@ -458,79 +802,6 @@ export default function ChatView({ channelId, username, userId }) {
       year: "numeric",
     });
   }, []);
-
-  // Mesaj item'ını memoize et (sadece mesaj değiştiğinde render et)
-  const MessageItem = memo(({ message, prevMessage, messageIndex, onContextMenu, renderText, formatTime, formatDateHeader, isInSequence }) => {
-    const isSequence =
-      prevMessage &&
-      prevMessage.userId === message.userId &&
-      message.timestamp - prevMessage.timestamp < MESSAGE_SEQUENCE_THRESHOLD;
-    const showDateSeparator =
-      !prevMessage ||
-      new Date(message.timestamp).toDateString() !==
-        new Date(prevMessage.timestamp).toDateString();
-
-    return (
-      <div>
-        {/* TARİH AYIRICI */}
-        {showDateSeparator && (
-          <div className="relative flex items-center justify-center my-6 select-none group">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-[#3f4147]"></div>
-            </div>
-            <span className="relative bg-[#313338] px-2 text-[12px] font-semibold text-[#949ba4] group-hover:text-[#dbdee1] transition-colors">
-              {formatDateHeader(message.timestamp)}
-            </span>
-          </div>
-        )}
-
-        {/* MESAJ KARTI */}
-        <div
-          className={`
-            group flex pr-4 pl-[72px] relative w-full
-            ${!isSequence ? "mt-[17px]" : "mt-[2px]"}
-            hover:bg-[#2e3035]/60 -mx-4 px-4 py-0.5 transition-colors duration-75
-          `}
-          onContextMenu={(e) => onContextMenu(e, message, isInSequence)}
-        >
-          {/* SOL TARA: AVATAR VEYA SAAT */}
-          <div className="absolute left-4 w-[50px] flex justify-start select-none">
-            {!isSequence || showDateSeparator ? (
-              <div className="w-10 h-10 rounded-full bg-indigo-500 hover:shadow-md cursor-pointer overflow-hidden mt-0.5 flex items-center justify-center text-white font-bold text-lg transition-transform hover:scale-105 active:scale-95">
-                {message.username?.charAt(0).toUpperCase()}
-              </div>
-            ) : (
-              <span className="text-[10px] text-[#949ba4] hidden group-hover:inline-block w-full text-left pl-2 mt-1.5 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                {formatTime(message.timestamp)}
-              </span>
-            )}
-          </div>
-
-          {/* SAĞ TARA: İÇERİK */}
-          <div className="flex-1 min-w-0">
-            {(!isSequence || showDateSeparator) && (
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[16px] font-medium text-white hover:underline cursor-pointer">
-                  {message.username}
-                </span>
-                <span className="text-[12px] text-[#949ba4] font-medium ml-1 select-none">
-                  {formatTime(message.timestamp)}
-                </span>
-              </div>
-            )}
-            <p
-              className={`
-                text-[0.95rem] leading-[1.375rem] whitespace-pre-wrap break-words 
-                ${isSequence ? "text-[#dbdee1]" : "text-[#dcddde]"}
-              `}
-            >
-              {renderText(message.text)}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  });
 
   MessageItem.displayName = 'MessageItem';
 
@@ -618,6 +889,7 @@ export default function ChatView({ channelId, username, userId }) {
                   formatTime={formatTime}
                   formatDateHeader={formatDateHeader}
                   isInSequence={isMessageInSequence(message, index)}
+                  onImageClick={setSelectedImage}
                 />
               ))}
             </div>
@@ -630,6 +902,23 @@ export default function ChatView({ channelId, username, userId }) {
 
       {/* INPUT ALANI */}
       <div className="px-4 sm:px-5 pb-5 sm:pb-6 pt-3 bg-gradient-to-t from-[#0e0f12] via-[#12131a] to-transparent shrink-0 z-20 relative">
+        {pendingImage && (
+          <div className="mb-3 bg-[#1e1f22]/90 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex items-start gap-3 animate-fadeIn shadow-lg relative max-w-fit mx-auto sm:mx-0">
+            <div className="relative group">
+                <img src={pendingImage} alt="Preview" className="h-40 rounded-lg object-contain bg-black/50" />
+                <button 
+                    onClick={removePendingImage}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors z-10"
+                >
+                    <Trash2 size={14} />
+                </button>
+            </div>
+            <div className="flex flex-col gap-1 max-w-[200px]">
+                <span className="text-white text-sm font-medium truncate">{pendingImageFile?.name || "Pasted Image"}</span>
+                <span className="text-white/50 text-xs text-left">Gönderilmeye hazır</span>
+            </div>
+          </div>
+        )}
         {/* Cooldown Banner */}
         {cooldownRemaining > 0 && (
           <div className="mb-3 bg-gradient-to-br from-red-500/15 to-red-600/10 backdrop-blur-md border border-red-500/30 rounded-2xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4 animate-fadeIn shadow-[0_4px_20px_rgba(239,68,68,0.2)]">
@@ -655,7 +944,7 @@ export default function ChatView({ channelId, username, userId }) {
           </div>
         )}
 
-        <div className="backdrop-blur-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] rounded-2xl px-4 sm:px-5 py-3 flex items-center gap-2 sm:gap-3 relative shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)] border border-white/[0.08] focus-within:border-indigo-500/50 focus-within:shadow-[0_8px_32px_rgba(99,102,241,0.2)] transition-all duration-300">
+        <div className="backdrop-blur-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] rounded-2xl px-4 sm:px-5 py-3 flex items-center gap-0.5 sm:gap-1 relative shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)] border border-white/[0.08] focus-within:border-indigo-500/50 focus-within:shadow-[0_8px_32px_rgba(99,102,241,0.2)] transition-all duration-300">
           {/* Sol İkon (Emoji Picker) */}
           <div className="relative" ref={emojiPickerRef}>
             <button
@@ -711,6 +1000,25 @@ export default function ChatView({ channelId, username, userId }) {
             )}
           </div>
 
+          {/* Upload Button */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/png, image/jpeg, image/webp, image/gif"
+            onChange={handleImageSelect}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className={`text-white/60 hover:text-white transition-all duration-200 p-2 rounded-xl hover:bg-white/[0.05] hover:scale-110 active:scale-95 ml-1 flex-shrink-0 ${
+                isUploading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            title="Resim Yükle"
+          >
+             {isUploading ? <Loader2 size={20} className="animate-spin" /> : <Paperclip size={20} />}
+          </button>
+
           <form
             onSubmit={handleSendMessage}
             className="flex-1 flex items-center"
@@ -720,6 +1028,7 @@ export default function ChatView({ channelId, username, userId }) {
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
+              onPaste={handlePaste}
               placeholder={`#${
                 currentChannel?.name || "sohbet"
               } kanalına mesaj gönder`}
@@ -823,13 +1132,32 @@ export default function ChatView({ channelId, username, userId }) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className="mx-2 px-2 py-1.5 hover:bg-[#5865F2] hover:text-white rounded cursor-pointer flex items-center gap-2 group select-none transition-colors"
-            onClick={handleCopyText}
-          >
-            <Copy size={16} className="text-[#b5bac1] group-hover:text-white" />
-            <span className="font-medium">Metni Kopyala</span>
-          </div>
+          {contextMenu.message.type === 'image' ? (
+            <>
+              <div
+                className="mx-2 px-2 py-1.5 hover:bg-[#5865F2] hover:text-white rounded cursor-pointer flex items-center gap-2 group select-none transition-colors"
+                onClick={handleCopyImage}
+              >
+                <ImageIcon size={16} className="text-[#b5bac1] group-hover:text-white" />
+                <span className="font-medium">Resmi Kopyala</span>
+              </div>
+              <div
+                className="mx-2 px-2 py-1.5 hover:bg-[#5865F2] hover:text-white rounded cursor-pointer flex items-center gap-2 group select-none transition-colors"
+                onClick={handleCopyImageLink}
+              >
+                <Copy size={16} className="text-[#b5bac1] group-hover:text-white" />
+                <span className="font-medium">Linki Kopyala</span>
+              </div>
+            </>
+          ) : (
+            <div
+              className="mx-2 px-2 py-1.5 hover:bg-[#5865F2] hover:text-white rounded cursor-pointer flex items-center gap-2 group select-none transition-colors"
+              onClick={handleCopyText}
+            >
+              <Copy size={16} className="text-[#b5bac1] group-hover:text-white" />
+              <span className="font-medium">Metni Kopyala</span>
+            </div>
+          )}
           {contextMenu.message.userId === userId && (
             <>
               <div className="h-[1px] bg-[#1e1f22] my-1 mx-2"></div>
@@ -863,6 +1191,165 @@ export default function ChatView({ channelId, username, userId }) {
         </div>,
         document.body
       )}
+      
+      {/* IMAGE PREVIEW MODAL */}
+      {selectedImage && typeof document !== 'undefined' && createPortal(
+        <div 
+            className="fixed inset-0 z-[10000] bg-[#0f0f11]/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 animate-fadeIn select-none overflow-hidden"
+            onClick={() => setSelectedImage(null)}
+            onMouseMove={handleImgMouseMove}
+            onMouseUp={handleImgMouseUp}
+            onMouseLeave={handleImgMouseUp}
+            onContextMenu={(e) => e.preventDefault()}
+        >
+            {/* Background Decorations */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full animate-float-slow" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 blur-[120px] rounded-full animate-float" />
+
+            {/* Top Toolbar */}
+            <div className="absolute top-8 left-8 right-8 z-50 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <ImageIcon className="text-white" size={20} />
+                  </div>
+                  <div className="hidden sm:block">
+                    <h1 className="text-lg font-bold text-white tracking-tight">Netrex Görüntüleyici</h1>
+                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest leading-none mt-1">Premium Media Experience</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(selectedImage);
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `netrex-media-${Date.now()}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                      } catch (error) {
+                        toast.error("İndirme başarısız oldu.");
+                        window.open(selectedImage, '_blank');
+                      }
+                    }}
+                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white px-4 py-2.5 rounded-xl border border-white/5 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg"
+                  >
+                    <Download size={18} />
+                    <span className="text-sm font-semibold">İndir</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                        const viewerUrl = `${window.location.origin}/view?url=${encodeURIComponent(selectedImage)}`;
+                        if (window.netrex?.openExternalLink) {
+                            window.netrex.openExternalLink(viewerUrl);
+                        } else {
+                            window.open(viewerUrl, "_blank");
+                        }
+                    }}
+                    className="flex items-center gap-2 gradient-primary hover:shadow-glow text-white px-6 py-2.5 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg group/link"
+                  >
+                    <ExternalLink size={18} className="group-hover/link:rotate-45 transition-transform" />
+                    <span className="text-sm font-semibold">Tarayıcıda Aç</span>
+                  </button>
+
+                  <button
+                      onClick={() => setSelectedImage(null)}
+                      className="bg-white/5 hover:bg-red-500/80 text-white/80 hover:text-white p-2.5 rounded-xl border border-white/5 transition-all duration-300 hover:scale-110 active:scale-90 shadow-lg group/close"
+                  >
+                      <X size={20} className="group-hover/close:rotate-90 transition-transform" />
+                  </button>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 w-full flex items-center justify-center relative z-10 overflow-hidden">
+                <div 
+                  className={`relative ${imgIsDragging ? 'transition-none' : 'transition-transform duration-200'} ease-out ${
+                    isSpacePressed ? (imgIsDragging ? 'cursor-grabbing' : 'cursor-grab') :
+                    (imgZoom > 1 ? 'cursor-move' : 'cursor-default')
+                  }`}
+                  style={{
+                    transform: `translate(${imgPosition.x}px, ${imgPosition.y}px) scale(${imgZoom}) rotate(${imgRotation}deg)`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={handleImgMouseDown}
+                >
+                  <div className="absolute inset-0 bg-indigo-500/20 blur-[100px] opacity-50 pointer-events-none" />
+                  <div className="relative glass-card p-1.5 rounded-2xl shadow-2xl animate-scaleIn">
+                    <img 
+                        src={selectedImage} 
+                        alt="Full View" 
+                        className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-inner pointer-events-none"
+                    />
+                  </div>
+                </div>
+            </div>
+
+            {/* Bottom Floating Controls */}
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50" onClick={(e) => e.stopPropagation()}>
+              <div className="glass-modal px-6 py-3 rounded-2xl flex items-center gap-6 shadow-2xl border border-white/10 backdrop-blur-2xl">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleImgZoomOut}
+                    className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all disabled:opacity-20"
+                    disabled={imgZoom <= 0.5}
+                  >
+                    <Minus size={20} />
+                  </button>
+                  <span className="min-w-[4rem] text-center text-sm font-bold text-white/80 tabular-nums">
+                    %{Math.round(imgZoom * 100)}
+                  </span>
+                  <button 
+                    onClick={handleImgZoomIn}
+                    className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all disabled:opacity-20"
+                    disabled={imgZoom >= 5}
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-white/10" />
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleImgRotate}
+                    title="Döndür"
+                    className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
+                  >
+                    <RotateCw size={20} />
+                  </button>
+                  <button 
+                    onClick={handleImgReset}
+                    title="Sıfırla"
+                    className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
+                  >
+                    <RefreshCw size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Status Footer */}
+            <div className="absolute bottom-6 px-10 w-full flex items-center justify-between pointer-events-none opacity-40">
+                <div className="flex gap-6 text-[10px] text-white/50 font-bold uppercase tracking-[0.2em]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] self-center" />
+                  <span>Secure Stream Protocol</span>
+                </div>
+                <div className="text-[10px] text-white font-bold uppercase tracking-widest">
+                  {imgRotation !== 0 && `${imgRotation}°`}
+                  {imgZoom !== 1 && (imgRotation !== 0 ? ` • ` : "") + `%${Math.round(imgZoom * 100)}`}
+                </div>
+            </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

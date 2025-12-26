@@ -798,6 +798,7 @@ function RoomEventsHandler({
   onDisconnected,
   onError,
   roomName,
+  roomDisplayName,
   userId,
   username,
 }) {
@@ -879,7 +880,7 @@ function RoomEventsHandler({
         showNotification(
           "Kullanıcı Katıldı",
           `${participant.name || "Bir kullanıcı"} ${
-            roomName ? `"${roomName}"` : ""
+            roomDisplayName || roomName ? `"${roomDisplayName || roomName}"` : ""
           } odasına katıldı`,
           false
         );
@@ -899,7 +900,7 @@ function RoomEventsHandler({
         showNotification(
           "Kullanıcı Ayrıldı",
           `${participant.name || "Bir kullanıcı"} ${
-            roomName ? `"${roomName}"` : ""
+            roomDisplayName || roomName ? `"${roomDisplayName || roomName}"` : ""
           } odasından ayrıldı`,
           false
         );
@@ -1086,118 +1087,49 @@ function RoomEventsHandler({
       }
     };
 
-    const handleBeforeUnload = async (e) => {
-      // Cleanup'ı yap ve tamamlandığında main process'e bildir
-      try {
-        await cleanup();
-        // Electron context'inde isek cleanup tamamlandı mesajı gönder
-        if (
-          typeof window !== "undefined" &&
-          window.netrex?.notifyCleanupComplete
-        ) {
-          window.netrex.notifyCleanupComplete();
-          console.log(
-            "✅ Cleanup tamamlandı (beforeunload), main process'e bildirildi"
-          );
-        }
-      } catch (error) {
-        console.error("Cleanup hatası:", error);
-        // Hata olsa bile main process'e bildir (eğer Electron context'inde isek)
-        if (
-          typeof window !== "undefined" &&
-          window.netrex?.notifyCleanupComplete
-        ) {
-          window.netrex.notifyCleanupComplete();
-        }
-      }
+    // Handle standard browser unload (refresh/close tab)
+    const handleBeforeUnload = (e) => {
+      // Synchronous/Fast cleanup for browser close
+      cleanup().catch(console.error);
     };
 
-    // Electron IPC event listener
-    let electronCleanupHandler = null;
-    if (typeof window !== "undefined" && window.netrex?.onAppWillQuit) {
-      electronCleanupHandler = async () => {
-        console.log("🛑 App closing cleanup started...");
-        try {
-          // Parallelize cleanup tasks
-          const cleanupPromise = (async () => {
-            const tasks = [];
-            
-            // 1. LiveKit Disconnect
-            if (room && room.state !== ConnectionState.Disconnected) {
-              tasks.push(
-                room.disconnect()
-                  .then(() => console.log("✅ LiveKit room disconnect edildi (app close)"))
-                  .catch((err) => console.error("❌ LiveKit disconnect hatası:", err))
-              );
-            }
-
-            // 2. Firestore Cleanup
-            if (userId && roomName && username) {
-              const presenceRef = doc(db, "room_presence", roomName);
-              const userData = { 
-                userId, 
-                username,
-                photoURL: user?.photoURL || null
-              };
-              tasks.push(
-                updateDoc(presenceRef, { users: arrayRemove(userData) })
-                  .then(() => console.log("✅ Firestore presence temizlendi (app close)"))
-                  .catch((err) => {
-                    if (err.code !== "not-found") {
-                      console.error("❌ Firestore cleanup hatası:", err);
-                    }
-                  })
-              );
-            }
-
-            if (tasks.length > 0) {
-              await Promise.allSettled(tasks);
-            }
-          })();
-
-          // Race with 2 second timeout
-          await Promise.race([
-            cleanupPromise,
-            new Promise((resolve) => setTimeout(resolve, 2000))
-          ]);
-          
-        } catch (error) {
-          console.error("Electron cleanup hatası:", error);
-        } finally {
-          // Her durumda main process'e bildir
-          console.log("🏁 Cleanup finished (or timed out), notifying main process");
-          if (window.netrex?.notifyCleanupComplete) {
-             window.netrex.notifyCleanupComplete();
-          }
-        }
-      };
-      window.netrex.onAppWillQuit(electronCleanupHandler);
+    // Electron IPC event listener: Register cleanup task
+    let unregisterCleanup = null;
+    if (typeof window !== "undefined" && window.netrex) {
+      const { registerCleanupTask } = require("@/src/utils/cleanup");
+      unregisterCleanup = registerCleanupTask(async () => {
+         console.log("🛑 ActiveRoom App closing cleanup started...");
+         await cleanup();
+      });
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      if (electronCleanupHandler && window.netrex?.removeListener) {
-        window.netrex.removeListener("app-will-quit");
+      if (unregisterCleanup) unregisterCleanup();
+      
+      // Critical: Explicitly disconnect room on unmount to prevent ghost participants
+      if (room && room.state !== ConnectionState.Disconnected) {
+          room.disconnect();
       }
     };
   }, [room, roomName, userId, username]);
 
   return null;
 }
-function DeafenManager({ isDeafened }) {
+function DeafenManager({ isDeafened, serverDeafened }) {
   useEffect(() => {
     const muteAll = () => {
       document.querySelectorAll("audio").forEach((el) => {
-        el.muted = isDeafened;
+        el.muted = isDeafened || serverDeafened;
       });
     };
     muteAll();
     const obs = new MutationObserver(muteAll);
     obs.observe(document.body, { childList: true, subtree: true });
     return () => obs.disconnect();
-  }, [isDeafened]);
+  }, [isDeafened, serverDeafened]);
   return null;
 }
 function useAudioActivity(participant) {
@@ -1409,6 +1341,129 @@ function useAudioActivity(participant) {
   return isActive;
 }
 
+// Moderasyon Komutlarını Dinleyen ve Mikrofon Senkronizasyonu Yapan Bileşen
+function ModerationHandler({ 
+  setServerMuted, 
+  setServerDeafened, 
+  setMutedBy,
+  setDeafenedBy,
+  setMutedAt,
+  setDeafenedAt,
+  serverMuted, 
+  serverDeafened, 
+  isDeafened, 
+  setIsDeafened, 
+  isMuted, 
+  setIsMuted, 
+  playSound 
+}) {
+  const room = useRoomContext();
+  const { localParticipant } = useLocalParticipant();
+
+  // Mikrofon ve Hoparlör durumunu hem manuel hem de sunucu kısıtlamalarına göre senkronize et
+  useEffect(() => {
+    if (localParticipant) {
+      // Mikrofon açık olmalı mı? (Manuel mute kapalı VE sunucu susturması kapalı VE sağırlaştırma kapalı)
+      const shouldEnableMic = !(isMuted || serverMuted || isDeafened || serverDeafened);
+      localParticipant.setMicrophoneEnabled(shouldEnableMic);
+    }
+  }, [isMuted, serverMuted, isDeafened, serverDeafened, localParticipant]);
+
+  // İlk bağlantıda metadata'dan durumu oku
+  useEffect(() => {
+    if (localParticipant && localParticipant.metadata) {
+       try {
+         const meta = JSON.parse(localParticipant.metadata);
+         if (meta.serverMuted !== undefined) setServerMuted(meta.serverMuted);
+         if (meta.serverDeafened !== undefined) setServerDeafened(meta.serverDeafened);
+         if (meta.mutedBy) setMutedBy(meta.mutedBy);
+         if (meta.deafenedBy) setDeafenedBy(meta.deafenedBy);
+         if (meta.mutedAt) setMutedAt(meta.mutedAt);
+         if (meta.deafenedAt) setDeafenedAt(meta.deafenedAt);
+       } catch (e) {
+         console.error("Metadata parse error:", e);
+       }
+    }
+  }, [localParticipant, setServerMuted, setServerDeafened, setMutedBy, setDeafenedBy, setMutedAt, setDeafenedAt]);
+
+  useEffect(() => {
+    if (!room || !localParticipant) return;
+
+    const handleDataReceived = (payload, participant) => {
+      // Sadece debugging için log ekleyelim
+      if (process.env.NODE_ENV === "development") {
+        console.log("📨 Veri alındı:", participant?.identity);
+      }
+      const str = new TextDecoder().decode(payload);
+      try {
+        const data = JSON.parse(str);
+        if (data.type === "MODERATION_COMMAND") {
+          if (process.env.NODE_ENV === "development") {
+            console.log("🛠️ Moderasyon komutu:", data.action, "Hedef:", data.targetId, "Sen:", localParticipant.identity);
+          }
+          // Eğer hedef bensem
+           if (data.targetId === localParticipant.identity) {
+             if (data.action === "MUTE") {
+               const modName = data.moderatorName || "Bir yetkili";
+               setServerMuted(data.value);
+               if (data.value) {
+                 setMutedBy(modName);
+                 setMutedAt(Date.now());
+               } else {
+                 setMutedBy(null);
+                 setMutedAt(null);
+               }
+               
+               // Metadata güncellemesi artık ActiveRoom'un ana useEffect'i tarafından yapılacak
+
+               // Sadece bildirim ve ses
+               if (data.value) {
+                 playSound("mute");
+                 toast.error(`${modName} tarafından susturuldunuz.`, {
+                   icon: <MicOff className="text-red-500" size={18} />
+                 });
+               } else {
+                 playSound("unmute");
+                 toast.success(`${modName} susturmanızı kaldırdı.`, {
+                   icon: <Mic className="text-green-500" size={18} />
+                 });
+               }
+             } else if (data.action === "DEAFEN") {
+                const modName = data.moderatorName || "Bir yetkili";
+                const newValue = data.value;
+                setServerDeafened(newValue);
+                if (newValue) {
+                  setDeafenedBy(modName);
+                  setDeafenedAt(Date.now());
+                } else {
+                  setDeafenedBy(null);
+                  setDeafenedAt(null);
+                }
+
+                if (newValue) {
+                  playSound("deafen");
+                  toast.error(`${modName} tarafından sağırlaştırıldınız.`, {
+                    icon: <VolumeX className="text-red-500" size={18} />
+                  });
+                } else {
+                  playSound("undeafen");
+                  toast.success(`${modName} sağırlaştırmanızı kaldırdı.`, {
+                    icon: <Headphones className="text-green-500" size={18} />
+                  });
+                }
+             }
+          }
+        }
+      } catch (e) {}
+    };
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+    return () => room.off(RoomEvent.DataReceived, handleDataReceived);
+  }, [room, localParticipant, setServerMuted, setServerDeafened, isDeafened, setIsDeafened, setIsMuted, playSound, setMutedBy, setDeafenedBy, setMutedAt, setDeafenedAt]);
+
+  return null;
+}
+
 // --- ANA BİLEŞEN ---
 export default function ActiveRoom({
   roomName,
@@ -1421,9 +1476,19 @@ export default function ActiveRoom({
   const { user } = useAuthStore();
   const [token, setToken] = useState("");
   const [showSettings, setShowSettings] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false);
+  
+  // Voice State - Global Store'dan al
+  const { isMuted, isDeafened, toggleMute, toggleDeaf } = useSettingsStore();
+
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [hideIncomingVideo, setHideIncomingVideo] = useState(false);
+  const [serverMuted, setServerMuted] = useState(false);
+  const [serverDeafened, setServerDeafened] = useState(false);
+  // New States for enhanced moderation feedback
+  const [mutedBy, setMutedBy] = useState(null);
+  const [deafenedBy, setDeafenedBy] = useState(null);
+  const [mutedAt, setMutedAt] = useState(null);
+  const [deafenedAt, setDeafenedAt] = useState(null);
 
   const [showVoicePanel, setShowVoicePanel] = useState(true);
   const {
@@ -1446,6 +1511,9 @@ export default function ActiveRoom({
     useSettingsStore();
   const { playSound } = useSoundEffects();
   const { channels } = useServerStore();
+
+  // NOT: useLocalParticipant hook'u sadece LiveKitRoom içinde çalışır.
+  // Mikrofon senkronizasyonu MicrophoneSyncHandler bileşeninde yapılır (LiveKitRoom içinde).
 
   const roomDisplayName = useMemo(() => {
     if (displayName) return displayName;
@@ -1478,6 +1546,9 @@ export default function ActiveRoom({
     return () => window.removeEventListener("mousedown", closeMenu);
   }, []);
 
+  // settingsStore'dan mute/deafen durumlarını sıfırlamak için set fonksiyonunu al
+  const settingsStore = useSettingsStore;
+  
   useEffect(() => {
     // Room değiştiğinde state'leri sıfırla (eski room'dan temiz çıkış için)
     setToken(""); // Token'ı sıfırla ki eski room'dan disconnect olsun
@@ -1487,6 +1558,10 @@ export default function ActiveRoom({
     hasConnectedOnceRef.current = false;
     setActiveStreamId(null); // Aktif stream'i sıfırla
     setIsCameraOn(false); // Kamera durumunu sıfırla
+    
+    // ÖNEMLİ: Odaya her bağlanıldığında mute/deafen durumlarını sıfırla
+    // Bu, önceki oturumdan kalan görsel durumun gerçek durumla senkronize olmasını sağlar
+    settingsStore.setState({ isMuted: false, isDeafened: false });
 
     // Timeout'u temizle
     if (connectionTimeoutRef.current) {
@@ -1497,11 +1572,11 @@ export default function ActiveRoom({
     (async () => {
       try {
         if (window.netrex) {
-          // Generate persistent identity using userId
-          // This prevents ghost participants when users reconnect
-          const identity = generateLiveKitIdentity(userId);
+          // Use userId directly as identity to prevent ghost participants
+          // generateLiveKitIdentity adds device suffix which causes duplicates on refresh
+          const identity = userId;
           
-          // Get token with persistent identity and display name
+          // Get token with stable identity and display name
           const t = await window.netrex.getLiveKitToken(roomName, identity, username);
           setToken(t);
 
@@ -1661,6 +1736,7 @@ export default function ActiveRoom({
       y: e.clientY,
       participant,
       isLocal: participant.isLocal,
+      roomName: roomName,
     });
   };
 
@@ -1744,10 +1820,24 @@ export default function ActiveRoom({
         onDisconnected={handleDisconnect}
         onError={handleError}
         roomName={roomName}
+        roomDisplayName={roomDisplayName}
         userId={userId}
         username={username}
       />
       <MicrophoneManager />
+      <ModerationHandler 
+        setServerMuted={setServerMuted} 
+        setServerDeafened={setServerDeafened}
+        setMutedBy={setMutedBy}
+        setDeafenedBy={setDeafenedBy}
+        setMutedAt={setMutedAt}
+        setDeafenedAt={setDeafenedAt}
+        serverMuted={serverMuted}
+        serverDeafened={serverDeafened}
+        isDeafened={isDeafened}
+        isMuted={isMuted}
+        playSound={playSound}
+      />
 
       {/* LiveKit bağlantısı kurulana kadar loading overlay */}
       {!hasConnectedOnce && !connectionError && (
@@ -1805,7 +1895,7 @@ export default function ActiveRoom({
                     setHasConnectedOnce(false);
                     hasConnectedOnceRef.current = false;
                     if (window.netrex) {
-                      const identity = generateLiveKitIdentity(userId);
+                      const identity = userId;
                       window.netrex
                         .getLiveKitToken(roomName, identity, username)
                         .then((t) => {
@@ -1876,7 +1966,7 @@ export default function ActiveRoom({
 
       <style>{styleInjection}</style>
       <RoomAudioRenderer />
-      <DeafenManager isDeafened={isDeafened} />
+      <DeafenManager isDeafened={isDeafened} serverDeafened={serverDeafened} />
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
@@ -2014,13 +2104,21 @@ export default function ActiveRoom({
             onLeave={handleManualLeave}
             onOpenSettings={() => setShowSettings(true)}
             isDeafened={isDeafened}
-            setIsDeafened={setIsDeafened}
+            onDeafenToggle={toggleDeaf}
+            isMuted={isMuted}
+            onMuteToggle={toggleMute}
+            serverMuted={serverMuted}
+            serverDeafened={serverDeafened}
             playSound={playSound}
             setActiveStreamId={setActiveStreamId}
             isCameraOn={isCameraOn}
             setIsCameraOn={setIsCameraOn}
             stopScreenShare={stopScreenShare}
             chatPosition={chatPosition}
+            mutedBy={mutedBy}
+            deafenedBy={deafenedBy}
+            mutedAt={mutedAt}
+            deafenedAt={deafenedAt}
           />
         )}
       />
@@ -2030,6 +2128,7 @@ export default function ActiveRoom({
           y={contextMenu.y}
           participant={contextMenu.participant}
           isLocal={contextMenu.isLocal}
+          roomName={contextMenu.roomName}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -3122,7 +3221,23 @@ function UserCard({
   const { identity, name, metadata } = useParticipantInfo({ participant });
   
   // Use name for display, fallback to identity if name is not set
-  const displayName = name || identity;
+  // For anonymous users, this ensures we have something to display
+  const displayName = name || identity || "User";
+  
+  // Get initials from name (same logic as Avatar.jsx component)
+  const getInitials = (nameStr) => {
+    if (!nameStr) return "?";
+    const trimmed = nameStr.trim();
+    if (!trimmed) return "?";
+    const parts = trimmed.split(" ");
+    if (parts.length === 1) {
+      return parts[0].charAt(0).toUpperCase();
+    }
+    // For multiple words, take first letter of first and last word
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  };
+  
+  const userInitials = getInitials(displayName);
   const audioActive = useAudioActivity(participant);
 
   // Screen share track kontrolü
@@ -3478,9 +3593,9 @@ function UserCard({
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/avatar:translate-x-full transition-transform duration-1000 pointer-events-none rounded-2xl"></div>
             )}
 
-            {/* Letter - use displayName for proper initials */}
+            {/* Letter - use userInitials for proper initials (handles anonymous users) */}
             <span className="relative z-10 drop-shadow-lg">
-              {displayName?.charAt(0).toUpperCase()}
+              {userInitials}
             </span>
 
             {/* Speaking pulse rings */}
@@ -3561,36 +3676,59 @@ function UserCard({
               : "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%)",
           }}
         >
-          <div className="flex items-center gap-2">
-            {/* Status indicator - Minimal */}
-            {(isDeafened || isMuted) && (
-              <div className="relative shrink-0">
-                {isDeafened ? (
-                  <VolumeX size={12} className="text-red-400" />
-                ) : (
-                  <MicOff size={12} className="text-red-400" />
-                )}
-                <div className="absolute inset-0 bg-red-500/20 rounded-full blur-sm animate-pulse"></div>
-              </div>
-            )}
-            {isSpeaking && !isMuted && !isDeafened && (
-              <div className="relative shrink-0">
-                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
-                <div className="absolute inset-0 bg-green-500/30 rounded-full blur-sm animate-ping"></div>
-              </div>
-            )}
-            <span
-              className={`font-semibold text-white tracking-normal truncate block drop-shadow-2xl ${
-                compact ? "text-[10px] leading-tight" : "text-sm"
-              }`}
-              style={{
-                textShadow:
-                  "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
-              }}
-            >
-              {displayName}
-            </span>
-          </div>
+          {/* Muted By veya Normal İsim */}
+          {(remoteState.serverMuted || remoteState.serverDeafened) && (remoteState.mutedBy || remoteState.deafenedBy) ? (
+            <div className="flex flex-col items-start gap-0.5 animate-in slide-in-from-bottom-1 fade-in duration-300">
+               <div className="flex items-center gap-1.5 leading-none">
+                 {remoteState.serverDeafened ? (
+                   <VolumeX size={12} className="text-red-400" />
+                 ) : (
+                   <MicOff size={12} className="text-red-400" />
+                 )}
+                 <span className="text-[10px] font-bold text-red-300 uppercase tracking-widest leading-none">
+                   {remoteState.serverDeafened ? "SAĞIRLAŞTIRILDI" : "SUSTURULDU"}
+                 </span>
+               </div>
+               <div className="flex items-center gap-1">
+                 <span className="text-[10px] text-zinc-400 leading-tight">Yapan:</span>
+                 <span className="text-xs font-bold text-white/90 leading-tight">
+                    {remoteState.serverDeafened ? remoteState.deafenedBy : remoteState.mutedBy}
+                 </span>
+               </div>
+            </div>
+          ) : (
+            /* Normal Durum */
+            <div className="flex items-center gap-2">
+              {/* Status indicator - Minimal */}
+              {(isDeafened || isMuted) && (
+                <div className="relative shrink-0">
+                  {isDeafened ? (
+                    <VolumeX size={12} className="text-red-400" />
+                  ) : (
+                    <MicOff size={12} className="text-red-400" />
+                  )}
+                  <div className="absolute inset-0 bg-red-500/20 rounded-full blur-sm animate-pulse"></div>
+                </div>
+              )}
+              {isSpeaking && !isMuted && !isDeafened && (
+                <div className="relative shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                  <div className="absolute inset-0 bg-green-500/30 rounded-full blur-sm animate-ping"></div>
+                </div>
+              )}
+              <span
+                className={`font-semibold text-white tracking-normal truncate block drop-shadow-2xl ${
+                  compact ? "text-[10px] leading-tight" : "text-sm"
+                }`}
+                style={{
+                  textShadow:
+                    "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
+                }}
+              >
+                {displayName}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame (sadece izlenmiyorsa) */}
@@ -3704,17 +3842,24 @@ function BottomControls({
   onLeave,
   onOpenSettings,
   isDeafened,
-  setIsDeafened,
   playSound,
   setActiveStreamId,
   isCameraOn,
   setIsCameraOn,
   stopScreenShare,
   chatPosition,
+  serverMuted,
+  serverDeafened,
+  isMuted,
+  onMuteToggle,
+  onDeafenToggle,
+  mutedBy,
+  deafenedBy,
+  mutedAt,
+  deafenedAt,
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const [isMuted, setMuted] = useState(false);
   const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate } = useSettingsStore();
   const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
@@ -3722,12 +3867,19 @@ function BottomControls({
   const screenShareMenuRef = useRef(null);
   const screenShareButtonRef = useRef(null);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
+  const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
   const stateRef = useRef({
     isMuted,
     isDeafened,
     localParticipant,
     profileColor,
     isCameraOn,
+    serverMuted,
+    serverDeafened,
+    mutedBy,
+    deafenedBy,
+    mutedAt,
+    deafenedAt,
   });
   useEffect(() => {
     stateRef.current = {
@@ -3736,14 +3888,19 @@ function BottomControls({
       localParticipant,
       profileColor,
       isCameraOn,
+      serverMuted,
+      serverDeafened,
+      mutedBy,
+      deafenedBy,
+      mutedAt,
+      deafenedAt,
     };
-  }, [isMuted, isDeafened, localParticipant, profileColor, isCameraOn]);
+  }, [isMuted, isDeafened, localParticipant, profileColor, isCameraOn, serverMuted, serverDeafened, mutedBy, deafenedBy, mutedAt, deafenedAt]);
 
   // Metadata update'i debounce et (timeout önlemek için)
   const metadataUpdateRef = useRef(null);
   const lastMetadataRef = useRef("");
   const isUpdatingMetadataRef = useRef(false);
-  const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
 
   // Room bağlantı durumunu kontrol et
   const isRoomConnected = room?.state === ConnectionState.Connected;
@@ -3771,6 +3928,12 @@ function BottomControls({
       isMuted,
       profileColor,
       isCameraOn,
+      serverMuted,
+      serverDeafened,
+      mutedBy: serverMuted ? mutedBy : null,
+      deafenedBy: serverDeafened ? deafenedBy : null,
+      mutedAt: serverMuted ? mutedAt : null,
+      deafenedAt: serverDeafened ? deafenedAt : null,
     });
 
     // Aynı metadata ise güncelleme yapma
@@ -3865,6 +4028,12 @@ function BottomControls({
     isCameraOn,
     isRoomConnected,
     room,
+    serverMuted,
+    serverDeafened,
+    mutedBy,
+    deafenedBy,
+    mutedAt,
+    deafenedAt
   ]);
 
   // Video track durumunu senkronize et (sadece event'lerde, sürekli kontrol yok)
@@ -3914,29 +4083,16 @@ function BottomControls({
   }, [isCameraOn]);
 
   const toggleMute = useCallback(() => {
-    const { isMuted, isDeafened, localParticipant } = stateRef.current;
-    if (isDeafened) return;
-    const newState = !isMuted;
-    setMuted(newState);
-    if (localParticipant) localParticipant.setMicrophoneEnabled(!newState);
-    playSound(newState ? "mute" : "unmute");
-  }, [playSound]);
+    const { isMuted } = stateRef.current;
+    onMuteToggle();
+    playSound(!isMuted ? "mute" : "unmute");
+  }, [playSound, onMuteToggle]);
 
   const toggleDeaf = useCallback(() => {
-    const { isDeafened, isMuted, localParticipant } = stateRef.current;
-    const newState = !isDeafened;
-    setIsDeafened(newState);
-    playSound(newState ? "deafen" : "undeafen");
-    if (newState) {
-      if (!isMuted) {
-        setMuted(true);
-        if (localParticipant) localParticipant.setMicrophoneEnabled(false);
-      }
-    } else {
-      setMuted(false);
-      if (localParticipant) localParticipant.setMicrophoneEnabled(true);
-    }
-  }, [playSound]);
+    const { isDeafened } = stateRef.current;
+    onDeafenToggle();
+    playSound(!isDeafened ? "deafen" : "undeafen");
+  }, [playSound, onDeafenToggle]);
 
   const toggleCamera = useCallback(async () => {
     if (!enableCamera) {

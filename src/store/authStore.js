@@ -9,8 +9,10 @@ import {
   deleteUser,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase"; // Added db
+
+import { useServerStore } from "@/src/store/serverStore";
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -18,6 +20,21 @@ export const useAuthStore = create((set) => ({
   isLoading: true,
 
   initializeAuth: () => {
+    // Listen for OAuth success from Electron (Google login)
+    if (typeof window !== 'undefined' && window.netrex?.onOAuthSuccess) {
+      window.netrex.onOAuthSuccess(async (token) => {
+        console.log("OAuth token received, logging in...");
+        try {
+          const credential = GoogleAuthProvider.credential(token);
+          await signInWithCredential(auth, credential);
+          toast.success("Google ile giriş başarılı!");
+        } catch (error) {
+          console.error("OAuth login error:", error);
+          toast.error("Google ile giriş başarısız: " + error.message);
+        }
+      });
+    }
+
     return onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Sync user data to Firestore
@@ -70,6 +87,18 @@ export const useAuthStore = create((set) => ({
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
+        // 1. Set offline status on all servers BEFORE signing out
+        const { servers } = useServerStore.getState();
+        if (servers && servers.length > 0) {
+            const updatePromises = servers.map(server => 
+                updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
+                    presence: 'offline',
+                    lastSeen: serverTimestamp()
+                }).catch((err) => console.warn(`Failed to set offline on server ${server.id}:`, err))
+            );
+            await Promise.allSettled(updatePromises);
+        }
+
         if (currentUser.isAnonymous) {
           // Anonim ise sil
           await deleteUser(currentUser);
@@ -83,6 +112,9 @@ export const useAuthStore = create((set) => ({
         await signOut(auth).catch(() => {});
       }
     }
+    
+    // Reset stores
+    useServerStore.getState().reset();
     set({ user: null, isAuth: false });
   },
 }));

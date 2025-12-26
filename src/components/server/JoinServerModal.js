@@ -39,41 +39,53 @@ export default function JoinServerModal({ isOpen, onClose, onCreateClick }) {
   return (
     <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-nds-fade-in">
        {/* Animated background gradient */}
-       <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-teal-500/5 to-transparent pointer-events-none"></div>
+       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-transparent pointer-events-none"></div>
 
-       <div className="glass-modal w-full max-w-md flex flex-col animate-nds-scale-in rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1b1e] via-[#16171a] to-[#111214] shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+       <div className="glass-modal w-full max-w-md flex flex-col animate-nds-scale-in rounded-3xl border border-nds-border-medium bg-gradient-to-br from-nds-bg-deep/95 via-nds-bg-secondary/95 to-nds-bg-tertiary/95 shadow-nds-elevated relative overflow-hidden backdrop-blur-2xl">
           {/* Top glow effect */}
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-20 bg-green-500/10 blur-[50px] pointer-events-none"></div>
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-24 bg-emerald-500/10 blur-[60px] pointer-events-none"></div>
+          
+          {/* Animated Particles */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-10 left-10 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
+            <div className="absolute bottom-10 right-10 w-40 h-40 bg-teal-500/5 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: "1s" }}></div>
+          </div>
+
+          {/* ESC Close Button - Premium Style */}
+          <div
+            className="absolute top-5 right-5 flex flex-col items-center group cursor-pointer z-[10000]"
+            onClick={onClose}
+          >
+            <div className="w-9 h-9 rounded-xl glass-strong border border-nds-border-light flex items-center justify-center text-nds-text-tertiary group-hover:bg-gradient-to-br group-hover:from-nds-danger/20 group-hover:to-nds-danger/30 group-hover:text-nds-danger group-hover:border-nds-danger/30 transition-all duration-medium hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative group/close">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+            <span className="text-[9px] font-bold text-nds-text-tertiary mt-1 group-hover:text-nds-text-secondary transition-colors">
+              ESC
+            </span>
+          </div>
 
           {/* Header */}
           <div className="px-8 pt-8 pb-4 text-center relative z-10">
               <h2 className="text-2xl font-bold text-white mb-2">Sunucuya Katıl</h2>
-              <p className="text-gray-400 text-sm leading-relaxed">
+              <p className="text-[#949ba4] text-sm leading-relaxed">
                 Aşağıya bir davet kodu girerek bir sunucuya katılabilirsin.
               </p>
-              
-              {/* Close Button */}
-              <button 
-                  onClick={onClose}
-                  className="absolute top-5 right-5 w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all duration-200 group"
-              >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
           </div>
 
           <div className="p-8 pt-2 relative z-10">
               <form onSubmit={handleSubmit} className="space-y-6">
                 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-1">
+                  <label className="text-xs font-bold text-[#949ba4] uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                     <div className="w-1 h-1 bg-emerald-500 rounded-full"></div>
                      Davet Kodu
                   </label>
                   <Input 
                     value={inviteCode}
                     onChange={(e) => setInviteCode(e.target.value)}
                     placeholder="ör. htkz2s"
-                    className="bg-black/20 border-white/10 focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 text-white placeholder:text-gray-600 transition-all duration-300 h-12 text-center text-lg font-mono tracking-wider"
+                    className="bg-black/20 border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 text-white placeholder:text-gray-600 transition-all duration-300 h-12 text-center text-lg font-mono tracking-wider rounded-xl shadow-inner"
                     autoFocus
                   />
                   <p className="text-xs text-gray-500 text-center pt-1">
@@ -81,12 +93,12 @@ export default function JoinServerModal({ isOpen, onClose, onCreateClick }) {
                   </p>
                 </div>
 
-                <div className="flex justify-between items-center ">
+                <div className="flex justify-between items-center">
                    <Button 
                         variant="ghost" 
                         onClick={onCreateClick || onClose} 
                         type="button"
-                        className="hover:bg-white/5 text-gray-400 hover:text-white"
+                        className="hover:bg-white/5 text-[#949ba4] hover:text-white px-6"
                    >
                      {onCreateClick ? "Geri Dön" : "İptal"}
                    </Button>
@@ -95,7 +107,7 @@ export default function JoinServerModal({ isOpen, onClose, onCreateClick }) {
                         variant="success"
                         loading={isLoading} 
                         disabled={!inviteCode.trim()}
-                        className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20 px-8 flex-1 ml-4"
+                        className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg shadow-emerald-500/20 px-8 flex-1 ml-4 h-12 rounded-xl"
                    >
                      Sunucuya Katıl
                    </Button>
@@ -103,15 +115,14 @@ export default function JoinServerModal({ isOpen, onClose, onCreateClick }) {
               </form>
               
               {!onCreateClick && (
-                  <div className="mt-6 pt-4 border-t border-white/5 text-center">
-                    <h4 className="text-gray-400 text-xs font-bold uppercase mb-2">Kendi sunucunu mu kurmak istiyorsun?</h4>
+                  <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                    <h4 className="text-[#949ba4] text-xs font-bold uppercase mb-3 tracking-widest">Kendi sunucunu mu kurmak istiyorsun?</h4>
                      <Button 
                       variant="ghost" 
                       onClick={() => {
                           onClose();
-                          // This logic depends on parent, but typically there's a switch or seperate modal
                       }}
-                      className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                      className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 w-full h-11"
                     >
                       Sunucu Oluştur
                     </Button>

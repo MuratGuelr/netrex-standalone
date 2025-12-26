@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRoomContext } from "@livekit/components-react";
 import {
   Mic,
@@ -784,6 +785,7 @@ function ApplicationSettings() {
 function AccountSettings({ onClose }) {
   const { user, logout } = useAuthStore();
   const { profileColor, setProfileColor } = useSettingsStore();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Admin kontrolü (sadece UID)
   const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID?.trim() || "";
@@ -873,11 +875,13 @@ function AccountSettings({ onClose }) {
       );
     }
   }, [gradStart, gradEnd, gradAngle, colorMode, setProfileColor]);
-  const handleLogout = async () => {
-    if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
-      await logout();
-      onClose();
-    }
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    onClose();
+    await logout();
   };
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
@@ -1195,6 +1199,38 @@ function AccountSettings({ onClose }) {
           </div>
         </button>
       </div>
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && createPortal(
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-nds-fade-in" onClick={() => setShowLogoutModal(false)}></div>
+          <div className="glass-strong bg-[#1e1f22] border border-red-500/20 rounded-2xl w-full max-w-md p-0 relative z-10 animate-nds-scale-in shadow-2xl overflow-hidden">
+            <div className="p-6">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                    <LogOut size={24} className="text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Çıkış Yap</h3>
+                <p className="text-[#949ba4] leading-relaxed">
+                  Hesabından çıkış yapmak istediğine emin misin? Tekrar giriş yapana kadar bildirim almayacaksın.
+                </p>
+            </div>
+            <div className="p-4 bg-white/5 flex justify-end gap-3 border-t border-white/5">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="px-4 py-2.5 rounded-xl text-[#dbdee1] hover:bg-white/5 transition-colors font-medium text-sm"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="px-6 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 active:scale-95 text-white transition-all font-medium text-sm shadow-lg shadow-red-500/20 flex items-center gap-2"
+              >
+                Çıkış Yap
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

@@ -1,9 +1,24 @@
 "use client";
 
+import { usePresence } from "@/src/hooks/usePresence";
 import { Toaster } from "sonner";
 import { SettingsApplier } from "@/src/components/SettingsApplier";
+import { useEffect } from "react";
 
 export function Providers({ children }) {
+  usePresence(); // Enable global presence tracking
+  
+  // Clean up coordination
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.netrex?.onAppWillQuit) {
+      const { executeCleanupTasks } = require("@/src/utils/cleanup");
+      // Register the master handler
+      // We wrap it to ensure we don't add multiple listeners if Providers remounts (though it shouldn't)
+      const handler = () => executeCleanupTasks();
+      window.netrex.onAppWillQuit(handler);
+    }
+  }, []);
+
   return (
     <>
       <SettingsApplier />

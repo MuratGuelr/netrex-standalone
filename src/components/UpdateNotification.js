@@ -15,14 +15,19 @@ export default function UpdateNotification() {
   const [progress, setProgress] = useState(0);
   const [show, setShow] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
 
   useEffect(() => {
     if (!window.netrex) return;
 
     // Durum dinleyicisi
-    window.netrex.onUpdateStatus((newStatus, err) => {
-      console.log("Updater:", newStatus);
+    window.netrex.onUpdateStatus((newStatus, data) => {
+      console.log("Updater:", newStatus, data);
       setStatus(newStatus);
+
+      if (data && typeof data === 'object' && data.version) {
+        setUpdateInfo(data);
+      }
 
       if (
         newStatus === "available" ||
@@ -128,7 +133,10 @@ export default function UpdateNotification() {
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className={`w-1.5 h-1.5 rounded-full ${status === "downloaded" ? "bg-emerald-500 animate-pulse" : "bg-indigo-500"}`}></span>
                   <span className="text-[11px] text-[#949ba4] font-medium uppercase tracking-wider">
-                    {status === "downloaded" ? "v3.1.0 Bekliyor" : "Netrex v3.1.0"}
+                    {status === "downloaded" 
+                      ? (updateInfo?.version ? `v${updateInfo.version} Hazır` : "Kurulum Hazır")
+                      : (updateInfo?.version ? `Netrex v${updateInfo.version}` : "Netrex Güncellemesi")
+                    }
                   </span>
                 </div>
               </div>

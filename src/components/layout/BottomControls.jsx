@@ -30,6 +30,8 @@ export default function BottomControls({
   isDeafened = false,
   isCameraOn = false,
   isScreenSharing = false,
+  serverMuted = false,
+  serverDeafened = false,
   onMuteToggle,
   onDeafenToggle,
   onCameraToggle,
@@ -56,22 +58,44 @@ export default function BottomControls({
         px-2 py-2
       ">
         {/* Microphone */}
-        <ControlButton
-          icon={isMuted ? <MicOff size={20} /> : <Mic size={20} />}
-          active={!isMuted}
-          danger={isMuted}
-          onClick={onMuteToggle}
-          tooltip={isMuted ? "Sesi Aç (M)" : "Sustur (M)"}
-        />
+        <div className="relative">
+          <ControlButton
+            icon={isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            active={!isMuted}
+            danger={isMuted || serverMuted}
+            onClick={onMuteToggle}
+            tooltip={
+              serverMuted 
+                ? "Sunucu tarafından susturuldunuz (Yerel durumu değiştirmek için tıklayın)" 
+                : isMuted ? "Sesi Aç (M)" : "Sustur (M)"
+            }
+          />
+          {serverMuted && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center border-2 border-[#1e1f22] pointer-events-none z-10">
+              <span className="text-[10px] text-white font-bold">!</span>
+            </div>
+          )}
+        </div>
 
         {/* Deafen */}
-        <ControlButton
-          icon={isDeafened ? <VolumeX size={20} /> : <Headphones size={20} />}
-          active={!isDeafened}
-          danger={isDeafened}
-          onClick={onDeafenToggle}
-          tooltip={isDeafened ? "Sağırlaştırmayı Kapat" : "Sağırlaştır"}
-        />
+        <div className="relative">
+          <ControlButton
+            icon={isDeafened ? <VolumeX size={20} /> : <Headphones size={20} />}
+            active={!isDeafened}
+            danger={isDeafened || serverDeafened}
+            onClick={onDeafenToggle}
+            tooltip={
+              serverDeafened
+                ? "Sunucu tarafından sağırlaştırıldınız"
+                : isDeafened ? "Sağırlaştırmayı Kapat" : "Sağırlaştır"
+            }
+          />
+          {serverDeafened && (
+             <div className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center border-2 border-[#1e1f22] pointer-events-none z-10">
+              <span className="text-[10px] text-white font-bold">!</span>
+            </div>
+          )}
+        </div>
 
         {/* Divider */}
         <div className="w-px h-6 bg-nds-border-light mx-1" />
