@@ -31,6 +31,7 @@ log.info("App starting...");
 // Ortam Değişkenlerini Yükle (SSL bypass'tan ÖNCE yüklenmeli)
 const possibleEnvPaths = [
   path.join(__dirname, ".env.local"),
+  path.join(__dirname, "local.env"), // Backup for dotfile exclusion
   path.join(__dirname, "../.env.local"),
   path.join(process.cwd(), ".env.local"),
 ];

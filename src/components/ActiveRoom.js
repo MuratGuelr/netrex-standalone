@@ -1586,7 +1586,7 @@ export default function ActiveRoom({
           connectionTimeoutRef.current = setTimeout(() => {
             // Eğer hala bağlanmadıysa hata göster
             if (!hasConnectedOnceRef.current) {
-              setConnectionError("Odaya bağlanılamadı. Lütfen tekrar deneyin.");
+              setConnectionError(`Odaya bağlanılamadı (Timeout). URL: ${process.env.NEXT_PUBLIC_LIVEKIT_URL}`);
             }
           }, 20000); // 20 saniye
         }
@@ -1723,7 +1723,7 @@ export default function ActiveRoom({
     console.error("LiveKit bağlantı hatası:", error);
     // Sadece başarılı bağlantıdan sonra hata olursa göster
     if (hasConnectedOnce) {
-      setConnectionError(error?.message || "Bağlantı hatası oluştu.");
+      setConnectionError(`${error?.message || "Bağlantı hatası oluştu."} (URL: ${process.env.NEXT_PUBLIC_LIVEKIT_URL})`);
     }
     // İlk bağlantı hatasında sadece timeout'ta hata göster
   };

@@ -8,7 +8,9 @@ const destEnv = path.join(__dirname, '../electron/.env.local');
 if (fs.existsSync(sourceEnv)) {
   try {
     fs.copyFileSync(sourceEnv, destEnv);
-    console.log('✓ Copied .env.local to electron/ directory');
+    // Also copy to local.env to avoid electron-builder dotfile exclusion
+    fs.copyFileSync(sourceEnv, path.join(__dirname, '../electron/local.env'));
+    console.log('✓ Copied .env.local to electron/ directory (and local.env)');
   } catch (error) {
     console.error('Error copying .env.local:', error);
     process.exit(1);
