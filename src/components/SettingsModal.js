@@ -27,6 +27,7 @@ import {
   Github,
   Youtube,
   ChevronRight,
+  Cpu,
 } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
@@ -207,6 +208,13 @@ export default function SettingsModal({ isOpen, onClose }) {
             color="purple"
           />
           <SidebarItem
+            label="Performans"
+            icon={<Cpu size={18} />}
+            active={activeTab === "performance"}
+            onClick={() => setActiveTab("performance")}
+            color="green"
+          />
+          <SidebarItem
             label="Ses ve Görüntü"
             icon={<Mic size={18} />}
             active={activeTab === "voice"}
@@ -270,6 +278,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               <div className="animate-page-enter">
                 {activeTab === "account" && <AccountSettings onClose={onClose} />}
                 {activeTab === "application" && <ApplicationSettings />}
+                {activeTab === "performance" && <PerformanceSettings />}
                 {activeTab === "voice" && <VoiceSettings />}
                 {activeTab === "keybinds" && <KeybindSettings />}
                 {activeTab === "notifications" && <NotificationSettings />}
@@ -347,6 +356,13 @@ function SidebarItem({ label, icon, active, onClick, color = "indigo" }) {
       activeDot: "bg-pink-400 shadow-[0_0_8px_rgba(236,72,153,0.6)]",
       hoverBg: "group-hover/item:from-pink-500/10 group-hover/item:to-pink-600/5",
     },
+    green: {
+      activeBg: "from-green-500/20 to-green-600/10",
+      activeBorder: "border-green-500/40",
+      activeIcon: "text-green-400",
+      activeDot: "bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.6)]",
+      hoverBg: "group-hover/item:from-green-500/10 group-hover/item:to-green-600/5",
+    },
   };
 
   const colors = colorClasses[color] || colorClasses.indigo;
@@ -418,7 +434,7 @@ function ToggleSwitch({ label, description, checked, onChange }) {
         }`}
       >
         <div
-          className={`absolute top-[2px] left-[2px] w-6 h-6 bg-white rounded-full shadow-lg transform transition-all duration-500 ease-in-out flex items-center justify-center ${
+          className={`absolute top-0 left-[3px] w-6 h-6 bg-white rounded-full shadow-lg transform transition-all duration-500 ease-in-out flex items-center justify-center ${
             checked ? "translate-x-[26px]" : "translate-x-0"
           }`}
         >
@@ -437,7 +453,7 @@ function ToggleSwitch({ label, description, checked, onChange }) {
 
 function AboutSettings() {
   // Versiyon bilgilerini package.json'dan al
-  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0";
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0";
   const appName = "Netrex";
   const appDescription = "Güvenli Masaüstü Sesli Sohbet Uygulaması";
   const githubUrl = "https://github.com/MuratGuelr/netrex-standalone";
@@ -1496,6 +1512,127 @@ function KeybindRow({
             <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-red-600/5 animate-pulse"></div>
           )}
         </button>
+      </div>
+    </div>
+  );
+}
+
+export function PerformanceSettings() {
+  const {
+    hardwareAcceleration,
+    setHardwareAcceleration,
+    graphicsQuality,
+    setGraphicsQuality,
+  } = useSettingsStore();
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
+      <h3 className="text-2xl font-bold text-white mb-6 relative">
+        <span className="relative z-10">Performans Ayarları</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/20 to-emerald-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+      </h3>
+
+      {/* Header Banner */}
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
+
+        <div className="h-20 w-full bg-gradient-to-r from-green-600 via-emerald-600 to-green-600 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/30"></div>
+          <div className="absolute inset-0 flex items-center px-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg">
+                <Cpu size={24} className="text-white" />
+              </div>
+              <div>
+                <h4 className="text-white font-bold text-lg">Performans ve Kalite</h4>
+                <p className="text-white/70 text-sm">
+                  Uygulamanın kaynak kullanımını ve görsel kalitesini yönetin
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Donanım Hızlandırma */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-green-500/20 flex items-center justify-center">
+            <Zap size={14} className="text-green-400" />
+          </div>
+          GPU Hızlandırma
+        </h4>
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-green-500/20 transition-colors duration-300">
+          <ToggleSwitch
+            label="Donanım Hızlandırma"
+            description="Animasyonları ve efektleri grafik kartınızda (GPU) işleyerek işlemci (CPU) yükünü azaltır."
+            checked={hardwareAcceleration}
+            onChange={() => setHardwareAcceleration(!hardwareAcceleration)}
+          />
+        </div>
+      </div>
+
+      {/* Görsel Kalite */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+            <Palette size={14} className="text-emerald-400" />
+          </div>
+          Görsel Kalite
+        </h4>
+        <div className="relative z-10 space-y-3">
+          <p className="text-sm text-[#949ba4] leading-relaxed">
+            Düşük sistem özelliklerine sahipseniz "Performans" modunu seçerek bulanıklık (blur) efektlerini kapatabilir ve daha akıcı bir deneyim elde edebilirsiniz.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setGraphicsQuality("high")}
+              className={`relative overflow-hidden rounded-xl p-4 border transition-all duration-300 text-left group/opt focus:outline-none ${
+                graphicsQuality === "high"
+                  ? "bg-green-500/10 border-green-500/50"
+                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
+              }`}
+            >
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`font-bold ${graphicsQuality === "high" ? "text-green-400" : "text-white"}`}>Yüksek Kalite</span>
+                  {graphicsQuality === "high" && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
+                </div>
+                <div className="text-xs text-[#949ba4] group-hover/opt:text-[#b5bac1]">
+                  Tam görsel deneyim. Bulanıklık (Glassmorphism) ve tüm animasyonlar aktiftir.
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setGraphicsQuality("low")}
+              className={`relative overflow-hidden rounded-xl p-4 border transition-all duration-300 text-left group/opt focus:outline-none ${
+                graphicsQuality === "low"
+                  ? "bg-yellow-500/10 border-yellow-500/50"
+                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
+              }`}
+            >
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`font-bold ${graphicsQuality === "low" ? "text-yellow-400" : "text-white"}`}>Performans</span>
+                  {graphicsQuality === "low" && <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)] animate-pulse"></div>}
+                </div>
+                <div className="text-xs text-[#949ba4] group-hover/opt:text-[#b5bac1]">
+                  Maksimum performans. Bulanıklık efektleri kapatılır ve animasyonlar basitleştirilir.
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

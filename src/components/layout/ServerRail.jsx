@@ -8,6 +8,9 @@ import { Home, Plus, Upload, RefreshCw, Settings, UserPlus, LogOut, Compass } fr
 import Tooltip from "@/src/components/ui/Tooltip";
 import RailUserPanel from "./RailUserPanel";
 import ServerSettingsModal from "@/src/components/server/ServerSettingsModal";
+import CreateInviteModal from "@/src/components/server/CreateInviteModal";
+import LeaveServerModal from "@/src/components/server/LeaveServerModal";
+import { useServerPermission } from "@/src/hooks/useServerPermission";
 
 /**
  * 🚆 ServerRail - Netrex Premium Navigation Rail
@@ -23,6 +26,8 @@ export default function ServerRail({ onOpenCreateModal }) {
   } = useServerStore();
   
   const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview', serverId: null });
+  const [inviteModal, setInviteModal] = useState({ isOpen: false, serverId: null });
+  const [leaveModal, setLeaveModal] = useState({ isOpen: false, server: null });
 
   useEffect(() => {
     if (user?.uid) {
@@ -36,14 +41,27 @@ export default function ServerRail({ onOpenCreateModal }) {
   const handleOpenSettings = (serverId, tab = 'overview') => {
       setServerSettings({ isOpen: true, initialTab: tab, serverId });
   };
+
+  const handleOpenInvite = (serverId) => {
+    setInviteModal({ isOpen: true, serverId });
+  };
   
   const { leaveServer } = useServerStore();
 
-  const handleLeaveServer = async (server) => {
-      if(confirm(`"${server.name}" sunucusundan ayrılmak istediğinize emin misiniz?`)) {
-          await leaveServer(server.id, user.uid);
-          selectServer(null);
-      }
+  const handleLeaveClick = (server) => {
+     setLeaveModal({ isOpen: true, server });
+  };
+  
+  const canManageCurrentServer = useServerPermission("MANAGE_SERVER");
+
+  const confirmLeaveServer = async () => {
+     if (leaveModal.server) {
+        await leaveServer(leaveModal.server.id, user.uid);
+        if (currentServer?.id === leaveModal.server.id) {
+            selectServer(null);
+        }
+        setLeaveModal({ isOpen: false, server: null });
+     }
   };
 
   return (
@@ -77,8 +95,10 @@ export default function ServerRail({ onOpenCreateModal }) {
           onClick={() => handleServerClick(server.id)}
           iconUrl={server.iconUrl}
           isOwner={server.ownerId === user?.uid}
+          canManage={(currentServer?.id === server.id) ? canManageCurrentServer : false}
           onOpenSettings={handleOpenSettings}
-          onLeave={() => handleLeaveServer(server)}
+          onOpenInvite={handleOpenInvite}
+          onLeave={() => handleLeaveClick(server)}
         />
       ))}
 
@@ -104,6 +124,23 @@ export default function ServerRail({ onOpenCreateModal }) {
           initialTab={serverSettings.initialTab}
         />
       )}
+
+      {inviteModal.isOpen && (
+        <CreateInviteModal
+          isOpen={inviteModal.isOpen}
+          onClose={() => setInviteModal({ isOpen: false, serverId: null })}
+          serverId={inviteModal.serverId}
+        />
+      )}
+
+      {leaveModal.isOpen && (
+        <LeaveServerModal 
+            isOpen={leaveModal.isOpen}
+            onClose={() => setLeaveModal({ isOpen: false, server: null })}
+            onConfirm={confirmLeaveServer}
+            serverName={leaveModal.server?.name}
+        />
+      )}
     </nav>
   );
 }
@@ -120,7 +157,9 @@ function RailItem({
   variant = "default", // default | success | explore
   serverId = null,
   isOwner = false,
+  canManage = false,
   onOpenSettings,
+  onOpenInvite,
   onLeave
 }) {
   const [localIcon, setLocalIcon] = useState(null);
@@ -227,8 +266,10 @@ function RailItem({
          menuPos={menuPos} 
          onClose={() => setShowMenu(false)}
          isOwner={isOwner}
+         canManage={canManage}
          serverId={serverId}
          onOpenSettings={onOpenSettings}
+         onOpenInvite={onOpenInvite}
          onLeave={onLeave}
          fileInputRef={fileInputRef}
          handleFileChange={handleFileChange}
@@ -251,7 +292,7 @@ function Separator() {
 /**
  * 🖱️ Context Menu (Portal) - Tasarım 2 Görünümü ile
  */
-function ContextMenu({ menuPos, onClose, isOwner, serverId, onOpenSettings, onLeave, fileInputRef, handleFileChange, hasLocalIcon, clearLocalIcon }) {
+function ContextMenu({ menuPos, onClose, isOwner, canManage, serverId, onOpenSettings, onOpenInvite, onLeave, fileInputRef, handleFileChange, hasLocalIcon, clearLocalIcon }) {
     if (typeof document === 'undefined') return null;
     
     return createPortal(
@@ -282,13 +323,16 @@ function ContextMenu({ menuPos, onClose, isOwner, serverId, onOpenSettings, onLe
              Sunucu
            </div>
            
-           <MenuBtn icon={<UserPlus size={14}/>} label="İnsanları Davet Et" onClick={() => { onClose(); onOpenSettings(serverId, 'invites'); }} color="indigo" />
+           
+           <MenuBtn icon={<UserPlus size={14}/>} label="İnsanları Davet Et" onClick={() => { onClose(); onOpenInvite(serverId); }} color="indigo" />
            
            <div className="h-px bg-white/[0.06] my-1" />
 
-           {isOwner ? (
+           {(isOwner || canManage) && (
                <MenuBtn icon={<Settings size={14}/>} label="Sunucu Ayarları" onClick={() => { onClose(); onOpenSettings(serverId, 'overview'); }} />
-           ) : (
+           )}
+
+           {!isOwner && (
                <MenuBtn icon={<LogOut size={14}/>} label="Sunucudan Ayrıl" onClick={() => { onClose(); onLeave(); }} color="red" />
            )}
 

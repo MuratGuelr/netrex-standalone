@@ -31,5 +31,6 @@ pnpm-debug.log*
 .env.production.local
 electron/.env.local
 
+
 # Electron Store
 config.json

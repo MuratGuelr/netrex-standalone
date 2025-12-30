@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { useChatStore } from "@/src/store/chatStore";
 import ServerSettingsModal from "./ServerSettingsModal";
+import CreateInviteModal from "./CreateInviteModal";
+import LeaveServerModal from "./LeaveServerModal";
 import CreateChannelModal from "./CreateChannelModal";
 import ChannelContextMenu from "./ChannelContextMenu";
 import ChannelSettingsModal from "./ChannelSettingsModal";
@@ -34,9 +36,12 @@ export default function ServerSidebar({ onJoinChannel }) {
   const { user } = useAuthStore();
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
+  const canManageServer = useServerPermission("MANAGE_SERVER");
 
   // State
   const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview' });
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [createChannelModal, setCreateChannelModal] = useState({ isOpen: false, type: 'text' });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, data: null });
@@ -106,6 +111,7 @@ export default function ServerSidebar({ onJoinChannel }) {
       <div className="relative z-30 p-4 pb-2" ref={menuRef}>
         <div 
           onClick={() => setShowMenu(!showMenu)}
+          onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
           className={`
             relative overflow-hidden
             group flex flex-col justify-between 
@@ -153,21 +159,49 @@ export default function ServerSidebar({ onJoinChannel }) {
          {/* Modern Dropdown Menu */}
          {showMenu && (
              <div className="absolute top-[calc(100%)] left-4 right-4 mt-2 bg-[#111214]/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 p-2 space-y-1">
-                 <button onClick={() => { setServerSettings({ isOpen: true, initialTab: 'invites' }); setShowMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500 hover:text-white transition-all">
+                 <button onClick={() => { setShowInviteModal(true); setShowMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500 hover:text-white transition-all">
                      <UserPlus size={18} />
                      <span className="text-sm font-semibold">Davet Et</span>
                  </button>
 
                  <div className="h-px bg-white/10 my-1 mx-2" />
 
-                 {isOwner ? (
-                     <>
-                         <MenuButton icon={<Settings size={18} />} label="Ayarlar" onClick={() => { setServerSettings({ isOpen: true, initialTab: 'overview' }); setShowMenu(false); }} />
-                         <MenuButton icon={<Plus size={18} />} label="Kanal Ekle" onClick={() => { handleCreateChannel('text'); setShowMenu(false); }} />
-                         <MenuButton icon={<Trash2 size={18} />} label="Sunucuyu Sil" danger onClick={handleDeleteServer} />
-                     </>
-                 ) : (
-                     <MenuButton icon={<LogOut size={18} />} label="Ayrıl" danger onClick={async () => { if(confirm("Ayrıl?")) { await useServerStore.getState().leaveServer(currentServer.id, user.uid); setShowMenu(false); }}} />
+                 {/* Server Settings - Owner or Manager */}
+                 {(isOwner || canManageServer) && (
+                     <MenuButton 
+                        icon={<Settings size={18} />} 
+                        label="Ayarlar" 
+                        onClick={() => { setServerSettings({ isOpen: true, initialTab: 'overview' }); setShowMenu(false); }} 
+                     />
+                 )}
+
+                 {/* Create Channel - Owner or Manage Channels */}
+                 {(isOwner || canManageChannels) && (
+                     <MenuButton 
+                        icon={<Plus size={18} />} 
+                        label="Kanal Ekle" 
+                        onClick={() => { handleCreateChannel('text'); setShowMenu(false); }} 
+                     />
+                 )}
+
+                 {/* Delete Server - Owner Only */}
+                 {isOwner && (
+                     <MenuButton 
+                        icon={<Trash2 size={18} />} 
+                        label="Sunucuyu Sil" 
+                        danger 
+                        onClick={handleDeleteServer} 
+                     />
+                 )}
+                 
+                 {/* Leave Server - Non-Owners */}
+                 {!isOwner && (
+                     <MenuButton 
+                        icon={<LogOut size={18} />} 
+                        label="Ayrıl" 
+                        danger 
+                        onClick={() => { setLeaveModalOpen(true); setShowMenu(false); }} 
+                     />
                  )}
              </div>
          )}
@@ -341,6 +375,22 @@ export default function ServerSidebar({ onJoinChannel }) {
           initialTab={serverSettings.initialTab}
         />
       )}
+
+      <CreateInviteModal 
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        serverId={currentServer.id}
+      />
+      
+      <LeaveServerModal
+        isOpen={leaveModalOpen}
+        onClose={() => setLeaveModalOpen(false)}
+        onConfirm={async () => {
+            await useServerStore.getState().leaveServer(currentServer.id, user.uid);
+            setLeaveModalOpen(false);
+        }}
+        serverName={currentServer.name}
+      />
 
       <CreateChannelModal 
         isOpen={createChannelModal.isOpen}

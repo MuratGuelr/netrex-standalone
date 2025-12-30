@@ -61,6 +61,10 @@ export const useSettingsStore = create(
       fontSize: "medium", // "small" | "medium" | "large"
       fontFamily: "system", // Sistem fontları veya web fontları
 
+      // Performans
+      hardwareAcceleration: true, // Animasyonlar için GPU zorlama
+      graphicsQuality: "high", // "high" | "low" (Low: Blur efektlerini kapatır)
+
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
       videoResolution: "1080p", // "720p" | "1080p" | "2k"
@@ -176,10 +180,13 @@ export const useSettingsStore = create(
       setNotifyOnLeave: (enabled) => set({ notifyOnLeave: enabled }),
       setNotificationSoundType: (type) => set({ notificationSoundType: type }),
 
-      // Görünüm ayarları
       setUIScale: (scale) => set({ uiScale: scale }),
       setFontSize: (size) => set({ fontSize: size }),
       setFontFamily: (font) => set({ fontFamily: font }),
+
+      // Performans ayarları
+      setHardwareAcceleration: (enabled) => set({ hardwareAcceleration: enabled }),
+      setGraphicsQuality: (quality) => set({ graphicsQuality: quality }),
 
       // Kamera ayarları
       setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),

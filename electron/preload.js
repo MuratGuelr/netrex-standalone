@@ -84,4 +84,8 @@ contextBridge.exposeInMainWorld("netrex", {
   
   // Cleanup tamamlandı mesajı gönder
   notifyCleanupComplete: () => ipcRenderer.send("cleanup-complete"),
+
+  // Window state changes (minimize, hide, show, focus)
+  onWindowStateChanged: (callback) =>
+    ipcRenderer.on("window-state-changed", (_, state) => callback(state)),
 });

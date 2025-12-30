@@ -43,6 +43,8 @@ import {
   Video,
   VideoOff,
   CameraOff,
+  X,
+  Maximize2,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
@@ -2320,9 +2322,15 @@ function StageManager({
     setIsResizing(true);
   };
   const screenTracks = useTracks([Track.Source.ScreenShare]);
-  const activeTrack = activeStreamId
-    ? screenTracks.find((t) => t.participant.identity === activeStreamId)
-    : null;
+  const cameraTracks = useTracks([Track.Source.Camera]);
+  
+  const activeTrack = useMemo(() => {
+    if (!activeStreamId) return null;
+    const screen = screenTracks.find((t) => t.participant.identity === activeStreamId);
+    if (screen) return screen;
+    const camera = cameraTracks.find((t) => t.participant.identity === activeStreamId);
+    return camera;
+  }, [activeStreamId, screenTracks, cameraTracks]);
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
   const { desktopNotifications, notifyOnJoin } = useSettingsStore();
@@ -2377,10 +2385,10 @@ function StageManager({
     }
 
     // Track kaybolduysa (artık yoksa) null yap
-    if (
-      activeStreamId &&
-      !screenTracks.find((t) => t.participant.identity === activeStreamId)
-    ) {
+    const isScreenTrack = screenTracks.find((t) => t.participant.identity === activeStreamId);
+    const isCameraTrack = cameraTracks.find((t) => t.participant.identity === activeStreamId);
+
+    if (activeStreamId && !isScreenTrack && !isCameraTrack) {
       userStoppedWatchingRef.current = false; // Track kayboldu, reset
       setActiveStreamId(null);
       return;
@@ -2397,7 +2405,7 @@ function StageManager({
       }
       // Diğer kullanıcılar için otomatik seçim yok - manuel olarak katılmaları gerekiyor
     }
-  }, [screenTracks, activeStreamId, setActiveStreamId]);
+  }, [screenTracks, cameraTracks, activeStreamId, setActiveStreamId]);
 
   const isLocalSharing = activeTrack?.participant.isLocal;
   const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
@@ -2634,6 +2642,152 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   );
 }
 
+// Draggable Pip Component - Improved with robust dragging and resizing
+function DraggablePip({ trackRef, participant, onClose }) {
+  // Default size
+  const [size, setSize] = useState({ width: 320, height: 180 });
+  const [position, setPosition] = useState({ x: 20, y: 20 }); // Will be updated on mount
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  
+  // Ref to track start positions for delta calculations
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const posStartRef = useRef({ x: 0, y: 0 });
+  const sizeStartRef = useRef({ w: 0, h: 0 });
+
+  const pipRef = useRef(null);
+  const initializedRef = useRef(false);
+
+  // Initialize position to bottom right relative to PARENT container
+  useEffect(() => {
+     if (initializedRef.current || !pipRef.current) return;
+     
+     // Use a small timeout to ensure layout is computed
+     const timer = setTimeout(() => {
+       if (pipRef.current && pipRef.current.offsetParent) {
+         const parent = pipRef.current.offsetParent;
+         const { clientWidth, clientHeight } = parent;
+         // Set to bottom right with 24px padding
+         setPosition({ 
+           x: Math.max(0, clientWidth - size.width - 24), 
+           y: Math.max(0, clientHeight - size.height - 24) 
+         });
+         initializedRef.current = true;
+       }
+     }, 100);
+     return () => clearTimeout(timer);
+  }, []); // Run once
+
+  const handleMouseDown = (e) => {
+    // Prevent default to stop text selection etc.
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.target.closest('.pip-close-btn')) return;
+    
+    const isResizeHandle = e.target.closest('.resize-handle');
+
+    if (isResizeHandle) {
+        setIsResizing(true);
+        // Store start values
+        dragStartRef.current = { x: e.clientX, y: e.clientY };
+        sizeStartRef.current = { w: size.width, h: size.height };
+    } else {
+        setIsDragging(true);
+        // Store start values
+        dragStartRef.current = { x: e.clientX, y: e.clientY };
+        posStartRef.current = { x: position.x, y: position.y };
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (isDragging) {
+        // Calculate delta
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+        
+        // Update position based on start pos + delta
+        setPosition({
+          x: posStartRef.current.x + dx,
+          y: posStartRef.current.y + dy
+        });
+      } else if (isResizing) {
+        const dx = e.clientX - dragStartRef.current.x;
+        
+        // Update size (maintain aspect ratio 16:9)
+        const newWidth = Math.max(160, sizeStartRef.current.w + dx); // Min width 160px
+        const newHeight = newWidth * (9/16);
+        
+        setSize({ width: newWidth, height: newHeight });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+    };
+
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isResizing]);
+  
+  return (
+      <div 
+        ref={pipRef}
+        style={{ 
+          left: position.x, 
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          zIndex: 60, // Above everything
+          cursor: isDragging ? 'grabbing' : 'grab',
+          // Ensure hardware acceleration for smoother dragging
+          transform: 'translateZ(0)',
+          willChange: isDragging || isResizing ? 'left, top, width, height' : 'auto'
+        }}
+        onMouseDown={handleMouseDown}
+        className="absolute bg-black/90 rounded-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)] overflow-hidden group/pip transition-shadow hover:shadow-glow-sm"
+      >
+        <VideoTrack 
+            trackRef={trackRef} 
+            className="w-full h-full object-cover pointer-events-none" 
+        />
+        
+        {/* Overlay Controls */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 opacity-0 group-hover/pip:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-2">
+            {/* Header: Name + Close */}
+            <div className="flex justify-between items-start">
+                <span className="text-[10px] font-bold text-white/90 bg-black/40 px-2 py-0.5 rounded backdrop-blur-md select-none pointer-events-none">
+                    {participant?.name || "Kamera"}
+                </span>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onClose(); }}
+                  className="pip-close-btn p-1 rounded-full bg-red-500/20 hover:bg-red-500 hover:text-white text-red-200 transition-colors pointer-events-auto"
+                >
+                   <X size={12} />
+                </button>
+            </div>
+
+            {/* Resize Handle */}
+             <div className="flex justify-end">
+                <div className="resize-handle cursor-se-resize p-1 opacity-50 hover:opacity-100 pointer-events-auto active:text-white">
+                    <Maximize2 size={12} className="text-white/70 rotate-90" />
+                </div>
+             </div>
+        </div>
+      </div>
+  );
+}
+
 function ScreenShareStage({
   trackRef,
   onStopWatching,
@@ -2644,6 +2798,7 @@ function ScreenShareStage({
   setActiveStreamId,
   activeStreamId,
 }) {
+  const [showPip, setShowPip] = useState(false);
   const [volume, setVolume] = useState(50);
   const [prevVolume, setPrevVolume] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -2653,6 +2808,7 @@ function ScreenShareStage({
   const audioRef = useRef(null);
   const mouseMoveTimeoutRef = useRef(null);
   const cursorTimeoutRef = useRef(null);
+
 
   const participants = useParticipants();
   const viewerCount = Math.max(0, participants.length - 1);
@@ -2802,10 +2958,28 @@ function ScreenShareStage({
           trackRef={trackRef}
           className="max-w-full max-h-full object-contain shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
         />
-        {!isLocalSharing && <audio ref={audioRef} autoPlay />}
+        {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && <audio ref={audioRef} autoPlay />}
 
-        {/* Premium Glassmorphism Overlay - Mouse movement ile kontrol ediliyor */}
-        {/* Overlay arka planı - görünür değilken pointer-events-none */}
+        {/* Draggable PiP Camera Overlay */}
+        {(() => {
+           // Ana ekran zaten kamera ise PiP kamera gösterme
+           if (trackRef.source === Track.Source.Camera) return null;
+
+           const pipParticipant = trackRef?.participant;
+           const cameraTracks = useTracks([Track.Source.Camera]);
+           const pipTrackRef = cameraTracks.find(t => t.participant.identity === pipParticipant?.identity);
+           
+           if (!pipTrackRef || !pipTrackRef.publication?.isSubscribed || !showPip) return null;
+
+           return (
+             <DraggablePip 
+                trackRef={pipTrackRef} 
+                participant={pipParticipant} 
+                onClose={() => setShowPip(false)} 
+             />
+           );
+        })()}
+
         <div
           className={`absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/50 transition-all duration-500 ${
             showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -2830,7 +3004,9 @@ function ScreenShareStage({
             <span className="text-white font-bold drop-shadow-lg text-sm sm:text-base tracking-tight">
               {isLocalSharing
                 ? "Senin Yayının"
-                : `${participant?.identity} yayını`}
+                : trackRef.source === Track.Source.ScreenShare
+                ? `${participant?.name || participant?.identity || "Kullanıcı"} yayını`
+                : `${participant?.name || participant?.identity || "Kullanıcı"} kamerası`}
             </span>
           </div>
           <div className="flex gap-2 pointer-events-auto">
@@ -2848,6 +3024,30 @@ function ScreenShareStage({
                 />
               </button>
             )}
+            {/* PiP Toggle Button - Only if camera is available */}
+            {(() => {
+                // Ana ekran zaten kamera ise PiP butonu gösterme
+                if (trackRef.source === Track.Source.Camera) return null;
+
+                const pipParticipant = trackRef?.participant;
+                const cameraTracks = useTracks([Track.Source.Camera]);
+                const hasCamera = cameraTracks.some(t => t.participant.identity === pipParticipant?.identity);
+                
+                if (!hasCamera) return null;
+
+                return (
+                    <button
+                      onClick={() => setShowPip(!showPip)}
+                      className={`backdrop-blur-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] hover:border-white/20 text-white/70 hover:text-white p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 group/btn z-[100] ${
+                         showOverlay ? "opacity-100" : "opacity-0"
+                      }`}
+                      title={showPip ? "Kamerayı Gizle" : "Kamerayı Göster"}
+                    >
+                      {showPip ? <Video size={18} className="sm:w-5 sm:h-5" /> : <VideoOff size={18} className="sm:w-5 sm:h-5" />}
+                    </button>
+                );
+            })()}
+
             {/* İzlemeyi Durdur butonu - Always visible */}
             <button
               onClick={(e) => {
@@ -3396,13 +3596,12 @@ function UserCard({
           <div
             className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg z-20 group/camera"
             onClick={(e) => {
-              // Eğer screen share varsa ve izlenmiyorsa, kameraya tıklandığında yayına katıl
+              // Kameraya veya yayına tıklandığında activeStreamId'yi güncelle
               if (
-                hasScreenShare &&
-                screenShareTrack &&
                 !isCurrentlyWatching &&
                 setActiveStreamId &&
-                participant.identity
+                participant.identity &&
+                ((hasScreenShare && screenShareTrack) || (shouldShowVideo && videoTrack))
               ) {
                 e.stopPropagation();
                 setActiveStreamId(participant.identity);
@@ -3410,7 +3609,8 @@ function UserCard({
             }}
             style={{
               cursor:
-                hasScreenShare && screenShareTrack && !isCurrentlyWatching
+                (hasScreenShare && screenShareTrack && !isCurrentlyWatching) ||
+                (shouldShowVideo && videoTrack && !isCurrentlyWatching)
                   ? "pointer"
                   : "default",
             }}
@@ -3551,6 +3751,24 @@ function UserCard({
                   </div>
                   <span className="drop-shadow-lg">Yayına Katıl</span>
                   <Tv size={16} className="drop-shadow-lg" />
+                </div>
+              </div>
+            )}
+
+            {/* Hover overlay - Kamerayı Büyüt (screen share yoksa ve izlenmiyorsa) */}
+             {!hasScreenShare && shouldShowVideo && videoTrack && !isCurrentlyWatching && (
+              <div
+                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (setActiveStreamId && participant.identity) {
+                    setActiveStreamId(participant.identity);
+                  }
+                }}
+              >
+                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
+                  <Maximize size={16} className="drop-shadow-lg" />
+                  <span className="drop-shadow-lg">Büyüt</span>
                 </div>
               </div>
             )}

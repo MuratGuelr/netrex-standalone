@@ -465,6 +465,7 @@
   /* Speaking Animations */
   .animate-speaking {
     animation: ndsSpeakingGlow 2s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
   }
 
   .animate-speaking-ring {
@@ -533,11 +534,9 @@
 
 @keyframes ndsSpeakingGlow {
   0%, 100% { 
-    box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
     border-color: rgba(34, 197, 94, 0.6);
   }
   50% { 
-    box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);
     border-color: rgba(34, 197, 94, 1);
   }
 }
@@ -1159,4 +1158,49 @@
   background: linear-gradient(90deg, var(--nds-accent-primary) 0%, var(--nds-accent-secondary) 100%) !important;
   height: 3px !important;
   border-radius: 0 0 16px 16px !important;
+}
+/* --- PERFORMANCE & GPU ACCELERATION --- */
+
+/* GPU Forced Layer */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Hardware Acceleration Mode */
+body.hardware-accel-on .animate-speaking,
+body.hardware-accel-on .animate-speaking-ring {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Low Quality Mode Overrides (Disables Blur & Heavy Animations) */
+body.graphics-quality-low .glass-strong,
+body.graphics-quality-low .glass-modal,
+body.graphics-quality-low .backdrop-blur-md,
+body.graphics-quality-low .backdrop-blur-lg,
+body.graphics-quality-low .backdrop-blur-xl,
+body.graphics-quality-low .backdrop-blur-2xl,
+body.graphics-quality-low .backdrop-blur-3xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(17, 18, 20, 0.98) !important;
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.graphics-quality-low .animate-pulse,
+body.graphics-quality-low .animate-pulse-slow,
+body.graphics-quality-low .animate-bounce-subtle,
+body.graphics-quality-low .animate-float {
+  animation: none !important;
+}
+
+/* Ensure readable text in low quality mode */
+body.graphics-quality-low .glass-strong,
+body.graphics-quality-low .glass-modal {
+  background: #1e1f22 !important;
+  border: 1px solid #313338 !important;
 }

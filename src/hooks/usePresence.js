@@ -6,31 +6,43 @@
  * 
  * States:
  * - online: User is active in the app
- * - idle: App is minimized or not focused (set after delay)
+ * - idle: App is minimized/hidden or not focused (set after delay)
  * - offline: App is closed
+ * 
+ * Heartbeat System:
+ * - Updates lastSeen every HEARTBEAT_INTERVAL while user is online/idle
+ * - Client-side checks if lastSeen is stale to show offline status
+ * - This handles cases where computer is shut down without closing app
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { doc, updateDoc, serverTimestamp, onDisconnect, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuthStore } from '@/src/store/authStore';
 import { useServerStore } from '@/src/store/serverStore';
 import { useSettingsStore } from '@/src/store/settingsStore';
+import { registerCleanupTask } from '@/src/utils/cleanup';
 
-// Idle timeout in milliseconds (5 minutes of no focus)
-const IDLE_TIMEOUT = 5 * 60 * 1000;
-// Debounce for focus/blur events (avoid rapid switches)
-const FOCUS_DEBOUNCE = 3000;
+// Debounce for presence updates (avoid rapid switches)
+const PRESENCE_DEBOUNCE = 2000;
+
+// Heartbeat interval: Update lastSeen every 2 minutes while active
+// This ensures that if computer is shut down, user will appear offline after STALE_THRESHOLD
+const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
+
+// How long before a user is considered "stale" (offline)
+// Should be > HEARTBEAT_INTERVAL to account for network delays
+export const PRESENCE_STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 
 export function usePresence() {
   const { user } = useAuthStore();
   const { currentServer } = useServerStore();
   const { userStatus } = useSettingsStore();
   
-  const idleTimeoutRef = useRef(null);
   const lastUpdateRef = useRef(0);
   const currentStatusRef = useRef('online');
-  const isElectronRef = useRef(false);
+  const cleanupRegisteredRef = useRef(false);
+  const heartbeatIntervalRef = useRef(null);
 
   // Update presence in Firebase
   const updatePresence = useCallback(async (status) => {
@@ -38,7 +50,7 @@ export function usePresence() {
     
     // Debounce - avoid too many writes
     const now = Date.now();
-    if (now - lastUpdateRef.current < FOCUS_DEBOUNCE && status === currentStatusRef.current) {
+    if (now - lastUpdateRef.current < PRESENCE_DEBOUNCE && status === currentStatusRef.current) {
       return;
     }
     
@@ -62,70 +74,137 @@ export function usePresence() {
     }
   }, [user?.uid, currentServer?.id, userStatus]);
 
-  // Set offline on all servers when app closes
-  const setOfflineOnAllServers = useCallback(async () => {
-    if (!user?.uid) return;
+  // Update lastSeen on all servers (heartbeat)
+  const sendHeartbeat = useCallback(async () => {
+    const currentUser = useAuthStore.getState().user;
+    const { userStatus: currentStatus } = useSettingsStore.getState();
+    
+    // Don't send heartbeat if user is offline or invisible
+    if (!currentUser?.uid || currentStatus === 'offline' || currentStatus === 'invisible') {
+      return;
+    }
     
     try {
       const { servers } = useServerStore.getState();
+      if (!servers || servers.length === 0) return;
+      
+      // Update lastSeen on all servers
       const updatePromises = servers.map(server => 
-        updateDoc(doc(db, 'servers', server.id, 'members', user.uid), {
+        updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
+          lastSeen: serverTimestamp()
+        }).catch(() => {}) // Silently ignore errors for heartbeat
+      );
+      
+      await Promise.allSettled(updatePromises);
+      console.log('💓 Heartbeat sent to all servers');
+    } catch (error) {
+      // Silently ignore heartbeat errors
+    }
+  }, []);
+
+  // Set offline on all servers when app closes
+  const setOfflineOnAllServers = useCallback(async () => {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser?.uid) {
+      console.log('👤 No user to set offline');
+      return;
+    }
+    
+    try {
+      const { servers } = useServerStore.getState();
+      if (!servers || servers.length === 0) {
+        console.log('👤 No servers to update');
+        return;
+      }
+      
+      console.log(`👤 Setting offline status on ${servers.length} servers...`);
+      
+      const updatePromises = servers.map(server => 
+        updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
           presence: 'offline',
           lastSeen: serverTimestamp()
-        }).catch(() => {}) // Ignore errors for individual servers
+        }).catch((err) => {
+          console.warn(`Failed to set offline on server ${server.id}:`, err.message);
+        })
       );
+      
       await Promise.allSettled(updatePromises);
       console.log('👤 Presence set to offline on all servers');
     } catch (error) {
       console.error('Failed to set offline status:', error);
     }
-  }, [user?.uid]);
+  }, []);
 
   // Handle userStatus changes from settingsStore (driven by useIdleDetection or manual toggle)
   useEffect(() => {
     if (user?.uid && currentServer?.id) {
-        // userStatus değiştiğinde Firebase'i güncelle
-        // 'invisible' durumunu zaten updatePresence içinde kontrol ediyoruz ama burada da userStatus direkt geliyor
-        updatePresence(userStatus);
+      updatePresence(userStatus);
     }
   }, [userStatus, user?.uid, currentServer?.id, updatePresence]);
 
-  // Window focus handler - just triggers detection reset via hook usually, 
-  // but here we can just ensure we are online if we were auto-idle
-  // Actually useIdleDetection handles switching back to online on activity.
-  // So we don't need manual focus/blur here anymore for idle state.
-  // We keep beforeunload for offline status.
-  
-  // Setup listeners for offline status
+  // Heartbeat interval - keeps lastSeen fresh while user is active
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    // Clear any existing interval
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    
+    // Start heartbeat interval
+    heartbeatIntervalRef.current = setInterval(() => {
+      sendHeartbeat();
+    }, HEARTBEAT_INTERVAL);
+    
+    // Send initial heartbeat
+    sendHeartbeat();
+    
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+    };
+  }, [user?.uid, sendHeartbeat]);
+
+  // Register cleanup task for offline status on app quit
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    // Register cleanup task only once
+    if (!cleanupRegisteredRef.current) {
+      cleanupRegisteredRef.current = true;
+      
+      const unregister = registerCleanupTask(async () => {
+        console.log("👤 Cleanup task: Setting offline status before quit...");
+        await setOfflineOnAllServers();
+      });
+      
+      return () => {
+        cleanupRegisteredRef.current = false;
+        unregister();
+      };
+    }
+  }, [user?.uid, setOfflineOnAllServers]);
+
+  // Handle beforeunload (browser/window close)
   useEffect(() => {
     if (!user?.uid) return;
 
-    isElectronRef.current = typeof window !== 'undefined' && !!window.netrex;
-
-    // Beforeunload - try to set offline
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (event) => {
+      // Try to set offline synchronously (may not complete)
+      // The cleanup task will handle async cleanup
+      console.log('👤 beforeunload: attempting to set offline...');
+      
+      // Use sendBeacon for reliable delivery (doesn't work with Firestore directly)
+      // Instead, we rely on the cleanup mechanism
       setOfflineOnAllServers();
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // Electron-specific: register cleanup task
-    if (isElectronRef.current) {
-        const { registerCleanupTask } = require('@/src/utils/cleanup');
-        // Register the offline setter
-        const unregister = registerCleanupTask(async () => {
-             console.log("👤 Setting offline status before quit...");
-             await setOfflineOnAllServers();
-        });
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            setOfflineOnAllServers();
-            unregister();
-        };
-    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      setOfflineOnAllServers();
     };
   }, [user?.uid, setOfflineOnAllServers]);
 
@@ -133,8 +212,44 @@ export function usePresence() {
     updatePresence,
     setOffline: () => updatePresence('offline'),
     setOnline: () => updatePresence('online'),
-    setIdle: () => updatePresence('idle')
+    setIdle: () => updatePresence('idle'),
+    setOfflineOnAllServers,
+    sendHeartbeat // Expose for manual heartbeat if needed
   };
+}
+
+/**
+ * Helper function to check if a user's presence is stale
+ * Use this in components that display user presence
+ * 
+ * @param {Object} member - Member object with presence and lastSeen fields
+ * @returns {string} - Effective presence status ('online', 'idle', or 'offline')
+ */
+export function getEffectivePresence(member) {
+  if (!member) return 'offline';
+  
+  const { presence, lastSeen } = member;
+  
+  // If already offline, return offline
+  if (presence === 'offline') return 'offline';
+  
+  // Check if lastSeen is stale
+  if (lastSeen) {
+    const lastSeenTime = lastSeen?.toDate?.() || new Date(lastSeen);
+    const now = Date.now();
+    const timeSinceLastSeen = now - lastSeenTime.getTime();
+    
+    // If lastSeen is older than threshold, user is effectively offline
+    if (timeSinceLastSeen > PRESENCE_STALE_THRESHOLD) {
+      return 'offline';
+    }
+  } else {
+    // No lastSeen at all, consider offline
+    return 'offline';
+  }
+  
+  // Return actual presence if not stale
+  return presence || 'offline';
 }
 
 export default usePresence;

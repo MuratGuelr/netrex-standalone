@@ -51,6 +51,7 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
   const canViewOverview = isOwner || canManageServer;
   const canViewRoles = isOwner || canManageRoles;
   const canViewMembers = isOwner || canManageServer || canKickMembers || canBanMembers;
+  const canViewInvites = isOwner || canManageServer;
   
   useEffect(() => {
     setMounted(true);
@@ -71,17 +72,23 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
     }
   }, [activeTab]);
   
-  // If user lands on a tab they can't see, redirect to one they can (prefer invites if that's what triggers it)
+  // If user lands on a tab they can't see, redirect to one they can
   useEffect(() => {
-      if (!isOwner && initialTab === 'invites') return; // Stay on invites if explicitly asked
-      
       // Safety fallbacks if current tab is restricted
       if (activeTab === 'overview' && !canViewOverview) {
           if (canViewRoles) setActiveTab('roles');
           else if (canViewMembers) setActiveTab('members');
-          else setActiveTab('invites');
+          else if (canViewInvites) setActiveTab('invites');
+          else if (canBanMembers) setActiveTab('bans');
+          else onClose(); // No permissions
       }
-  }, [activeTab, canViewOverview, canViewRoles, canViewMembers, isOwner, initialTab]);
+      
+      // Ensure we don't get stuck on other tabs without perms
+      if (activeTab === 'invites' && !canViewInvites) {
+          if (canViewOverview) setActiveTab('overview');
+          else onClose();
+      }
+  }, [activeTab, canViewOverview, canViewRoles, canViewMembers, canViewInvites, isOwner, onClose]);
 
   if (!mounted || !isOpen || !currentServer) return null;
 
@@ -94,7 +101,7 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
       case "members":
         return canViewMembers ? <MembersTab members={members} roles={roles} /> : null;
       case "invites":
-        return <InvitesTab invites={activeInvites} onCreate={createInvite} serverId={currentServer.id} userId={user.uid} fetchInvites={fetchServerInvites} />;
+        return canViewInvites ? <InvitesTab invites={activeInvites} onCreate={createInvite} serverId={currentServer.id} userId={user.uid} fetchInvites={fetchServerInvites} /> : null;
       case "bans":
         return canBanMembers ? <BansTab serverId={currentServer.id} fetchBans={fetchBans} unbanMember={unbanMember} /> : null;
       default:
@@ -184,13 +191,15 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab }) {
               />
             )}
             
-            <SidebarItem
-              label="Davetler"
-              icon={<Link size={16} />}
-              active={activeTab === "invites"}
-              onClick={() => setActiveTab("invites")}
-              color="orange"
-            />
+            {canViewInvites && (
+              <SidebarItem
+                label="Davetler"
+                icon={<Link size={16} />}
+                active={activeTab === "invites"}
+                onClick={() => setActiveTab("invites")}
+                color="orange"
+              />
+            )}
             
             {canBanMembers && (
               <SidebarItem

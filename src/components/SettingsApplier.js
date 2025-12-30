@@ -44,6 +44,25 @@ export function SettingsApplier() {
     document.body.style.fontFamily = fontFamilyValue;
   }, [uiScale, fontSize, fontFamily]);
 
+  // Performans ayarları
+  const { hardwareAcceleration, graphicsQuality } = useSettingsStore();
+
+  useEffect(() => {
+    // GPU Hızlandırma
+    if (hardwareAcceleration) {
+      document.body.classList.add("hardware-accel-on");
+    } else {
+      document.body.classList.remove("hardware-accel-on");
+    }
+
+    // Görsel Kalite (Low = Blur yok)
+    if (graphicsQuality === "low") {
+      document.body.classList.add("graphics-quality-low");
+    } else {
+      document.body.classList.remove("graphics-quality-low");
+    }
+  }, [hardwareAcceleration, graphicsQuality]);
+
   return null;
 }
 

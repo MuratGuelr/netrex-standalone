@@ -183,6 +183,69 @@ export default function ChatView({ channelId, username, userId }) {
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
+  // Drag & Drop State
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounter = useRef(0);
+
+  useEffect(() => {
+    const handleDragEnter = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current += 1;
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        setIsDraggingFile(true);
+      }
+    };
+
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current === 0) {
+        setIsDraggingFile(false);
+      }
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingFile(false);
+      dragCounter.current = 0;
+
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              setPendingImage(ev.target.result);
+              setPendingImageFile(file);
+          };
+          reader.readAsDataURL(file);
+        } else {
+          toast.error("Sadece resim dosyaları yüklenebilir.");
+        }
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
   const handleImgZoomIn = useCallback(() => setImgZoom(prev => Math.min(prev + 0.25, 5)), []);
   const handleImgZoomOut = useCallback(() => setImgZoom(prev => Math.max(prev - 0.25, 0.5)), []);
   const handleImgRotate = useCallback(() => setImgRotation(prev => (prev + 90) % 360), []);
@@ -335,6 +398,17 @@ export default function ChatView({ channelId, username, userId }) {
           } else {
             window.focus();
           }
+          
+          // Bildirim içeriğinde link varsa güvenlik modalını aç
+          if (incomingMessage.text) {
+             const urlRegex = /(https?:\/\/[^\s]+)/g;
+             const matches = incomingMessage.text.match(urlRegex);
+             if (matches && matches.length > 0) {
+                 // İlk bulunan linki açmak için modalı tetikle
+                 setLinkModal({ isOpen: true, url: matches[0] });
+             }
+          }
+          
           notification.close();
         };
       } catch (error) {
@@ -383,30 +457,13 @@ export default function ChatView({ channelId, username, userId }) {
     return () => room.off(RoomEvent.DataReceived, handleDataReceived);
   }, [room, handleDataReceived]);
 
-  // Scroll'u throttle et (her mesaj değişikliğinde değil, sadece gerektiğinde)
-  const scrollTimeoutRef = useRef(null);
-  useEffect(() => {
-    // Önceki timeout'u iptal et
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-    
-    // 100ms sonra scroll yap (debounce)
-    scrollTimeoutRef.current = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
-
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, [messages.length]); // Sadece mesaj sayısı değiştiğinde
+  // Scroll Restorasyonu için state
+  const [preservingScroll, setPreservingScroll] = useState(false);
+  const [prevScrollHeight, setPrevScrollHeight] = useState(0);
 
   useEffect(() => {
     const handleClick = (e) => {
       setContextMenu(null);
-      // Emoji picker dışına tıklanırsa kapat (ama emoji butonlarına tıklanınca kapatma)
       if (
         emojiPickerRef.current && 
         !emojiPickerRef.current.contains(e.target) &&
@@ -526,13 +583,65 @@ export default function ChatView({ channelId, username, userId }) {
     }
   }, [canUseNotifications]);
 
-  const handleLoadOlderMessages = useCallback(() => {
-    if (!currentChannel) return;
-    loadOlderMessages(currentChannel.id);
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!currentChannel || !containerRef.current) return;
+    
+    // Yükleme öncesi scroll yüksekliğini kaybet
+    setPrevScrollHeight(containerRef.current.scrollHeight);
+    setPreservingScroll(true);
+    
+    await loadOlderMessages(currentChannel.id);
   }, [currentChannel, loadOlderMessages]);
 
   const shouldShowNotificationBanner =
     canUseNotifications && notificationPermission !== "granted";
+
+  const hasScrolledToBottomRef = useRef(false);
+
+  // Kanal değiştiğinde scroll durumunu sıfırla
+  useEffect(() => {
+    hasScrolledToBottomRef.current = false;
+  }, [channelId]);
+
+  // Akıllı Scroll Yönetimi
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // 1. Durum: Eski mesajlar yüklendiğinde pozisyonu koru
+    if (preservingScroll && prevScrollHeight > 0) {
+      const newScrollHeight = container.scrollHeight;
+      const heightDifference = newScrollHeight - prevScrollHeight;
+      
+      // Scroll'u aşağı kaydırarak kullanıcının kaldığı yeri koru
+      container.scrollTop = heightDifference;
+      
+      setPreservingScroll(false);
+      setPrevScrollHeight(0);
+      return;
+    }
+
+    // 2. Durum: İlk yüklemede scroll (Anında)
+    if (!hasScrolledToBottomRef.current && messages.length > 0) {
+        // Render'ın tamamlanmasını bekle
+        setTimeout(() => {
+            if (messagesEndRef.current) {
+                messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
+                hasScrolledToBottomRef.current = true;
+            }
+        }, 100);
+        return;
+    }
+
+    // 3. Durum: Yeni mesaj geldiğinde
+    // Eğer kullanıcı zaten en alttaysa veya çok yakınsa (100px) otomatik kaydır
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    
+    if (messages.length > 0 && isNearBottom) {
+       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    
+  }, [messages, preservingScroll, prevScrollHeight]);
 
   const handleContextMenu = useCallback((e, msg, isInSequence) => {
     e.preventDefault();
@@ -806,7 +915,23 @@ export default function ChatView({ channelId, username, userId }) {
   MessageItem.displayName = 'MessageItem';
 
   return (
+
     <div className="flex flex-col bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] h-full w-full relative overflow-hidden">
+      {/* DRAG OVERLAY - PORTALED TO BODY TO COVER EVERYTHING */}
+      {isDraggingFile && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md border-4 border-indigo-500/50 border-dashed m-4 rounded-3xl flex items-center justify-center pointer-events-none animate-in fade-in duration-200">
+           <div className="flex flex-col items-center gap-6 p-10 bg-[#0f0f12]/90 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-white/10 transform scale-105">
+              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/30 animate-bounce shadow-lg shadow-indigo-500/20">
+                <ImageIcon size={48} className="text-indigo-400" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-3xl font-bold text-white mb-2 tracking-tight">Resmi Bırak</h3>
+                <p className="text-white/60 text-lg font-medium">Yüklemek için herhangi bir yere bırakın</p>
+              </div>
+           </div>
+        </div>,
+        document.body
+      )}
       {/* Subtle background decorations */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/[0.05] rounded-full blur-[120px]" />
@@ -863,7 +988,10 @@ export default function ChatView({ channelId, username, userId }) {
               </p>
             </div>
           ) : (
-            <div className="flex flex-col justify-end min-h-0 pb-4 pt-6">
+            <div className="flex flex-col min-h-full pb-4 pt-6">
+              {/* Spacer to push messages to bottom when content is less than container height */}
+              <div className="flex-grow" />
+              
               {hasMoreMessages && (
                 <button
                   onClick={handleLoadOlderMessages}
@@ -1059,8 +1187,9 @@ export default function ChatView({ channelId, username, userId }) {
       </div>
 
       {/* LINK GÜVENLİK MODALI */}
-      {linkModal.isOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+      {/* LINK GÜVENLİK MODALI */}
+      {linkModal.isOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
           {/* Animated background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-transparent pointer-events-none"></div>
           
@@ -1116,7 +1245,8 @@ export default function ChatView({ channelId, username, userId }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* SAĞ TIK MENÜSÜ */}
@@ -1243,20 +1373,7 @@ export default function ChatView({ channelId, username, userId }) {
                     <span className="text-sm font-semibold">İndir</span>
                   </button>
                   
-                  <button 
-                    onClick={() => {
-                        const viewerUrl = `${window.location.origin}/view?url=${encodeURIComponent(selectedImage)}`;
-                        if (window.netrex?.openExternalLink) {
-                            window.netrex.openExternalLink(viewerUrl);
-                        } else {
-                            window.open(viewerUrl, "_blank");
-                        }
-                    }}
-                    className="flex items-center gap-2 gradient-primary hover:shadow-glow text-white px-6 py-2.5 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg group/link"
-                  >
-                    <ExternalLink size={18} className="group-hover/link:rotate-45 transition-transform" />
-                    <span className="text-sm font-semibold">Tarayıcıda Aç</span>
-                  </button>
+                  
 
                   <button
                       onClick={() => setSelectedImage(null)}

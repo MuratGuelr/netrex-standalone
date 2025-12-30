@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { X, Users, Crown, Shield, Circle } from "lucide-react";
 import Avatar from "@/src/components/ui/Avatar";
 import MemberContextMenu from "@/src/components/server/MemberContextMenu";
+import { getEffectivePresence } from "@/src/hooks/usePresence";
 
 export default function ServerMemberList({ onClose }) {
   const { members, roles, currentServer } = useServerStore();
@@ -20,17 +21,23 @@ export default function ServerMemberList({ onClose }) {
 
   const enrichedMembers = useMemo(() => {
     return members.map(member => {
+      // Calculate effective presence based on lastSeen timestamp
+      // This handles "ghost online" when computer was shut down without closing app
+      const effectivePresence = getEffectivePresence(member);
+      
       if (currentUser && (member.id === currentUser.uid || member.userId === currentUser.uid)) {
         return {
           ...member,
           displayName: member.displayName || member.nickname || currentUser.displayName || "User",
-          photoURL: member.photoURL || currentUser.photoURL || null
+          photoURL: member.photoURL || currentUser.photoURL || null,
+          presence: effectivePresence // Use effective presence
         };
       }
       return {
         ...member,
         displayName: member.displayName || member.nickname || `User${member.id?.slice(-4) || ''}`,
-        photoURL: member.photoURL || null
+        photoURL: member.photoURL || null,
+        presence: effectivePresence // Use effective presence
       };
     });
   }, [members, currentUser]);

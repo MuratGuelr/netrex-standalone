@@ -21,6 +21,7 @@ import { AppShell } from "@/src/components/layout";
 import ServerRail from "@/src/components/layout/ServerRail";
 import CreateServerModal from "@/src/components/server/CreateServerModal";
 import JoinServerModal from "@/src/components/server/JoinServerModal";
+import AddServerSelectionModal from "@/src/components/server/AddServerSelectionModal";
 import ServerSidebar from "@/src/components/server/ServerSidebar";
 import { useServerStore } from "@/src/store/serverStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -65,6 +66,7 @@ export default function Home() {
 
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [showJoinServerModal, setShowJoinServerModal] = useState(false);
+  const [showAddServerSelectionModal, setShowAddServerSelectionModal] = useState(false);
 
   // Initialize presence tracking (online/idle/offline status)
   usePresence();
@@ -125,7 +127,7 @@ export default function Home() {
     <AppShell
       serverRail={
         <ServerRail 
-          onOpenCreateModal={() => setShowCreateServerModal(true)} 
+          onOpenCreateModal={() => setShowAddServerSelectionModal(true)} 
         />
       }
       rightSidebar={
@@ -180,6 +182,20 @@ export default function Home() {
         title={infoModal.title}
         message={infoModal.message}
         onClose={() => setInfoModal({ isOpen: false, title: "", message: "" })}
+      />
+
+      {/* Add Server Selection Modal */}
+      <AddServerSelectionModal 
+        isOpen={showAddServerSelectionModal}
+        onClose={() => setShowAddServerSelectionModal(false)}
+        onCreateClick={() => {
+            setShowAddServerSelectionModal(false);
+            setShowCreateServerModal(true);
+        }}
+        onJoinClick={() => {
+            setShowAddServerSelectionModal(false);
+            setShowJoinServerModal(true);
+        }}
       />
 
       {/* Create Server Modal */}

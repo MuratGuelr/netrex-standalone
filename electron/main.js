@@ -1993,8 +1993,27 @@ function createWindow() {
     if (!isQuitting && closeToTray) {
       event.preventDefault();
       mainWindow.hide();
+      // Notify renderer that window is hidden (for idle status)
+      mainWindow.webContents.send("window-state-changed", "hidden");
       return false;
     }
+  });
+
+  // --- PENCERE DURUMU DEĞİŞİKLİKLERİ ---
+  mainWindow.on("minimize", () => {
+    mainWindow.webContents.send("window-state-changed", "minimized");
+  });
+
+  mainWindow.on("restore", () => {
+    mainWindow.webContents.send("window-state-changed", "restored");
+  });
+
+  mainWindow.on("focus", () => {
+    mainWindow.webContents.send("window-state-changed", "focused");
+  });
+
+  mainWindow.on("show", () => {
+    mainWindow.webContents.send("window-state-changed", "shown");
   });
 
   createTray();

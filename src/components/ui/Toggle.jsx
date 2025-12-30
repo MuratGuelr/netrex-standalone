@@ -89,7 +89,7 @@ const Toggle = forwardRef(function Toggle({
         {/* Thumb */}
         <span
           className={`
-            absolute top-[2px] left-[2px]
+            absolute top-0 left-[1px]
             ${config.thumb}
             bg-white
             rounded-full

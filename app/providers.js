@@ -1,12 +1,14 @@
 "use client";
 
 import { usePresence } from "@/src/hooks/usePresence";
+import { useIdleDetection } from "@/src/hooks/useIdleDetection";
 import { Toaster } from "sonner";
 import { SettingsApplier } from "@/src/components/SettingsApplier";
 import { useEffect } from "react";
 
 export function Providers({ children }) {
   usePresence(); // Enable global presence tracking
+  useIdleDetection(); // Enable idle detection (minimize/tray/inactivity)
   
   // Clean up coordination
   useEffect(() => {
