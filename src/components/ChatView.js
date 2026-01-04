@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useMemo, useCallback, memo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback, memo, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
@@ -604,7 +604,7 @@ export default function ChatView({ channelId, username, userId }) {
   }, [channelId]);
 
   // Akıllı Scroll Yönetimi
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
@@ -621,27 +621,63 @@ export default function ChatView({ channelId, username, userId }) {
       return;
     }
 
-    // 2. Durum: İlk yüklemede scroll (Anında)
+    // 2. Durum: İlk yüklemede scroll (Agresif Yöntem)
+    // Mesajlar yüklendiğinde, resimler ve layout oturana kadar (1 sn) aşağı scroll'u zorla
+    // Bu, "biraz scroll yapıp kalma" sorununu çözer
     if (!hasScrolledToBottomRef.current && messages.length > 0) {
-        // Render'ın tamamlanmasını bekle
-        setTimeout(() => {
-            if (messagesEndRef.current) {
-                messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
-                hasScrolledToBottomRef.current = true;
+        
+        // Hemen en alta al
+        container.scrollTop = container.scrollHeight;
+
+        // Asenkron yüklemeler (resim vb.) için sürekli kontrol et
+        const intervalId = setInterval(() => {
+            if (container) {
+                // Sadece scroll aşağıda değilse müdahale et (titremeyi önlemek için)
+                if (container.scrollHeight - container.scrollTop > container.clientHeight + 5) {
+                    container.scrollTop = container.scrollHeight;
+                }
             }
-        }, 100);
-        return;
+        }, 50);
+
+        // 1 saniye sonra serbest bırak
+        const timeoutId = setTimeout(() => {
+            clearInterval(intervalId);
+            hasScrolledToBottomRef.current = true;
+            // Son bir kez scroll
+            if (container) container.scrollTop = container.scrollHeight;
+        }, 1000);
+        
+        return () => {
+            clearInterval(intervalId);
+            clearTimeout(timeoutId);
+        };
     }
 
     // 3. Durum: Yeni mesaj geldiğinde
-    // Eğer kullanıcı zaten en alttaysa veya çok yakınsa (100px) otomatik kaydır
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    const threshold = 300; // Threshold daha da artırıldı
+    // Eğer kullanıcı en alttan threshold kadar yukarıdaysa "Near Bottom" sayılır
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceFromBottom < threshold;
     
-    if (messages.length > 0 && isNearBottom) {
-       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+       const lastMessage = messages[messages.length - 1];
+       const isMyMessage = lastMessage?.userId === userId;
+
+       // Benim mesajımsa veya kullanıcı zaten aşağıdaysa kaydır
+       if (isMyMessage || isNearBottom) {
+           // Smooth scroll yerine requestAnimationFrame ile doğal kaydırma daha iyi
+           if (isMyMessage) {
+              container.scrollTop = container.scrollHeight;
+           } else {
+              // Smooth scroll için
+               setTimeout(() => {
+                   messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+               }, 50);
+           }
+       }
     }
     
-  }, [messages, preservingScroll, prevScrollHeight]);
+  }, [messages, preservingScroll, prevScrollHeight, userId, channelId]);
 
   const handleContextMenu = useCallback((e, msg, isInSequence) => {
     e.preventDefault();

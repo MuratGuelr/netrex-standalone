@@ -73,7 +73,7 @@ function fixPathsInFile(filePath) {
       }
       
       // Fix incorrect Windows absolute paths (C:/_next/...)
-      if (url.match(/^[A-Z]:\/_next\//)) {
+      if (url.match(/^[A-Z]:\\/_next\\//)) {
         return webpackPublicPath + url.substring(url.indexOf('/_next/') + 7);
       }
       
@@ -85,7 +85,7 @@ function fixPathsInFile(filePath) {
       
       // Fix paths with double _next
       if (url.includes('/_next/_next/')) {
-        url = url.replace(/\/_next\/_next\//g, '/_next/');
+        url = url.replace(/\\/_next\\/_next\\//g, '/_next/');
         if (url.startsWith('/_next/')) {
           return webpackPublicPath + url.substring(7);
         }

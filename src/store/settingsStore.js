@@ -63,12 +63,16 @@ export const useSettingsStore = create(
 
       // Performans
       hardwareAcceleration: true, // Animasyonlar için GPU zorlama
-      graphicsQuality: "high", // "high" | "low" (Low: Blur efektlerini kapatır)
+      hardwareAcceleration: true, // Animasyonlar için GPU zorlama
+      graphicsQuality: "high", // "high" | "low" | "potato"
+      disableAnimations: false, // Animasyonları tamamen kapat
+      disableBackgroundEffects: false, // Arka plan efektlerini kapat
+      videoCodec: "vp8", // "vp8" | "h264" | "av1"
 
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
-      videoResolution: "1080p", // "720p" | "1080p" | "2k"
-      videoFrameRate: 30, // 5 | 30 | 60
+      videoResolution: "240p", // "240p" | "360p" | "480p"
+      videoFrameRate: 18, // 15 | 18 | 24
 
       // Online/Offline durumu
       userStatus: "online", // "online" | "idle" | "offline" | "invisible"
@@ -186,7 +190,34 @@ export const useSettingsStore = create(
 
       // Performans ayarları
       setHardwareAcceleration: (enabled) => set({ hardwareAcceleration: enabled }),
-      setGraphicsQuality: (quality) => set({ graphicsQuality: quality }),
+      
+      // Grafik Kalitesi Presetleri
+      setGraphicsQuality: (quality) => set((state) => {
+        const newState = { graphicsQuality: quality };
+        
+        switch (quality) {
+          case "potato":
+             newState.disableAnimations = true;
+             newState.disableBackgroundEffects = true;
+             newState.hardwareAcceleration = false;
+             break;
+          case "low":
+             newState.disableAnimations = false;
+             newState.disableBackgroundEffects = true;
+             newState.hardwareAcceleration = true;
+             break;
+          case "high":
+             newState.disableAnimations = false;
+             newState.disableBackgroundEffects = false;
+             newState.hardwareAcceleration = true;
+             break;
+        }
+        return newState;
+      }),
+      
+      toggleDisableAnimations: () => set((state) => ({ disableAnimations: !state.disableAnimations })),
+      toggleDisableBackgroundEffects: () => set((state) => ({ disableBackgroundEffects: !state.disableBackgroundEffects })),
+      setVideoCodec: (codec) => set({ videoCodec: codec }),
 
       // Kamera ayarları
       setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),

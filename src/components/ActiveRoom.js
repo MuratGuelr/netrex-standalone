@@ -66,189 +66,12 @@ import {
   arrayRemove,
 } from "firebase/firestore";
 import { generateLiveKitIdentity } from "@/src/utils/deviceId";
+import { styleInjection } from "./active-room/ActiveRoomStyles";
+import ParticipantList from "./active-room/ParticipantList";
+import PipGrid from "./active-room/PipGrid";
 
 // --- STYLES ---
-const styleInjection = `
-  @keyframes pulse-ring { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } }
-  .speaking-avatar { animation: pulse-ring 2s infinite; }
-  .volume-slider { -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; outline: none; }
-  .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; cursor: pointer; }
-  
-  /* Bottom Controls Animations */
-  @keyframes ripple {
-    0% {
-      transform: scale(0);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(4);
-      opacity: 0;
-    }
-  }
-  @keyframes pulse-border {
-    0%, 100% {
-      opacity: 0.5;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.02);
-    }
-  }
-  @keyframes shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
-  }
-  @keyframes camera-active {
-    0%, 100% {
-      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
-    }
-    50% {
-      box-shadow: 0 0 20px 5px rgba(255, 255, 255, 0.2);
-    }
-  }
-  @keyframes screen-share-active {
-    0%, 100% {
-      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
-    }
-    50% {
-      box-shadow: 0 0 20px 5px rgba(34, 197, 94, 0.3);
-    }
-  }
-  @keyframes pulse-slow {
-    0%, 100% {
-      opacity: 0.3;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.5;
-      transform: scale(1.1);
-    }
-  }
-  .animate-ripple {
-    animation: ripple 0.6s ease-out;
-  }
-  .animate-pulse-border {
-    animation: pulse-border 2s ease-in-out infinite;
-  }
-  .animate-shimmer {
-    animation: shimmer 3s linear infinite;
-  }
-  .animate-camera-active {
-    animation: camera-active 2s ease-in-out infinite;
-  }
-  .animate-screen-share-active {
-    animation: screen-share-active 2s ease-in-out infinite;
-  }
-  .animate-pulse-slow {
-    animation: pulse-slow 4s ease-in-out infinite;
-  }
-  
-  /* User Card Animations */
-  @keyframes user-card-active {
-    0%, 100% {
-      transform: scale(1);
-    }
-    50% {
-      transform: scale(1.01);
-    }
-  }
-  @keyframes pulse-border-video {
-    0%, 100% {
-      opacity: 0.6;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-  @keyframes avatar-pulse {
-    0%, 100% {
-      transform: scale(1);
-    }
-    50% {
-      transform: scale(1.05);
-    }
-  }
-  @keyframes pulse-glow-slow {
-    0%, 100% {
-      opacity: 0.1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.2;
-      transform: scale(1.02);
-    }
-  }
-  .animate-user-card-active {
-    animation: user-card-active 3s ease-in-out infinite;
-  }
-  .animate-pulse-border-video {
-    animation: pulse-border-video 2s ease-in-out infinite;
-  }
-  .animate-avatar-pulse {
-    animation: avatar-pulse 2s ease-in-out infinite;
-  }
-  .animate-pulse-glow-slow {
-    animation: pulse-glow-slow 3s ease-in-out infinite;
-  }
-  
-  /* Speaking Background Animations */
-  @keyframes speaking-glow {
-    0%, 100% {
-      opacity: 0.6;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-  }
-  @keyframes speaking-pulse-ring {
-    0% {
-      opacity: 0.4;
-      transform: scale(0.95);
-    }
-    50% {
-      opacity: 0.8;
-      transform: scale(1.1);
-    }
-    100% {
-      opacity: 0.4;
-      transform: scale(0.95);
-    }
-  }
-  @keyframes speaking-corner-glow {
-    0%, 100% {
-      opacity: 0.3;
-      transform: scale(1);
-    }
-    25% {
-      opacity: 0.6;
-      transform: scale(1.1);
-    }
-    50% {
-      opacity: 0.4;
-      transform: scale(1.05);
-    }
-    75% {
-      opacity: 0.7;
-      transform: scale(1.15);
-    }
-  }
-  .animate-speaking-glow {
-    animation: speaking-glow 2s ease-in-out infinite;
-  }
-  .animate-speaking-pulse-ring {
-    animation: speaking-pulse-ring 3s ease-in-out infinite;
-  }
-  .animate-speaking-corner-glow {
-    animation: speaking-corner-glow 4s ease-in-out infinite;
-  }
-`;
+// Styles moved to active-room/ActiveRoomStyles.js
 
 // --- MIKROFON YÖNETİCİSİ ---
 function MicrophoneManager() {
@@ -1134,214 +957,7 @@ function DeafenManager({ isDeafened, serverDeafened }) {
   }, [isDeafened, serverDeafened]);
   return null;
 }
-function useAudioActivity(participant) {
-  const [isActive, setIsActive] = useState(false);
-  const { isMuted } = useParticipantInfo({ participant });
-  useEffect(() => {
-    if (isMuted) {
-      setIsActive(false);
-      return;
-    }
-    let ctx, analyser, raf;
-    let currentTrack = null;
-    let trackPublishedHandler = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 15;
-
-    const cleanup = () => {
-      if (raf) {
-        clearInterval(raf); // cancelAnimationFrame -> clearInterval
-        raf = null;
-      }
-      if (ctx && ctx.state !== "closed") {
-        try {
-          ctx.close();
-        } catch (e) {
-          // Context zaten kapatılmış olabilir
-        }
-        ctx = null;
-      }
-      analyser = null;
-      currentTrack = null;
-    };
-
-    const setup = (track) => {
-      // Önceki setup'ı temizle
-      cleanup();
-
-      // Track kontrolü: track var mı, mediaStreamTrack var mı, audio track mi?
-      if (!track?.mediaStreamTrack) return;
-      if (track.mediaStreamTrack.kind !== "audio") return;
-
-      // Track'in enabled olduğundan emin ol
-      if (!track.mediaStreamTrack.enabled) return;
-
-      // Track'in readyState'ini kontrol et
-      if (track.mediaStreamTrack.readyState === "ended") return;
-
-      currentTrack = track;
-
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        ctx = new AC();
-        analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-
-        // MediaStream oluştur ve audio track'i kontrol et
-        const mediaStream = new MediaStream([track.mediaStreamTrack]);
-
-        // MediaStream'in audio track'i olup olmadığını kontrol et
-        const audioTracks = mediaStream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          cleanup();
-          return;
-        }
-
-        // Audio track'in enabled olduğundan emin ol
-        if (!audioTracks[0].enabled || audioTracks[0].readyState === "ended") {
-          cleanup();
-          return;
-        }
-
-        const src = ctx.createMediaStreamSource(mediaStream);
-        src.connect(analyser);
-        const data = new Uint8Array(analyser.frequencyBinCount);
-
-        // CPU OPTİMİZASYONU: requestAnimationFrame yerine setInterval (200ms)
-        const checkActivity = () => {
-          // Track hala geçerli mi kontrol et
-          if (
-            !currentTrack ||
-            !track.mediaStreamTrack ||
-            track.mediaStreamTrack.readyState === "ended"
-          ) {
-            cleanup();
-            setIsActive(false);
-            return;
-          }
-
-          // MediaStream'in hala audio track'i var mı kontrol et
-          if (mediaStream.getAudioTracks().length === 0) {
-            cleanup();
-            setIsActive(false);
-            return;
-          }
-
-          try {
-            analyser.getByteFrequencyData(data);
-            let sum = 0;
-            for (let i = 0; i < data.length; i++) sum += data[i];
-            // Eşik 5 -> 8 (daha hızlı kapanma), aralık 100ms -> 75ms (daha hızlı tepki)
-            setIsActive(sum / data.length > 8);
-          } catch (e) {
-            // Analyser hatası - cleanup yap
-            cleanup();
-            setIsActive(false);
-          }
-        };
-        
-        // İlk kontrol
-        checkActivity();
-        // 75ms aralıklarla kontrol (CPU ve tepki dengesi)
-        raf = setInterval(checkActivity, 75);
-      } catch (e) {
-        // Audio analiz hatası - sessizce yoksay (non-critical)
-        cleanup();
-        if (process.env.NODE_ENV === "development") {
-          console.warn("Audio activity detection error:", e);
-        }
-      }
-    };
-
-    // Track subscription event handler
-    const handleTrackSubscribed = (track, publication) => {
-      if (publication?.source === Track.Source.Microphone && track) {
-        // Kısa bir gecikme ile setup yap (track tam hazır olsun)
-        setTimeout(() => {
-          if (
-            track.mediaStreamTrack &&
-            track.mediaStreamTrack.readyState !== "ended"
-          ) {
-            setup(track);
-          }
-        }, 100);
-      }
-    };
-
-    // Track published event handler
-    const handleTrackPublished = (publication) => {
-      if (
-        publication?.source === Track.Source.Microphone &&
-        publication.track
-      ) {
-        setTimeout(() => {
-          if (
-            publication.track?.mediaStreamTrack &&
-            publication.track.mediaStreamTrack.readyState !== "ended"
-          ) {
-            setup(publication.track);
-          }
-        }, 200);
-      }
-    };
-
-    // Track unpublished event handler
-    const handleTrackUnpublished = (publication) => {
-      if (publication?.source === Track.Source.Microphone) {
-        cleanup();
-        setIsActive(false);
-      }
-    };
-
-    // Track'i bul ve setup yap
-    const trySetup = () => {
-      const pub = participant.getTrackPublication(Track.Source.Microphone);
-      if (pub?.track) {
-        setTimeout(() => {
-          if (
-            pub.track?.mediaStreamTrack &&
-            pub.track.mediaStreamTrack.readyState !== "ended"
-          ) {
-            setup(pub.track);
-          } else if (retryCount < MAX_RETRIES) {
-            retryCount++;
-            setTimeout(trySetup, 300);
-          }
-        }, 100);
-      } else if (retryCount < MAX_RETRIES) {
-        retryCount++;
-        setTimeout(trySetup, 300);
-      }
-    };
-
-    // İlk deneme
-    trySetup();
-
-    // Event listener'ları ekle
-    if (trackPublishedHandler) {
-      participant.off(RoomEvent.TrackPublished, trackPublishedHandler);
-    }
-    trackPublishedHandler = handleTrackPublished;
-    participant.on(RoomEvent.TrackPublished, trackPublishedHandler);
-
-    if (!participant.isLocal) {
-      participant.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-      participant.on(RoomEvent.TrackUnpublished, handleTrackUnpublished);
-    }
-
-    return () => {
-      cleanup();
-      if (trackPublishedHandler) {
-        participant.off(RoomEvent.TrackPublished, trackPublishedHandler);
-      }
-      if (!participant.isLocal) {
-        participant.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-        participant.off(RoomEvent.TrackUnpublished, handleTrackUnpublished);
-      }
-    };
-  }, [participant, isMuted]);
-  return isActive;
-}
+// useAudioActivity moved to active-room/hooks/useAudioActivity.js
 
 // Moderasyon Komutlarını Dinleyen ve Mikrofon Senkronizasyonu Yapan Bileşen
 function ModerationHandler({ 
@@ -1509,8 +1125,43 @@ export default function ActiveRoom({
   const connectionTimeoutRef = useRef(null); // Bağlantı timeout'u
   const hasConnectedOnceRef = useRef(false); // Ref ile takip (timeout için)
 
-  const { noiseSuppression, echoCancellation, autoGainControl } =
-    useSettingsStore();
+  const { 
+    noiseSuppression, 
+    echoCancellation, 
+    autoGainControl, 
+    disableAnimations,
+    disableBackgroundEffects,
+    videoCodec,
+    videoResolution,
+    videoFrameRate,
+    enableCamera,
+    videoId
+  } = useSettingsStore();
+
+  // Inject Global Animation Disable Config
+  useEffect(() => {
+    if (disableAnimations) {
+      const styleId = 'disable-animations-global';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = `
+          *, *::before, *::after {
+            transition-duration: 0s !important;
+            transition-delay: 0s !important;
+            animation-duration: 0s !important;
+            animation-delay: 0s !important;
+            scroll-behavior: auto !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      return () => {
+        const el = document.getElementById(styleId);
+        if (el) el.remove();
+      };
+    }
+  }, [disableAnimations]);
   const { playSound } = useSoundEffects();
   const { channels } = useServerStore();
 
@@ -1747,10 +1398,13 @@ export default function ActiveRoom({
     return (
       <div className="flex flex-col items-center justify-center h-full bg-[#0a0a0c] relative overflow-hidden">
         {/* Animated background */}
+        {/* Animated background - Conditional Rendering */}
+        {!disableBackgroundEffects && (
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[100px] animate-pulse" />
           <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[80px] animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
+        )}
         
         {/* Content */}
         <div className="relative z-10 flex flex-col items-center gap-6">
@@ -2642,151 +2296,7 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   );
 }
 
-// Draggable Pip Component - Improved with robust dragging and resizing
-function DraggablePip({ trackRef, participant, onClose }) {
-  // Default size
-  const [size, setSize] = useState({ width: 320, height: 180 });
-  const [position, setPosition] = useState({ x: 20, y: 20 }); // Will be updated on mount
-
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  
-  // Ref to track start positions for delta calculations
-  const dragStartRef = useRef({ x: 0, y: 0 });
-  const posStartRef = useRef({ x: 0, y: 0 });
-  const sizeStartRef = useRef({ w: 0, h: 0 });
-
-  const pipRef = useRef(null);
-  const initializedRef = useRef(false);
-
-  // Initialize position to bottom right relative to PARENT container
-  useEffect(() => {
-     if (initializedRef.current || !pipRef.current) return;
-     
-     // Use a small timeout to ensure layout is computed
-     const timer = setTimeout(() => {
-       if (pipRef.current && pipRef.current.offsetParent) {
-         const parent = pipRef.current.offsetParent;
-         const { clientWidth, clientHeight } = parent;
-         // Set to bottom right with 24px padding
-         setPosition({ 
-           x: Math.max(0, clientWidth - size.width - 24), 
-           y: Math.max(0, clientHeight - size.height - 24) 
-         });
-         initializedRef.current = true;
-       }
-     }, 100);
-     return () => clearTimeout(timer);
-  }, []); // Run once
-
-  const handleMouseDown = (e) => {
-    // Prevent default to stop text selection etc.
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (e.target.closest('.pip-close-btn')) return;
-    
-    const isResizeHandle = e.target.closest('.resize-handle');
-
-    if (isResizeHandle) {
-        setIsResizing(true);
-        // Store start values
-        dragStartRef.current = { x: e.clientX, y: e.clientY };
-        sizeStartRef.current = { w: size.width, h: size.height };
-    } else {
-        setIsDragging(true);
-        // Store start values
-        dragStartRef.current = { x: e.clientX, y: e.clientY };
-        posStartRef.current = { x: position.x, y: position.y };
-    }
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (isDragging) {
-        // Calculate delta
-        const dx = e.clientX - dragStartRef.current.x;
-        const dy = e.clientY - dragStartRef.current.y;
-        
-        // Update position based on start pos + delta
-        setPosition({
-          x: posStartRef.current.x + dx,
-          y: posStartRef.current.y + dy
-        });
-      } else if (isResizing) {
-        const dx = e.clientX - dragStartRef.current.x;
-        
-        // Update size (maintain aspect ratio 16:9)
-        const newWidth = Math.max(160, sizeStartRef.current.w + dx); // Min width 160px
-        const newHeight = newWidth * (9/16);
-        
-        setSize({ width: newWidth, height: newHeight });
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      setIsResizing(false);
-    };
-
-    if (isDragging || isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, isResizing]);
-  
-  return (
-      <div 
-        ref={pipRef}
-        style={{ 
-          left: position.x, 
-          top: position.y,
-          width: size.width,
-          height: size.height,
-          zIndex: 60, // Above everything
-          cursor: isDragging ? 'grabbing' : 'grab',
-          // Ensure hardware acceleration for smoother dragging
-          transform: 'translateZ(0)',
-          willChange: isDragging || isResizing ? 'left, top, width, height' : 'auto'
-        }}
-        onMouseDown={handleMouseDown}
-        className="absolute bg-black/90 rounded-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)] overflow-hidden group/pip transition-shadow hover:shadow-glow-sm"
-      >
-        <VideoTrack 
-            trackRef={trackRef} 
-            className="w-full h-full object-cover pointer-events-none" 
-        />
-        
-        {/* Overlay Controls */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 opacity-0 group-hover/pip:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-2">
-            {/* Header: Name + Close */}
-            <div className="flex justify-between items-start">
-                <span className="text-[10px] font-bold text-white/90 bg-black/40 px-2 py-0.5 rounded backdrop-blur-md select-none pointer-events-none">
-                    {participant?.name || "Kamera"}
-                </span>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onClose(); }}
-                  className="pip-close-btn p-1 rounded-full bg-red-500/20 hover:bg-red-500 hover:text-white text-red-200 transition-colors pointer-events-auto"
-                >
-                   <X size={12} />
-                </button>
-            </div>
-
-            {/* Resize Handle */}
-             <div className="flex justify-end">
-                <div className="resize-handle cursor-se-resize p-1 opacity-50 hover:opacity-100 pointer-events-auto active:text-white">
-                    <Maximize2 size={12} className="text-white/70 rotate-90" />
-                </div>
-             </div>
-        </div>
-      </div>
-  );
-}
+// DraggablePip removed in favor of Native Picture-in-Picture
 
 function ScreenShareStage({
   trackRef,
@@ -2799,6 +2309,10 @@ function ScreenShareStage({
   activeStreamId,
 }) {
   const [showPip, setShowPip] = useState(false);
+  const { disableBackgroundEffects } = useSettingsStore();
+  const pipGridRef = useRef(null);
+  
+
   const [volume, setVolume] = useState(50);
   const [prevVolume, setPrevVolume] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -2814,10 +2328,21 @@ function ScreenShareStage({
   const viewerCount = Math.max(0, participants.length - 1);
   const participant = trackRef?.participant;
   const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
+  const cameraTracks = useTracks([Track.Source.Camera]);
   const audioTrackRef = audioTracks.find(
     (t) => t.participant.sid === participant?.sid
   );
   const isAudioDisabled = amISharing && !isLocalSharing;
+
+  // Filter valid camera tracks for PiP Grid
+  const validCameraTracks = useMemo(() => {
+    return cameraTracks.filter(t => t.publication && !t.publication.isMuted);
+  }, [cameraTracks]);
+
+  // PiP camera data - moved from inline IIFE to top level to follow Rules of Hooks
+  const pipParticipant = trackRef?.participant;
+  const pipTrackRef = cameraTracks.find(t => t.participant.identity === pipParticipant?.identity);
+  const hasPipCamera = pipTrackRef && pipTrackRef.publication?.isSubscribed;
 
   useEffect(() => {
     if (audioTrackRef?.publication?.track && audioRef.current) {
@@ -2871,6 +2396,21 @@ function ScreenShareStage({
     }
   }, [volume, audioTrackRef]);
 
+  // Handle PiP Toggle via Grid Component
+  const togglePip = useCallback(() => {
+    if (pipGridRef.current) {
+      pipGridRef.current.togglePip();
+      // We don't manually set showPip here because PipGrid manages its own state 
+      // or we can sync it via a callback if needed, but for the button icon:
+      // We can assume user intention.
+      setShowPip(prev => !prev);
+    }
+  }, []);
+
+  // Sync state with External Exit - Handled inside PipGrid largely, 
+  // but if we want to sync the button icon perfectly we might need a callback.
+  // For now, simple toggle is fine.
+
   const toggleMuteStream = () => {
     if (isAudioDisabled) return;
     if (volume > 0) {
@@ -2908,10 +2448,10 @@ function ScreenShareStage({
         clearTimeout(cursorTimeoutRef.current);
       }
 
-      // 0.8 saniye hareketsizlikten sonra overlay'i gizle (daha hızlı kapanma)
+      // 2 saniye hareketsizlikten sonra overlay'i gizle
       mouseMoveTimeoutRef.current = setTimeout(() => {
         setShowOverlay(false);
-      }, 200);
+      }, 2000);
 
       // 2 saniye hareketsizlikten sonra cursor'u gizle
       cursorTimeoutRef.current = setTimeout(() => {
@@ -2941,11 +2481,13 @@ function ScreenShareStage({
 
   return (
     <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] relative overflow-hidden">
-      {/* Ambient background orbs */}
+      {/* Ambient background orbs - Conditional Rendering */}
+      {!disableBackgroundEffects && (
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/[0.04] rounded-full blur-[120px] animate-pulse-slow" />
         <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/[0.03] rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '1s' }} />
       </div>
+      )}
 
       <div
         ref={containerRef}
@@ -2960,29 +2502,24 @@ function ScreenShareStage({
         />
         {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && <audio ref={audioRef} autoPlay />}
 
-        {/* Draggable PiP Camera Overlay */}
-        {(() => {
-           // Ana ekran zaten kamera ise PiP kamera gösterme
-           if (trackRef.source === Track.Source.Camera) return null;
+        {/* Native PiP Grid Component */}
+        <PipGrid 
+            ref={pipGridRef} 
+            tracks={validCameraTracks} 
+            isSelfSharing={isLocalSharing} 
+        />
 
-           const pipParticipant = trackRef?.participant;
-           const cameraTracks = useTracks([Track.Source.Camera]);
-           const pipTrackRef = cameraTracks.find(t => t.participant.identity === pipParticipant?.identity);
-           
-           if (!pipTrackRef || !pipTrackRef.publication?.isSubscribed || !showPip) return null;
-
-           return (
-             <DraggablePip 
-                trackRef={pipTrackRef} 
-                participant={pipParticipant} 
-                onClose={() => setShowPip(false)} 
-             />
-           );
-        })()}
-
+        {/* Overlay Gradients - Top and Bottom only (Center remains clear) */}
+        {/* Top Gradient */}
         <div
-          className={`absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/50 transition-all duration-500 ${
-            showOverlay ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-500 pointer-events-none ${
+            showOverlay ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        {/* Bottom Gradient */}
+        <div
+          className={`absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-500 pointer-events-none ${
+            showOverlay ? "opacity-100" : "opacity-0"
           }`}
         />
 
@@ -3024,29 +2561,18 @@ function ScreenShareStage({
                 />
               </button>
             )}
-            {/* PiP Toggle Button - Only if camera is available */}
-            {(() => {
-                // Ana ekran zaten kamera ise PiP butonu gösterme
-                if (trackRef.source === Track.Source.Camera) return null;
-
-                const pipParticipant = trackRef?.participant;
-                const cameraTracks = useTracks([Track.Source.Camera]);
-                const hasCamera = cameraTracks.some(t => t.participant.identity === pipParticipant?.identity);
-                
-                if (!hasCamera) return null;
-
-                return (
-                    <button
-                      onClick={() => setShowPip(!showPip)}
-                      className={`backdrop-blur-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] hover:border-white/20 text-white/70 hover:text-white p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 group/btn z-[100] ${
-                         showOverlay ? "opacity-100" : "opacity-0"
-                      }`}
-                      title={showPip ? "Kamerayı Gizle" : "Kamerayı Göster"}
-                    >
-                      {showPip ? <Video size={18} className="sm:w-5 sm:h-5" /> : <VideoOff size={18} className="sm:w-5 sm:h-5" />}
-                    </button>
-                );
-            })()}
+            {/* PiP Toggle Button - Native Window Mode */}
+            {trackRef.source !== Track.Source.Camera && cameraTracks.some(t => t.participant.identity === pipParticipant?.identity) && (
+              <button
+                onClick={togglePip}
+                className={`backdrop-blur-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] hover:border-white/20 text-white/70 hover:text-white p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 group/btn z-[100] ${
+                  showOverlay ? "opacity-100" : "opacity-0"
+                } ${showPip ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300" : ""}`}
+                title={showPip ? "Pencereyi Kapat" : "Pencere Moduna Al"}
+              >
+                {showPip ? <Layers size={18} className="sm:w-5 sm:h-5" /> : <Monitor size={18} className="sm:w-5 sm:h-5" />}
+              </button>
+            )}
 
             {/* İzlemeyi Durdur butonu - Always visible */}
             <button
@@ -3226,833 +2752,7 @@ function ScreenShareStage({
   );
 }
 
-// --- KATILIMCI LİSTESİ ---
-function ParticipantList({
-  onUserContextMenu,
-  compact,
-  hideIncomingVideo,
-  setActiveStreamId,
-  activeStreamId,
-}) {
-  const participants = useParticipants();
-  const count = participants.length;
-  if (count === 0) return null;
-  if (compact) {
-    return (
-      <div
-        className="flex items-center gap-3 h-full px-2"
-        style={{ overflow: "visible" }}
-      >
-        {participants.map((p) => (
-          <div
-            key={p.sid}
-            className="min-w-[140px] h-full"
-            style={{ overflow: "visible", padding: "2px" }}
-          >
-            <UserCard
-              participant={p}
-              totalCount={count}
-              onContextMenu={(e) => onUserContextMenu(e, p)}
-              compact={true}
-              hideIncomingVideo={hideIncomingVideo}
-              setActiveStreamId={setActiveStreamId}
-              activeStreamId={activeStreamId}
-            />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  let gridClass = "";
-  if (count === 1)
-    gridClass = "grid-cols-1 w-full max-w-[800px] aspect-video max-h-[600px]";
-  else if (count === 2)
-    gridClass = "grid-cols-1 md:grid-cols-2 w-full max-w-[1000px] gap-5";
-  else if (count <= 4) gridClass = "grid-cols-2 w-full max-w-[900px] gap-5";
-  else if (count <= 6)
-    gridClass = "grid-cols-2 md:grid-cols-3 w-full max-w-[1100px] gap-4";
-  else gridClass = "grid-cols-3 md:grid-cols-4 w-full max-w-[1200px] gap-4";
-  return (
-    <div
-      className={`grid ${gridClass} items-center justify-center content-center w-full p-4`}
-      style={{ overflow: "visible" }} // Glow efektlerinin kesilmemesi için
-    >
-      {participants.map((p) => (
-        <div
-          key={p.sid}
-          className="w-full h-full aspect-[16/9] min-h-[180px]"
-          style={{ overflow: "visible", padding: "4px" }}
-        >
-          <UserCard
-            participant={p}
-            totalCount={count}
-            onContextMenu={(e) => onUserContextMenu(e, p)}
-            hideIncomingVideo={hideIncomingVideo}
-            setActiveStreamId={setActiveStreamId}
-            activeStreamId={activeStreamId}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame
-function ScreenSharePreviewComponent({ trackRef }) {
-  const [previewImage, setPreviewImage] = useState(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const hasCapturedRef = useRef(false);
-  const captureTimeoutRef = useRef(null);
-  const trackSidRef = useRef(null);
-
-  // Track değiştiğinde reset - trackSid'i stabilize et
-  const currentTrackSid = trackRef?.participant?.sid ?? null;
-
-  useEffect(() => {
-    if (currentTrackSid !== trackSidRef.current) {
-      hasCapturedRef.current = false;
-      setPreviewImage(null);
-      trackSidRef.current = currentTrackSid;
-    }
-  }, [currentTrackSid]);
-
-  // Video element'ini track'e bağla - trackSid ve publication'ı stabilize et
-  const trackPublicationSid = trackRef?.publication?.trackSid ?? null;
-
-  useEffect(() => {
-    if (!trackRef?.publication?.track || hasCapturedRef.current) return;
-
-    const trackPublication = trackRef.publication;
-
-    const track = trackPublication.track;
-    const video = videoRef.current;
-
-    if (!video) return;
-
-    track.attach(video);
-
-    // Video yüklendiğinde 1 saniye sonra frame yakala
-    const handleLoadedMetadata = () => {
-      if (hasCapturedRef.current) return;
-
-      captureTimeoutRef.current = setTimeout(() => {
-        if (video && canvasRef.current && !hasCapturedRef.current) {
-          try {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext("2d");
-
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 360;
-
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL("image/jpeg", 0.8);
-            setPreviewImage(imageData);
-            hasCapturedRef.current = true;
-
-            // Video track'i detach et (artık gerek yok, bandwidth tasarrufu)
-            track.detach(video);
-          } catch (error) {
-            console.warn("Preview capture error:", error);
-          }
-        }
-      }, 1000); // 1 saniye sonra yakala
-    };
-
-    video.addEventListener("loadedmetadata", handleLoadedMetadata);
-
-    return () => {
-      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      if (captureTimeoutRef.current) {
-        clearTimeout(captureTimeoutRef.current);
-        captureTimeoutRef.current = null;
-      }
-      if (track && video) {
-        track.detach(video);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrackSid, trackPublicationSid]);
-
-  return (
-    <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl pointer-events-none">
-      {!hasCapturedRef.current && (
-        <>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-            style={{
-              filter: "blur(2px) brightness(0.7)",
-            }}
-          />
-          <canvas ref={canvasRef} className="hidden" />
-        </>
-      )}
-      {previewImage && (
-        <img
-          src={previewImage}
-          alt="Screen share preview"
-          className="w-full h-full object-cover"
-          style={{
-            filter: "blur(2px) brightness(0.7)",
-          }}
-        />
-      )}
-      <div className="absolute inset-0 bg-black/30"></div>
-    </div>
-  );
-}
-
-function UserCard({
-  participant,
-  totalCount,
-  onContextMenu,
-  compact,
-  hideIncomingVideo,
-  setActiveStreamId,
-  activeStreamId,
-}) {
-  // Extract both identity (for tracking) and name (for display)
-  // identity = persistent unique ID (e.g., "userId_deviceShort")
-  // name = user-friendly display name (e.g., "sk jsksos")
-  const { identity, name, metadata } = useParticipantInfo({ participant });
-  
-  // Use name for display, fallback to identity if name is not set
-  // For anonymous users, this ensures we have something to display
-  const displayName = name || identity || "User";
-  
-  // Get initials from name (same logic as Avatar.jsx component)
-  const getInitials = (nameStr) => {
-    if (!nameStr) return "?";
-    const trimmed = nameStr.trim();
-    if (!trimmed) return "?";
-    const parts = trimmed.split(" ");
-    if (parts.length === 1) {
-      return parts[0].charAt(0).toUpperCase();
-    }
-    // For multiple words, take first letter of first and last word
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  };
-  
-  const userInitials = getInitials(displayName);
-  const audioActive = useAudioActivity(participant);
-
-  // Screen share track kontrolü
-  const screenShareTracks = useTracks([Track.Source.ScreenShare]);
-  const screenShareTrack = screenShareTracks.find(
-    (t) => t.participant.sid === participant.sid
-  );
-  const hasScreenShare = !!screenShareTrack;
-  const isCurrentlyWatching = activeStreamId === participant.identity;
-  const { profileColor: localProfileColor, cameraMirrorEffect } =
-    useSettingsStore(); // Local kullanıcı için ayarlardan renk al
-  const remoteState = useMemo(() => {
-    try {
-      return metadata ? JSON.parse(metadata) : {};
-    } catch {
-      return {};
-    }
-  }, [metadata]);
-  // Local participant ise settings'den, değilse metadata'dan renk al
-  const userColor = participant.isLocal
-    ? localProfileColor || "#6366f1"
-    : remoteState.profileColor || "#6366f1";
-
-  // Gradient için border rengi çıkar (gradient'in ilk rengini kullan)
-  const getBorderColor = (color) => {
-    if (!color || !color.includes("gradient")) return color || "#6366f1";
-    // Gradient'ten ilk rengi çıkar: linear-gradient(135deg, #6366f1 0%, ...)
-    const match = color.match(/#[0-9a-fA-F]{6}/);
-    return match ? match[0] : "#6366f1";
-  };
-
-  // Local participant için de metadata'dan oku (kendi durumunu görmek için)
-  const isMuted = participant.isLocal
-    ? remoteState.isMuted !== undefined
-      ? remoteState.isMuted
-      : false
-    : remoteState.isMuted;
-  const isDeafened = participant.isLocal
-    ? remoteState.isDeafened !== undefined
-      ? remoteState.isDeafened
-      : false
-    : remoteState.isDeafened;
-  const isSpeaking = audioActive && !isMuted && !isDeafened;
-  const avatarSize = compact
-    ? "w-10 h-10 text-base"
-    : totalCount <= 2
-    ? "w-28 h-28 text-4xl"
-    : "w-16 h-16 text-xl";
-
-  // Mikrofon ikonu boyutunu avatar boyutuna göre ayarla
-  const micIconSize = compact ? 12 : totalCount <= 2 ? 20 : 14;
-  const micBadgeSize = compact
-    ? "w-5 h-5"
-    : totalCount <= 2
-    ? "w-8 h-8"
-    : "w-6 h-6";
-  const micBorderSize = compact
-    ? "border-[2px]"
-    : totalCount <= 2
-    ? "border-[3px]"
-    : "border-[2px]";
-
-  // useTracks hook'u sadece subscribe edilmiş track'leri döndürür
-  // Remote participant tarafında track henüz subscribe edilmemişse bulunamaz
-  // Bu yüzden direkt olarak participant'ın publication'ını kontrol ediyoruz
-  const videoTrack = useTracks([Track.Source.Camera]).find(
-    (t) => t.participant.sid === participant.sid
-  );
-
-  // Participant'ın publication'ını direkt kontrol et (useTracks'ten bağımsız)
-  const cameraPublication = participant.getTrackPublication(
-    Track.Source.Camera
-  );
-
-  // Debug: Track durumunu kontrol et
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development" && cameraPublication) {
-      console.log(
-        `📹 ${
-          participant.isLocal ? "Local" : "Remote"
-        } participant camera track durumu:`,
-        {
-          participant: participant.identity,
-          trackSid: cameraPublication.trackSid,
-          isMuted: cameraPublication.isMuted,
-          hasTrack: !!cameraPublication.track,
-          useTracksFound: !!videoTrack,
-          isSubscribed: videoTrack?.isSubscribed,
-        }
-      );
-    }
-  }, [cameraPublication, participant, videoTrack]);
-
-  // Track görünürlük kontrolü
-  // Local participant için: publication varsa ve muted değilse göster
-  // Remote participant için: publication varsa, muted değilse ve (useTracks track'i buldu VEYA publication'da track var) göster
-  const shouldShowVideo =
-    cameraPublication &&
-    !cameraPublication.isMuted &&
-    !hideIncomingVideo &&
-    cameraPublication.trackSid && // Track publish edilmiş olmalı
-    (participant.isLocal
-      ? true // Local participant için trackSid varsa göster
-      : videoTrack?.isSubscribed || !!cameraPublication.track); // Remote için subscribed VEYA publication'da track mevcut olmalı
-
-  return (
-    <div
-      onContextMenu={onContextMenu}
-      className="relative w-full h-full rounded-2xl flex flex-col items-center justify-center group cursor-context-menu backdrop-blur-md hover:shadow-soft-lg hover:scale-[1.02]"
-      style={{
-        background: isSpeaking
-          ? userColor.includes("gradient")
-            ? `linear-gradient(135deg, ${getBorderColor(userColor)}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
-            : `linear-gradient(135deg, ${userColor}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
-          : isMuted || isDeafened
-          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)'
-          : 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(10,10,12,0.6) 50%, rgba(10,10,12,0.8) 100%)',
-        borderWidth: '2px',
-        borderStyle: 'solid',
-        borderColor: isSpeaking
-          ? getBorderColor(userColor)
-          : isMuted || isDeafened
-          ? "rgba(239, 68, 68, 0.4)"
-          : "rgba(255, 255, 255, 0.1)",
-        boxShadow: isSpeaking
-          ? userColor.includes("gradient")
-            ? `0 0 40px ${getBorderColor(userColor)}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${getBorderColor(userColor)}20`
-            : `0 0 40px ${userColor}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${userColor}20`
-          : isMuted || isDeafened
-          ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
-          : '0 4px 24px rgba(0,0,0,0.3)',
-        overflow: "visible",
-        transition: 'border-color 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), background 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-      }}
-    >
-      {/* Animated background glow for speaking - Smooth fade in/out */}
-      <div
-        className="absolute inset-0 rounded-2xl pointer-events-none"
-        style={{
-          background: userColor.includes("gradient")
-            ? `radial-gradient(circle at center, ${getBorderColor(userColor)}20 0%, transparent 70%)`
-            : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
-          transform: "scale(0.95)",
-          opacity: isSpeaking ? 1 : 0,
-          animation: isSpeaking ? 'pulseGlowSlow 3s ease-in-out infinite' : 'none',
-          transition: 'opacity 0.8s cubic-bezier(0.25, 0.1, 0.25, 1)',
-        }}
-      />
-      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10 ">
-        {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
-        {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
-        {/* Eğer kullanıcı kendi screen share'ini açtıysa, kendi kameranın gösterilmesi gerekiyor */}
-        {/* Screen share varsa bile kamera gösterilmeli (screen share preview arka planda) */}
-        {/* Kameraya tıklandığında yayına katıl (eğer screen share varsa ve izlenmiyorsa) */}
-        {shouldShowVideo && videoTrack ? (
-          <div
-            className="relative w-full h-full rounded-2xl overflow-hidden shadow-soft-lg z-20 group/camera"
-            onClick={(e) => {
-              // Kameraya veya yayına tıklandığında activeStreamId'yi güncelle
-              if (
-                !isCurrentlyWatching &&
-                setActiveStreamId &&
-                participant.identity &&
-                ((hasScreenShare && screenShareTrack) || (shouldShowVideo && videoTrack))
-              ) {
-                e.stopPropagation();
-                setActiveStreamId(participant.identity);
-              }
-            }}
-            style={{
-              cursor:
-                (hasScreenShare && screenShareTrack && !isCurrentlyWatching) ||
-                (shouldShowVideo && videoTrack && !isCurrentlyWatching)
-                  ? "pointer"
-                  : "default",
-            }}
-          >
-            <VideoTrack
-              trackRef={videoTrack}
-              className="w-full h-full object-cover transition-all duration-500 relative z-0"
-              style={{
-                filter: isSpeaking
-                  ? "brightness(1.1) contrast(1.15) saturate(1.2) hue-rotate(5deg)"
-                  : "brightness(1) contrast(1.08) saturate(1.1)",
-                transform: `${isSpeaking ? "scale(1.05)" : "scale(1)"} ${
-                  participant.isLocal && cameraMirrorEffect ? "scaleX(-1)" : ""
-                }`,
-                transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-              }}
-            />
-
-            {/* Speaking durumunda animasyonlu arka plan glow - Resimdeki gibi - Container içinde kalacak şekilde */}
-            {isSpeaking && (
-              <>
-                {/* Ana glow layer - Radial gradient - Container içinde, padding ile */}
-                <div
-                  className="absolute rounded-2xl pointer-events-none animate-speaking-glow overflow-hidden"
-                  style={{
-                    top: "4px",
-                    left: "4px",
-                    right: "4px",
-                    bottom: "4px",
-                    background: `radial-gradient(circle at center, ${getBorderColor(
-                      userColor
-                    )}40 0%, ${getBorderColor(
-                      userColor
-                    )}20 30%, ${getBorderColor(
-                      userColor
-                    )}10 50%, transparent 80%)`,
-                    zIndex: 1,
-                  }}
-                />
-
-                {/* Pulsing ring effect - Container içinde, padding ile */}
-                <div
-                  className="absolute rounded-2xl pointer-events-none animate-speaking-pulse-ring overflow-hidden"
-                  style={{
-                    top: "6px",
-                    left: "6px",
-                    right: "6px",
-                    bottom: "6px",
-                    background: `radial-gradient(circle at center, ${getBorderColor(
-                      userColor
-                    )}30 0%, transparent 60%)`,
-                    zIndex: 2,
-                  }}
-                />
-
-                {/* Border glow - Container içinde */}
-                <div
-                  className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse-border-video overflow-hidden"
-                  style={{
-                    boxShadow: `inset 0 0 0 3px ${getBorderColor(
-                      userColor
-                    )}80, inset 0 0 20px ${getBorderColor(userColor)}30`,
-                    background: `linear-gradient(135deg, ${getBorderColor(
-                      userColor
-                    )}25 0%, transparent 60%)`,
-                    zIndex: 3,
-                  }}
-                />
-
-                {/* Corner glow accents - Container içinde, padding ile */}
-                <div
-                  className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
-                  style={{
-                    top: "4px",
-                    left: "4px",
-                    width: "40%",
-                    height: "40%",
-                    background: `radial-gradient(circle at top left, ${getBorderColor(
-                      userColor
-                    )}35 0%, transparent 60%)`,
-                    zIndex: 2,
-                  }}
-                />
-                <div
-                  className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
-                  style={{
-                    bottom: "4px",
-                    right: "4px",
-                    width: "40%",
-                    height: "40%",
-                    background: `radial-gradient(circle at bottom right, ${getBorderColor(
-                      userColor
-                    )}35 0%, transparent 60%)`,
-                    zIndex: 2,
-                    animationDelay: "0.5s",
-                  }}
-                />
-              </>
-            )}
-
-            {/* Enhanced gradient overlay - Speaking durumunda daha az koyu */}
-            <div
-              className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
-                isSpeaking ? "opacity-40" : "opacity-100"
-              }`}
-              style={{
-                background:
-                  "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)",
-                zIndex: 4,
-              }}
-            />
-            <div
-              className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
-                isSpeaking ? "opacity-30" : "opacity-100"
-              }`}
-              style={{
-                background:
-                  "linear-gradient(to bottom, transparent 0%, transparent 50%, rgba(0,0,0,0.4) 100%)",
-                zIndex: 4,
-              }}
-            />
-
-            {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
-            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (setActiveStreamId && participant.identity) {
-                    setActiveStreamId(participant.identity);
-                  }
-                }}
-              >
-                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
-                    <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
-                  </div>
-                  <span className="drop-shadow-lg">Yayına Katıl</span>
-                  <Tv size={16} className="drop-shadow-lg" />
-                </div>
-              </div>
-            )}
-
-            {/* Hover overlay - Kamerayı Büyüt (screen share yoksa ve izlenmiyorsa) */}
-             {!hasScreenShare && shouldShowVideo && videoTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/60 to-black/70 opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm cursor-pointer z-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (setActiveStreamId && participant.identity) {
-                    setActiveStreamId(participant.identity);
-                  }
-                }}
-              >
-                <div className="glass-strong border border-white/40 bg-gradient-to-r from-indigo-500/95 to-purple-500/95 px-4 py-2 rounded-xl backdrop-blur-xl flex items-center gap-2.5 font-semibold text-white text-sm shadow-soft-lg transform group-hover/camera:scale-110 transition-transform duration-300 hover:scale-125 hover:shadow-[0_0_20px_rgba(99,102,241,0.6)]">
-                  <Maximize size={16} className="drop-shadow-lg" />
-                  <span className="drop-shadow-lg">Büyüt</span>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div
-            className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold shadow-soft-lg z-10 relative transition-all duration-500 overflow-hidden group/avatar ${
-              isSpeaking
-                ? "speaking-avatar ring-4 ring-offset-4 ring-offset-transparent animate-avatar-pulse"
-                : isMuted || isDeafened
-                ? "bg-gray-600/80 ring-4 ring-red-500/40 grayscale opacity-70"
-                : "hover:shadow-glow hover:scale-110"
-            }`}
-            style={{
-              background:
-                isMuted || isDeafened
-                  ? undefined
-                  : userColor.includes("gradient")
-                  ? userColor
-                  : userColor,
-              "--tw-ring-color": isSpeaking
-                ? getBorderColor(userColor)
-                : undefined,
-              boxShadow: isSpeaking
-                ? userColor.includes("gradient")
-                  ? `0 0 40px ${getBorderColor(
-                      userColor
-                    )}70, 0 12px 35px rgba(0,0,0,0.5), inset 0 0 20px ${getBorderColor(
-                      userColor
-                    )}20`
-                  : `0 0 40px ${userColor}70, 0 12px 35px rgba(0,0,0,0.5), inset 0 0 20px ${userColor}20`
-                : undefined,
-            }}
-          >
-            {/* Avatar gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20 pointer-events-none rounded-2xl"></div>
-
-            {/* Animated shimmer effect */}
-            {!isMuted && !isDeafened && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/avatar:translate-x-full transition-transform duration-1000 pointer-events-none rounded-2xl"></div>
-            )}
-
-            {/* Letter - use userInitials for proper initials (handles anonymous users) */}
-            <span className="relative z-10 drop-shadow-lg">
-              {userInitials}
-            </span>
-
-            {/* Speaking pulse rings */}
-            {isSpeaking && (
-              <>
-                <div
-                  className="absolute inset-0 rounded-2xl animate-ping"
-                  style={{
-                    border: `2px solid ${getBorderColor(userColor)}`,
-                    opacity: 0.3,
-                  }}
-                />
-                <div
-                  className="absolute inset-0 rounded-2xl animate-ping"
-                  style={{
-                    border: `2px solid ${getBorderColor(userColor)}`,
-                    opacity: 0.2,
-                    animationDelay: "0.5s",
-                  }}
-                />
-              </>
-            )}
-
-            {/* Hover overlay - Yayına Katıl (sadece screen share varsa ve izlenmiyorsa) */}
-            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-end pb-4 cursor-pointer z-50 rounded-2xl"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (setActiveStreamId && participant.identity) {
-                    setActiveStreamId(participant.identity);
-                  }
-                }}
-              >
-                {/* Canlı yayın göstergesi - üstte */}
-                <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-red-500 rounded-full blur-md opacity-75 animate-pulse"></div>
-                    <div className="relative w-2.5 h-2.5 bg-red-500 rounded-full"></div>
-                  </div>
-                  <span className="text-xs font-bold text-white/90 uppercase tracking-wider">Canlı</span>
-                </div>
-                
-                {/* Katıl butonu - modern tasarım */}
-                <button 
-                  className="relative overflow-hidden px-5 py-2.5 rounded-xl font-semibold text-white text-sm shadow-2xl transform transition-all duration-300 hover:scale-110 active:scale-95 group/btn"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(99,102,241,0.95) 0%, rgba(168,85,247,0.95) 100%)',
-                  }}
-                >
-                  {/* Shimmer efekti */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700"></div>
-                  
-                  {/* Border glow */}
-                  <div className="absolute inset-0 rounded-xl border border-white/30 group-hover/btn:border-white/50 transition-colors"></div>
-                  
-                  {/* İçerik */}
-                  <div className="relative flex items-center gap-2">
-                    <Tv size={16} className="drop-shadow-lg" />
-                    <span className="drop-shadow-lg">Yayına Katıl</span>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* İsim - Alt kısımda - Enhanced with status indicator */}
-        <div
-          className={`absolute z-10 max-w-[80%] transition-all duration-300 group-hover:scale-105 ${
-            shouldShowVideo
-              ? "-bottom-1 left-1 glass-strong px-3 py-1.5 rounded-xl backdrop-blur-xl border border-white/20 shadow-soft-lg"
-              : "bottom-2 left-3 glass-strong px-4 py-2 rounded-xl backdrop-blur-xl border border-white/20 shadow-soft-lg"
-          }`}
-          style={{
-            background: shouldShowVideo
-              ? "linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 100%)"
-              : "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%)",
-          }}
-        >
-          {/* Muted By veya Normal İsim */}
-          {(remoteState.serverMuted || remoteState.serverDeafened) && (remoteState.mutedBy || remoteState.deafenedBy) ? (
-            <div className="flex flex-col items-start gap-0.5 animate-in slide-in-from-bottom-1 fade-in duration-300">
-               <div className="flex items-center gap-1.5 leading-none">
-                 {remoteState.serverDeafened ? (
-                   <VolumeX size={12} className="text-red-400" />
-                 ) : (
-                   <MicOff size={12} className="text-red-400" />
-                 )}
-                 <span className="text-[10px] font-bold text-red-300 uppercase tracking-widest leading-none">
-                   {remoteState.serverDeafened ? "SAĞIRLAŞTIRILDI" : "SUSTURULDU"}
-                 </span>
-               </div>
-               <div className="flex items-center gap-1">
-                 <span className="text-[10px] text-zinc-400 leading-tight">Yapan:</span>
-                 <span className="text-xs font-bold text-white/90 leading-tight">
-                    {remoteState.serverDeafened ? remoteState.deafenedBy : remoteState.mutedBy}
-                 </span>
-               </div>
-            </div>
-          ) : (
-            /* Normal Durum */
-            <div className="flex items-center gap-2">
-              {/* Status indicator - Minimal */}
-              {(isDeafened || isMuted) && (
-                <div className="relative shrink-0">
-                  {isDeafened ? (
-                    <VolumeX size={12} className="text-red-400" />
-                  ) : (
-                    <MicOff size={12} className="text-red-400" />
-                  )}
-                  <div className="absolute inset-0 bg-red-500/20 rounded-full blur-sm animate-pulse"></div>
-                </div>
-              )}
-              {isSpeaking && !isMuted && !isDeafened && (
-                <div className="relative shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
-                  <div className="absolute inset-0 bg-green-500/30 rounded-full blur-sm animate-ping"></div>
-                </div>
-              )}
-              <span
-                className={`font-semibold text-white tracking-normal truncate block drop-shadow-2xl ${
-                  compact ? "text-[10px] leading-tight" : "text-sm"
-                }`}
-                style={{
-                  textShadow:
-                    "0 2px 8px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.6)",
-                }}
-              >
-                {displayName}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Screen Share Önizleme - İlk 1 saniye canlı, sonra donmuş frame (sadece izlenmiyorsa) */}
-        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <ScreenSharePreviewComponent trackRef={screenShareTrack} />
-        )}
-
-        {/* Üstte çok küçük "yayın yapıyor" badge'i - Screen share varsa ve izleniyorsa */}
-        {hasScreenShare && screenShareTrack && isCurrentlyWatching && (
-          <div className="absolute top-2 left-2 z-30 glass-strong px-2 py-0.5 rounded-md backdrop-blur-md border border-white/20 shadow-soft">
-            <span className="font-medium text-white text-[10px] drop-shadow-lg flex items-center gap-1">
-              <div className="relative">
-                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
-                <div className="relative w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-              </div>
-              Yayında
-            </span>
-          </div>
-        )}
-
-        {/* Üstte "yayın yapıyor" badge'i - Screen share varsa ama izlenmiyorsa */}
-        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <div className="absolute top-3 left-3 z-30 glass-strong px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/20 shadow-soft">
-            <span className="font-medium text-white text-xs drop-shadow-lg flex items-center gap-1.5">
-              <div className="relative">
-                <div className="absolute inset-0 bg-red-500 rounded-full blur-sm opacity-75 animate-pulse"></div>
-                <div className="relative w-2 h-2 bg-red-500 rounded-full"></div>
-              </div>
-              Yayında
-            </span>
-          </div>
-        )}
-      </div>
-      {!shouldShowVideo && isSpeaking && (
-        <>
-          {/* Ana glow layer - Container içinde, padding ile */}
-          <div
-            className="absolute pointer-events-none rounded-2xl animate-speaking-glow overflow-hidden"
-            style={{
-              top: "4px",
-              left: "4px",
-              right: "4px",
-              bottom: "4px",
-              background: userColor.includes("gradient")
-                ? `radial-gradient(circle at center, ${getBorderColor(
-                    userColor
-                  )}40 0%, ${getBorderColor(userColor)}25 30%, ${getBorderColor(
-                    userColor
-                  )}15 50%, transparent 80%)`
-                : `radial-gradient(circle at center, ${userColor}40 0%, ${userColor}25 30%, ${userColor}15 50%, transparent 80%)`,
-              zIndex: 0,
-            }}
-          />
-          {/* Pulsing ring effect - Container içinde, padding ile */}
-          <div
-            className="absolute pointer-events-none rounded-2xl animate-speaking-pulse-ring overflow-hidden"
-            style={{
-              top: "6px",
-              left: "6px",
-              right: "6px",
-              bottom: "6px",
-              background: userColor.includes("gradient")
-                ? `radial-gradient(circle at center, ${getBorderColor(
-                    userColor
-                  )}30 0%, transparent 60%)`
-                : `radial-gradient(circle at center, ${userColor}30 0%, transparent 60%)`,
-              zIndex: 0,
-            }}
-          />
-          {/* Corner accents - Container içinde, padding ile */}
-          <div
-            className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
-            style={{
-              top: "4px",
-              left: "4px",
-              width: "40%",
-              height: "40%",
-              background: userColor.includes("gradient")
-                ? `radial-gradient(circle at top left, ${getBorderColor(
-                    userColor
-                  )}35 0%, transparent 60%)`
-                : `radial-gradient(circle at top left, ${userColor}35 0%, transparent 60%)`,
-              zIndex: 0,
-            }}
-          />
-          <div
-            className="absolute rounded-2xl pointer-events-none animate-speaking-corner-glow overflow-hidden"
-            style={{
-              bottom: "4px",
-              right: "4px",
-              width: "40%",
-              height: "40%",
-              background: userColor.includes("gradient")
-                ? `radial-gradient(circle at bottom right, ${getBorderColor(
-                    userColor
-                  )}35 0%, transparent 60%)`
-                : `radial-gradient(circle at bottom right, ${userColor}35 0%, transparent 60%)`,
-              zIndex: 0,
-              animationDelay: "0.5s",
-            }}
-          />
-        </>
-      )}
-    </div>
-  );
-}
+// ParticipantList, ScreenSharePreviewComponent, UserCard moved to separate files in active-room/
 
 // --- ALT KONTROLLER ---
 function BottomControls({
@@ -4078,7 +2778,7 @@ function BottomControls({
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate } = useSettingsStore();
+  const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate, videoCodec } = useSettingsStore();
   const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
@@ -4337,12 +3037,12 @@ function BottomControls({
       if (newState) {
         // Çözünürlük ayarlarını belirle
         const resolutionMap = {
-          "720p": { width: 1280, height: 720, bitrate: 1500000 },
-          "1080p": { width: 1920, height: 1080, bitrate: 3000000 },
-          "2k": { width: 2560, height: 1440, bitrate: 5000000 },
+          "240p": { width: 426, height: 240, bitrate: 150000 },
+          "360p": { width: 640, height: 360, bitrate: 300000 },
+          "480p": { width: 854, height: 480, bitrate: 500000 },
         };
-        const selectedResolution = resolutionMap[videoResolution] || resolutionMap["1080p"];
-        const selectedFps = videoFrameRate || 30;
+        const selectedResolution = resolutionMap[videoResolution] || resolutionMap["240p"];
+        const selectedFps = videoFrameRate || 18;
 
         // Önce eski video track'i kaldır (eğer varsa)
         const existingVideoTracks = localParticipant
@@ -4418,7 +3118,7 @@ function BottomControls({
               maxBitrate: selectedResolution.bitrate,
               maxFramerate: selectedFps,
             },
-            videoCodec: "vp8",
+            videoCodec: videoCodec || "vp8",
             simulcast: false,
           });
         } catch (publishError) {

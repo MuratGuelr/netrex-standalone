@@ -1523,6 +1523,12 @@ export function PerformanceSettings() {
     setHardwareAcceleration,
     graphicsQuality,
     setGraphicsQuality,
+    disableAnimations,
+    toggleDisableAnimations,
+    disableBackgroundEffects,
+    toggleDisableBackgroundEffects,
+    videoCodec,
+    setVideoCodec
   } = useSettingsStore();
 
   return (
@@ -1558,27 +1564,7 @@ export function PerformanceSettings() {
         </div>
       </div>
 
-      {/* Donanım Hızlandırma */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
-        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
-
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
-          <div className="w-6 h-6 rounded-lg bg-green-500/20 flex items-center justify-center">
-            <Zap size={14} className="text-green-400" />
-          </div>
-          GPU Hızlandırma
-        </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-green-500/20 transition-colors duration-300">
-          <ToggleSwitch
-            label="Donanım Hızlandırma"
-            description="Animasyonları ve efektleri grafik kartınızda (GPU) işleyerek işlemci (CPU) yükünü azaltır."
-            checked={hardwareAcceleration}
-            onChange={() => setHardwareAcceleration(!hardwareAcceleration)}
-          />
-        </div>
-      </div>
-
-      {/* Görsel Kalite */}
+      {/* Görsel Kalite Presetleri */}
       <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
@@ -1586,54 +1572,144 @@ export function PerformanceSettings() {
           <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
             <Palette size={14} className="text-emerald-400" />
           </div>
-          Görsel Kalite
+          Görsel Kalite Modu
         </h4>
         <div className="relative z-10 space-y-3">
-          <p className="text-sm text-[#949ba4] leading-relaxed">
-            Düşük sistem özelliklerine sahipseniz "Performans" modunu seçerek bulanıklık (blur) efektlerini kapatabilir ve daha akıcı bir deneyim elde edebilirsiniz.
+          <p className="text-sm text-[#949ba4] leading-relaxed mb-4">
+            Bilgisayarınızın performansına göre bir mod seçin veya ayarları aşağıdan manuel olarak özelleştirin.
           </p>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            {/* Yüksek */}
             <button
               onClick={() => setGraphicsQuality("high")}
-              className={`relative overflow-hidden rounded-xl p-4 border transition-all duration-300 text-left group/opt focus:outline-none ${
+              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
                 graphicsQuality === "high"
                   ? "bg-green-500/10 border-green-500/50"
                   : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
               }`}
             >
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`font-bold ${graphicsQuality === "high" ? "text-green-400" : "text-white"}`}>Yüksek Kalite</span>
-                  {graphicsQuality === "high" && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
-                </div>
-                <div className="text-xs text-[#949ba4] group-hover/opt:text-[#b5bac1]">
-                  Tam görsel deneyim. Bulanıklık (Glassmorphism) ve tüm animasyonlar aktiftir.
-                </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className={`font-bold text-sm ${graphicsQuality === "high" ? "text-green-400" : "text-white"}`}>Yüksek</span>
+                {graphicsQuality === "high" && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
+              </div>
+              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
+                Her şey açık. Tam görsel deneyim.
               </div>
             </button>
 
+            {/* Performans (Düşük) */}
             <button
               onClick={() => setGraphicsQuality("low")}
-              className={`relative overflow-hidden rounded-xl p-4 border transition-all duration-300 text-left group/opt focus:outline-none ${
+              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
                 graphicsQuality === "low"
                   ? "bg-yellow-500/10 border-yellow-500/50"
                   : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
               }`}
             >
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`font-bold ${graphicsQuality === "low" ? "text-yellow-400" : "text-white"}`}>Performans</span>
-                  {graphicsQuality === "low" && <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)] animate-pulse"></div>}
-                </div>
-                <div className="text-xs text-[#949ba4] group-hover/opt:text-[#b5bac1]">
-                  Maksimum performans. Bulanıklık efektleri kapatılır ve animasyonlar basitleştirilir.
-                </div>
+               <div className="flex items-center justify-between mb-1">
+                <span className={`font-bold text-sm ${graphicsQuality === "low" ? "text-yellow-400" : "text-white"}`}>Performans</span>
+                {graphicsQuality === "low" && <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)] animate-pulse"></div>}
+              </div>
+              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
+                Blur efektleri kapalı. Denge modu.
+              </div>
+            </button>
+
+            {/* Patates */}
+            <button
+              onClick={() => setGraphicsQuality("potato")}
+              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
+                graphicsQuality === "potato"
+                  ? "bg-red-500/10 border-red-500/50"
+                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
+              }`}
+            >
+               <div className="flex items-center justify-between mb-1">
+                <span className={`font-bold text-sm ${graphicsQuality === "potato" ? "text-red-400" : "text-white"}`}>Patates</span>
+                {graphicsQuality === "potato" && <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse"></div>}
+              </div>
+              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
+                Minimum kaynak. Animasyonlar kapalı.
               </div>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Detaylı Performans Ayarları */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-green-500/20 flex items-center justify-center">
+            <Zap size={14} className="text-green-400" />
+          </div>
+          Manuel Optimizasyon
+        </h4>
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-green-500/20 transition-colors duration-300 space-y-4">
+          <ToggleSwitch
+            label="Donanım Hızlandırma"
+            description="Mümkün olan yerlerde GPU kullanır. Kapatırsanız tüm yük işlemciye (CPU) biner."
+            checked={hardwareAcceleration}
+            onChange={() => setHardwareAcceleration(!hardwareAcceleration)}
+          />
+
+          <div className="h-px bg-white/5 my-2"></div>
+
+          <ToggleSwitch
+            label="Animasyonları Kapat"
+            description="Geçiş efektlerini ve animasyonları kapatarak CPU kullanımını düşürür."
+            checked={disableAnimations}
+            onChange={toggleDisableAnimations}
+          />
+          
+          <ToggleSwitch
+            label="Arka Plan Efektlerini Kapat"
+            description="Hareketli arka plan ışıklarını (orbs) kapatarak GPU kullanımını düşürür."
+            checked={disableBackgroundEffects}
+            onChange={toggleDisableBackgroundEffects}
+          />
+        </div>
+      </div>
+
+       {/* Video Codec Ayarları */}
+       <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-cyan-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <Cpu size={14} className="text-blue-400" />
+          </div>
+          Video Kodlama (Codec)
+        </h4>
+
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-blue-500/20 transition-colors duration-300">
+           <div className="mb-3">
+              <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
+                Tercih Edilen Codec
+              </label>
+              <select
+                value={videoCodec}
+                onChange={(e) => setVideoCodec(e.target.value)}
+                className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-blue-500/50 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none appearance-none cursor-pointer transition-all duration-300"
+              >
+                <option value="vp8">VP8 (Varsayılan - En Uyumlu)</option>
+                <option value="h264">H.264 (Donanım Hızlandırma)</option>
+                <option value="av1">AV1 (Yeni Nesil - Yüksek Sıkıştırma)</option>
+              </select>
+           </div>
+           <p className="text-xs text-[#949ba4] flex items-start gap-2 bg-blue-500/5 p-2 rounded-lg border border-blue-500/10">
+              <Info size={14} className="mt-0.5 text-blue-400 shrink-0" />
+              <span>
+                <strong>VP8:</strong> Tüm cihazlarda çalışır, CPU kullanır.<br/>
+                <strong>H.264:</strong> GPU hızlandırma destekler, performansı artırabilir.<br/>
+                <strong>AV1:</strong> En iyi kalite/boyut oranı, ancak güçlü/yeni donanım gerektirir.
+              </span>
+           </p>
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -1932,7 +2008,9 @@ function VoiceSettings() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[ 
-                      { value: "240p", label: "240p", desc: "Temel" },
+                      { value: "240p", label: "240p", desc: "Düşük" },
+                      { value: "360p", label: "360p", desc: "Normal" },
+                      { value: "480p", label: "480p", desc: "Yüksek" },
                     ].map((res) => (
                       <button
                         key={res.value}
@@ -1958,9 +2036,9 @@ function VoiceSettings() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { value: 10, label: "10 FPS", desc: "Düşük" },
-                      { value: 15, label: "15 FPS", desc: "Normal" },
-                      { value: 18, label: "18 FPS", desc: "Yüksek" },
+                      { value: 15, label: "15 FPS", desc: "Düşük" },
+                      { value: 18, label: "18 FPS", desc: "Normal" },
+                      { value: 24, label: "24 FPS", desc: "Sinematik" },
                     ].map((fps) => (
                       <button
                         key={fps.value}
