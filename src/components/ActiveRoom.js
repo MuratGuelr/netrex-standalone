@@ -1620,7 +1620,7 @@ export default function ActiveRoom({
         </div>
       )}
 
-      <style>{styleInjection}</style>
+      <style dangerouslySetInnerHTML={{ __html: styleInjection }} />
       <RoomAudioRenderer />
       <DeafenManager isDeafened={isDeafened} serverDeafened={serverDeafened} />
       <SettingsModal
