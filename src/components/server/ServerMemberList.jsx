@@ -2,16 +2,61 @@
 
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { X, Users, Crown, Shield, Circle } from "lucide-react";
 import Avatar from "@/src/components/ui/Avatar";
 import MemberContextMenu from "@/src/components/server/MemberContextMenu";
+import UserProfileModal from "@/src/components/server/UserProfileModal";
+import GameDuration from "@/src/components/ui/GameDuration";
+import GameIcon from "@/src/components/ui/GameIcon";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import { db } from "@/src/lib/firebase";
+import { collection, query, where, onSnapshot, documentId } from "firebase/firestore";
 
 export default function ServerMemberList({ onClose }) {
   const { members, roles, currentServer } = useServerStore();
   const { user: currentUser } = useAuthStore();
   const [contextMenu, setContextMenu] = useState(null);
+  const [profileModal, setProfileModal] = useState(null); // { member, position }
+  const [userProfiles, setUserProfiles] = useState({}); // userId -> { gameActivity, customStatus }
+
+  // 🎮 Listen to users collection for gameActivity and customStatus (real-time)
+  useEffect(() => {
+    if (!members || members.length === 0) return;
+
+    // Get member IDs (max 30 for Firestore 'in' query)
+    const memberIds = members
+      .map(m => m.id || m.userId)
+      .filter(Boolean)
+      .slice(0, 30);
+
+    if (memberIds.length === 0) return;
+
+    // Query users collection for these members
+    const q = query(
+      collection(db, "users"),
+      where(documentId(), "in", memberIds)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const profiles = {};
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        profiles[doc.id] = {
+          gameActivity: data.gameActivity || null,
+          customStatus: data.customStatus || null,
+          customStatusColor: data.customStatusColor || null,
+          presence: data.presence || null,
+          lastSeen: data.lastSeen || null,
+        };
+      });
+      setUserProfiles(profiles);
+    }, (error) => {
+      console.error("User profiles listener error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [members]);
 
   // --- Logic Kısmı (Aynı Kaldı) ---
   const handleMemberContextMenu = (e, member) => {
@@ -19,28 +64,46 @@ export default function ServerMemberList({ onClose }) {
     setContextMenu({ x: e.clientX, y: e.clientY, member });
   };
 
+  // Handle click to open profile modal
+  const handleMemberClick = (e, member) => {
+    e.stopPropagation();
+    setProfileModal({ 
+      member, 
+      position: { x: e.clientX, y: e.clientY } 
+    });
+  };
+
   const enrichedMembers = useMemo(() => {
     return members.map(member => {
+      const memberId = member.id || member.userId;
+      const userProfile = userProfiles[memberId] || {};
+      
       // Calculate effective presence based on lastSeen timestamp
       // This handles "ghost online" when computer was shut down without closing app
-      const effectivePresence = getEffectivePresence(member);
+      const effectivePresence = getEffectivePresence({ ...member, ...userProfile });
       
       if (currentUser && (member.id === currentUser.uid || member.userId === currentUser.uid)) {
         return {
           ...member,
           displayName: member.displayName || member.nickname || currentUser.displayName || "User",
           photoURL: member.photoURL || currentUser.photoURL || null,
-          presence: effectivePresence // Use effective presence
+          presence: effectivePresence,
+          gameActivity: userProfile.gameActivity,
+          customStatus: userProfile.customStatus || member.customStatus,
+          customStatusColor: userProfile.customStatusColor,
         };
       }
       return {
         ...member,
         displayName: member.displayName || member.nickname || `User${member.id?.slice(-4) || ''}`,
         photoURL: member.photoURL || null,
-        presence: effectivePresence // Use effective presence
+        presence: effectivePresence,
+        gameActivity: userProfile.gameActivity,
+        customStatus: userProfile.customStatus || member.customStatus,
+        customStatusColor: userProfile.customStatusColor,
       };
     });
-  }, [members, currentUser]);
+  }, [members, currentUser, userProfiles]);
 
   const groupedMembers = useMemo(() => {
     if (!enrichedMembers || !roles || !currentServer) return {};
@@ -173,6 +236,7 @@ export default function ServerMemberList({ onClose }) {
                         {group.members.map(member => (
                             <div 
                               key={member.id} 
+                              onClick={(e) => handleMemberClick(e, member)}
                               onContextMenu={(e) => handleMemberContextMenu(e, member)}
                               className="
                                 group relative
@@ -225,8 +289,19 @@ export default function ServerMemberList({ onClose }) {
 
                                     {/* Status Text */}
                                     <div className="text-[11px] truncate text-[#949ba4] group-hover:text-[#b5bac1] transition-colors min-h-[16px] flex items-center">
-                                      {member.customStatus ? (
-                                        <span>{member.customStatus}</span>
+                                      {member.gameActivity && member.presence !== 'offline' ? (
+                                        <span className="flex items-center gap-1.5 text-green-400 group/game relative">
+                                          <GameIcon
+                                            iconUrl={member.gameActivity.iconUrl}
+                                            icon={member.gameActivity.icon}
+                                            name={member.gameActivity.name}
+                                            className="w-3.5 h-3.5 object-cover rounded-[2px]"
+                                          />
+                                          <span className="truncate max-w-[120px]">{member.gameActivity.name}</span>
+                                          <GameDuration startTime={member.gameActivity.startedAt} />
+                                        </span>
+                                      ) : member.customStatus ? (
+                                        <span style={{ color: member.customStatusColor || "inherit" }}>{member.customStatus}</span>
                                       ) : member.presence === 'idle' ? (
                                         <span className="flex items-center gap-1 text-amber-500/80">
                                           <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
@@ -252,6 +327,15 @@ export default function ServerMemberList({ onClose }) {
           y={contextMenu.y}
           member={contextMenu.member}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Profile Modal */}
+      {profileModal && (
+        <UserProfileModal
+          member={profileModal.member}
+          position={profileModal.position}
+          onClose={() => setProfileModal(null)}
         />
       )}
     </div>

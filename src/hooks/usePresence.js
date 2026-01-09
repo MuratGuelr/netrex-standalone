@@ -44,9 +44,9 @@ export function usePresence() {
   const cleanupRegisteredRef = useRef(false);
   const heartbeatIntervalRef = useRef(null);
 
-  // Update presence in Firebase
+  // Update presence in Firebase (both member and user collections)
   const updatePresence = useCallback(async (status) => {
-    if (!user?.uid || !currentServer?.id) return;
+    if (!user?.uid) return;
     
     // Debounce - avoid too many writes
     const now = Date.now();
@@ -63,18 +63,26 @@ export function usePresence() {
     currentStatusRef.current = status;
 
     try {
-      const memberRef = doc(db, 'servers', currentServer.id, 'members', user.uid);
-      await updateDoc(memberRef, {
+      // SADECE users koleksiyonunu güncelle (Merkezi Yönetim)
+      const updateData = {
         presence: status,
         lastSeen: serverTimestamp()
-      });
+      };
+
+      // Eğer kullanıcı gizleniyorsa (offline/invisible), oyun aktivitesini de temizle
+      if (status === 'offline' || status === 'invisible') {
+        updateData.gameActivity = null;
+      }
+
+      await updateDoc(doc(db, 'users', user.uid), updateData);
+      
       console.log(`👤 Presence updated: ${status}`);
     } catch (error) {
       console.error('Failed to update presence:', error);
     }
   }, [user?.uid, currentServer?.id, userStatus]);
 
-  // Update lastSeen on all servers (heartbeat)
+  // Update users collection only (Optimized Heartbeat)
   const sendHeartbeat = useCallback(async () => {
     const currentUser = useAuthStore.getState().user;
     const { userStatus: currentStatus } = useSettingsStore.getState();
@@ -85,24 +93,20 @@ export function usePresence() {
     }
     
     try {
-      const { servers } = useServerStore.getState();
-      if (!servers || servers.length === 0) return;
+      // SADECE users koleksiyonunu güncelle
+      // (Böylece 10 sunucuya üye olan biri için 11 yazma yerine sadece 1 yazma işlemi yapılır)
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        lastSeen: serverTimestamp(),
+        presence: currentStatus || 'online'
+      });
       
-      // Update lastSeen on all servers
-      const updatePromises = servers.map(server => 
-        updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
-          lastSeen: serverTimestamp()
-        }).catch(() => {}) // Silently ignore errors for heartbeat
-      );
-      
-      await Promise.allSettled(updatePromises);
-      console.log('💓 Heartbeat sent to all servers');
+      console.log('💓 Heartbeat sent (Optimized)');
     } catch (error) {
       // Silently ignore heartbeat errors
     }
   }, []);
 
-  // Set offline on all servers when app closes
+  // Set offline on all servers AND users collection when app closes
   const setOfflineOnAllServers = useCallback(async () => {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser?.uid) {
@@ -112,24 +116,17 @@ export function usePresence() {
     
     try {
       const { servers } = useServerStore.getState();
-      if (!servers || servers.length === 0) {
-        console.log('👤 No servers to update');
-        return;
-      }
+      const updatePromises = [];
       
-      console.log(`👤 Setting offline status on ${servers.length} servers...`);
+      // Update all servers
+      // SADECE users koleksiyonunu güncelle (Tüm sunucular buradan okuyacak)
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        presence: 'offline',
+        lastSeen: serverTimestamp(),
+        gameActivity: null 
+      });
       
-      const updatePromises = servers.map(server => 
-        updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
-          presence: 'offline',
-          lastSeen: serverTimestamp()
-        }).catch((err) => {
-          console.warn(`Failed to set offline on server ${server.id}:`, err.message);
-        })
-      );
-      
-      await Promise.allSettled(updatePromises);
-      console.log('👤 Presence set to offline on all servers');
+      console.log('👤 Presence set to offline (Centrally)');
     } catch (error) {
       console.error('Failed to set offline status:', error);
     }
@@ -137,10 +134,10 @@ export function usePresence() {
 
   // Handle userStatus changes from settingsStore (driven by useIdleDetection or manual toggle)
   useEffect(() => {
-    if (user?.uid && currentServer?.id) {
+    if (user?.uid) {
       updatePresence(userStatus);
     }
-  }, [userStatus, user?.uid, currentServer?.id, updatePresence]);
+  }, [userStatus, user?.uid, updatePresence]);
 
   // Heartbeat interval - keeps lastSeen fresh while user is active
   useEffect(() => {

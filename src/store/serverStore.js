@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import {
   collection,
   query,
@@ -31,8 +32,10 @@ export const useServerStore = create((set, get) => ({
   channels: [], // Channels of current server
   roles: [], // Roles of current server
   members: [], // Members of current server
+  badges: [], // Badges of current server (sunucu bazlı rozetler)
   isLoading: false,
   error: null,
+  isLeavingServer: false, // Flag to prevent "kicked" notification when user leaves voluntarily
 
   voiceStates: {}, // Map of channelId -> list of users in that channel
   
@@ -41,6 +44,7 @@ export const useServerStore = create((set, get) => ({
   _channelListener: null,
   _roleListener: null,
   _memberListener: null,
+  _badgeListener: null,
   _voiceStateListener: null,
   _lastVoiceIds: "",
 
@@ -83,10 +87,11 @@ export const useServerStore = create((set, get) => ({
     if (prevServerId === serverId) return;
 
     // Cleanup previous server listeners
-    const { _channelListener, _roleListener, _memberListener, _inviteListener, _voiceStateListener } = get();
+    const { _channelListener, _roleListener, _memberListener, _badgeListener, _inviteListener, _voiceStateListener } = get();
     if (_channelListener) _channelListener();
     if (_roleListener) _roleListener();
     if (_memberListener) _memberListener();
+    if (_badgeListener) _badgeListener();
     if (_inviteListener) _inviteListener();
     if (_voiceStateListener) _voiceStateListener();
 
@@ -221,11 +226,21 @@ export const useServerStore = create((set, get) => ({
         console.error("Members listener error:", error);
       });
 
+      // Badges Listener
+      const badgesQ = query(collection(db, "servers", serverId, "badges"));
+      const unsubBadges = onSnapshot(badgesQ, (snapshot) => {
+        const badges = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        set({ badges });
+      }, (error) => {
+        console.error("Badges listener error:", error);
+      });
+
       set({
         isLoading: false,
         _channelListener: unsubChannels,
         _roleListener: unsubRoles,
-        _memberListener: unsubMembers
+        _memberListener: unsubMembers,
+        _badgeListener: unsubBadges
       });
 
     } catch (error) {
@@ -271,10 +286,19 @@ export const useServerStore = create((set, get) => ({
       await updateDoc(serverRef, { defaultRoleId: roleRef.id });
 
       // 4. Add Creator as Member (with displayName and photoURL)
+      // Firebase Auth'tan güncel displayName'i al (users collection'dan daha güncel olabilir)
+      const currentAuthUser = auth.currentUser;
+      const displayName = 
+        userData.displayName && userData.displayName !== "User" 
+          ? userData.displayName 
+          : userData.name && userData.name !== "User"
+            ? userData.name
+            : currentAuthUser?.displayName || "User";
+      
       await setDoc(doc(db, "servers", serverId, "members", userId), {
         id: userId,
         userId,
-        displayName: userData.displayName || userData.name || "User",
+        displayName: displayName,
         photoURL: userData.photoURL || null,
         joinedAt: serverTimestamp(),
         roles: [roleRef.id], // Give default role
@@ -502,6 +526,9 @@ export const useServerStore = create((set, get) => ({
       try {
           if (!serverId || !userId) return;
 
+          // Set flag to prevent "kicked" notification
+          set({ isLeavingServer: true });
+
           // Remove user from 'members' subcollection
           await deleteDoc(doc(db, "servers", serverId, "members", userId));
 
@@ -513,9 +540,15 @@ export const useServerStore = create((set, get) => ({
           if (get().currentServer?.id === serverId) {
               get().selectServer(null);
           }
+          
+          // Reset flag after a short delay (allow AppShell effect to run)
+          setTimeout(() => set({ isLeavingServer: false }), 500);
+          
+          toast.success("Sunucudan ayrıldınız.", { id: 'leave-notification' });
           return { success: true };
       } catch (error) {
           console.error("Leave server failed:", error);
+          set({ isLeavingServer: false }); // Reset flag on error
           return { success: false, error: error.message };
       }
   },
@@ -616,14 +649,21 @@ export const useServerStore = create((set, get) => ({
        }
        
        const userDoc = await getDoc(doc(db, "users", userId));
-       const userData = userDoc.exists() ? userDoc.data() : { displayName: "User" };
+       const userData = userDoc.exists() ? userDoc.data() : {};
+       
+       // Firebase Auth'tan güncel displayName'i al (users collection'dan daha güncel olabilir)
+       const currentAuthUser = auth.currentUser;
+       const displayName = 
+         userData.displayName && userData.displayName !== "User" 
+           ? userData.displayName 
+           : currentAuthUser?.displayName || "User";
        
        const serverDoc = await getDoc(doc(db, "servers", serverId));
        const defaultRoleId = serverDoc.data()?.defaultRoleId;
 
        await setDoc(memberRef, {
            id: userId,
-           displayName: userData.displayName || "User",
+           displayName: displayName, // Hesaplanan displayName'i kullan
            photoURL: userData.photoURL || null,
            roles: defaultRoleId ? [defaultRoleId] : [],
            joinedAt: serverTimestamp()
@@ -764,14 +804,101 @@ export const useServerStore = create((set, get) => ({
       }
   },
 
+  // --- BADGE MANAGEMENT ---
+  
+  // Create a new badge for the server
+  createBadge: async (serverId, badgeData) => {
+    try {
+      const badgeRef = await addDoc(collection(db, "servers", serverId, "badges"), {
+        ...badgeData,
+        createdAt: serverTimestamp(),
+        createdBy: auth.currentUser?.uid
+      });
+      return { success: true, badgeId: badgeRef.id };
+    } catch (error) {
+      console.error("Create badge failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Update an existing badge
+  updateBadge: async (serverId, badgeId, data) => {
+    try {
+      await updateDoc(doc(db, "servers", serverId, "badges", badgeId), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Update badge failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Delete a badge
+  deleteBadge: async (serverId, badgeId) => {
+    try {
+      // First, remove this badge from all members who have it
+      const membersSnapshot = await getDocs(collection(db, "servers", serverId, "members"));
+      const updatePromises = [];
+      
+      membersSnapshot.docs.forEach(memberDoc => {
+        const memberData = memberDoc.data();
+        if (memberData.badges && memberData.badges.includes(badgeId)) {
+          updatePromises.push(
+            updateDoc(doc(db, "servers", serverId, "members", memberDoc.id), {
+              badges: arrayRemove(badgeId)
+            })
+          );
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Then delete the badge itself
+      await deleteDoc(doc(db, "servers", serverId, "badges", badgeId));
+      return { success: true };
+    } catch (error) {
+      console.error("Delete badge failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Assign a badge to a member
+  assignBadgeToMember: async (serverId, memberId, badgeId) => {
+    try {
+      await updateDoc(doc(db, "servers", serverId, "members", memberId), {
+        badges: arrayUnion(badgeId)
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Assign badge failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Remove a badge from a member
+  removeBadgeFromMember: async (serverId, memberId, badgeId) => {
+    try {
+      await updateDoc(doc(db, "servers", serverId, "members", memberId), {
+        badges: arrayRemove(badgeId)
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Remove badge failed:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Cleanup
   reset: () => {
-    const { _serverListener, _channelListener, _roleListener, _memberListener, _voiceStateListener } = get();
+    const { _serverListener, _channelListener, _roleListener, _memberListener, _badgeListener, _voiceStateListener } = get();
     if (_serverListener) _serverListener();
     if (_channelListener) _channelListener();
     if (_roleListener) _roleListener();
     if (_memberListener) _memberListener();
+    if (_badgeListener) _badgeListener();
     if (_voiceStateListener) _voiceStateListener();
-    set({ servers: [], currentServer: null, channels: [], roles: [], members: [], voiceStates: {} });
+    set({ servers: [], currentServer: null, channels: [], roles: [], members: [], badges: [], voiceStates: {}, isLeavingServer: false });
   }
 }));

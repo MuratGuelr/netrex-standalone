@@ -88,4 +88,13 @@ contextBridge.exposeInMainWorld("netrex", {
   // Window state changes (minimize, hide, show, focus)
   onWindowStateChanged: (callback) =>
     ipcRenderer.on("window-state-changed", (_, state) => callback(state)),
+
+  // --- OYUN ALGILAMA ---
+  startGameDetection: () => ipcRenderer.invoke("start-game-detection"),
+  stopGameDetection: () => ipcRenderer.invoke("stop-game-detection"),
+  getCurrentGame: () => ipcRenderer.invoke("get-current-game"),
+  onGameActivityChanged: (callback) => {
+    ipcRenderer.removeAllListeners("game-activity-changed");
+    ipcRenderer.on("game-activity-changed", (_, game) => callback(game));
+  },
 });

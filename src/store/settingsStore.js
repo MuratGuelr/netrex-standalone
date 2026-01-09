@@ -15,6 +15,7 @@ export const useSettingsStore = create(
       
       // Global Modal State
       showSettingsModal: false,
+      settingsScrollToSection: null, // "profileInfo" etc. - Settings modal açıldığında bu bölüme scroll edilir
 
       // YENİ: KAMERA İZNİ (Varsayılan Açık)
       enableCamera: true,
@@ -74,6 +75,9 @@ export const useSettingsStore = create(
       videoResolution: "240p", // "240p" | "360p" | "480p"
       videoFrameRate: 18, // 15 | 18 | 24
 
+      // Kontrol Çubuğu Ayarları
+      controlBarHidden: false, // Kontrol çubuğu gizli mi?
+
       // Online/Offline durumu
       userStatus: "online", // "online" | "idle" | "offline" | "invisible"
       isAutoIdle: false, // Otomatik idle modu mu (pencere arka planda veya inaktivite)?
@@ -88,6 +92,9 @@ export const useSettingsStore = create(
       toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
       toggleDeaf: () => set((state) => ({ isDeafened: !state.isDeafened })),
       setSettingsOpen: (isOpen) => set({ showSettingsModal: isOpen }),
+      setSettingsScrollToSection: (section) => set({ settingsScrollToSection: section }),
+      // Settings modal'ı belirli bir bölüme scroll ederek aç
+      openSettingsToSection: (section) => set({ showSettingsModal: true, settingsScrollToSection: section }),
 
       // YENİ: KAMERA İZNİ TOGGLE
       toggleEnableCamera: () =>
@@ -223,6 +230,9 @@ export const useSettingsStore = create(
       setCameraMirrorEffect: (enabled) => set({ cameraMirrorEffect: enabled }),
       setVideoResolution: (resolution) => set({ videoResolution: resolution }),
       setVideoFrameRate: (fps) => set({ videoFrameRate: fps }),
+
+      // Kontrol Çubuğu Ayarları
+      toggleControlBarHidden: () => set((state) => ({ controlBarHidden: !state.controlBarHidden })),
 
       // Online/Offline ayarları
       // Online/Offline ayarları

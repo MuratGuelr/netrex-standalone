@@ -5,6 +5,21 @@ export const styleInjection = `
   .volume-slider { -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; outline: none; }
   .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; cursor: pointer; }
   
+  /* Control Bar Toggle Button Animation */
+  @keyframes fadeScaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-fadeScaleIn {
+    animation: fadeScaleIn 0.3s ease-out 0.15s both;
+  }
+  
   /* Bottom Controls Animations */
   @keyframes ripple {
     0% {

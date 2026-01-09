@@ -108,6 +108,7 @@ const Avatar = forwardRef(function Avatar({
           
           ${speaking ? "ring-2 ring-nds-success animate-nds-speaking" : ""}
           ${muted || deafened ? "opacity-50 grayscale" : ""}
+          ${className.includes("ring-") ? className.split(" ").filter(c => c.includes("ring")).join(" ") : ""}
         `}
         style={{ backgroundColor: !src ? avatarColor : undefined }}
       >

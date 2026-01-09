@@ -568,6 +568,29 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
+/* Horizontal slide animations for chat view */
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutToRight {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
 
 /* Page Enter Animation - Clean fade in (no slide) */
 @keyframes ndsPageEnter {

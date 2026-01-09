@@ -73,7 +73,22 @@ export const useAuthStore = create((set) => ({
     try {
       const result = await signInAnonymously(auth);
       if (username) {
+        // Önce Firebase Auth profile'ını güncelle
         await updateProfile(result.user, { displayName: username });
+        
+        // Sonra Firestore'a da manuel olarak kaydet (onAuthStateChanged'i bekleme)
+        // Bu önemli çünkü onAuthStateChanged, updateProfile tamamlanmadan önce tetiklenebilir
+        try {
+          await setDoc(doc(db, "users", result.user.uid), {
+            uid: result.user.uid,
+            displayName: username, // Kullanıcının girdiği ismi kullan
+            email: result.user.email,
+            photoURL: result.user.photoURL,
+            lastSeen: serverTimestamp()
+          }, { merge: true });
+        } catch (firestoreError) {
+          console.error("Error saving anonymous user to Firestore:", firestoreError);
+        }
       }
       // UI hemen güncellensin diye manuel set ediyoruz
       const user = { ...result.user, displayName: username };

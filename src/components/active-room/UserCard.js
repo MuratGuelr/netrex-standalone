@@ -174,7 +174,7 @@ export default function UserCard({
           : isMuted || isDeafened
           ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
           : '0 4px 24px rgba(0,0,0,0.3)',
-        overflow: "visible",
+        overflow: "hidden",
         transition: 'border-color 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), background 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
       }}
     >

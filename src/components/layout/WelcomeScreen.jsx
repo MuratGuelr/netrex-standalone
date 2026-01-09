@@ -70,7 +70,7 @@ export default function WelcomeScreen({
 
   return (
     <div className={`
-      relative flex-1 flex flex-col items-center justify-center p-8 overflow-hidden
+      relative h-full w-full flex flex-col items-center justify-center p-8 overflow-hidden
       bg-gradient-to-br from-[#111214] via-[#16171a] to-[#0f1012]
       ${className}
     `}>

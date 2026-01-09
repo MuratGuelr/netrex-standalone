@@ -15,7 +15,11 @@ import Titlebar from "./Titlebar";
 import { Users, ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
+import { useSettingsStore } from "@/src/store/settingsStore";
+import SettingsModal from "@/src/components/SettingsModal";
 import { toast } from "sonner";
+import { useGameActivity } from "@/src/hooks/useGameActivity";
+
 
 export default function AppShell({ 
   children, 
@@ -31,7 +35,11 @@ export default function AppShell({
   const [isElectron, setIsElectron] = useState(false);
   const router = useRouter();
   const { user } = useAuthStore();
-  const { currentServer, members, isLoading } = useServerStore();
+  const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
+  const { showSettingsModal, setSettingsOpen } = useSettingsStore();
+  
+  // 🎮 Oyun Algılama - Firebase'e sadece oyun başlayınca/bitince yazıyor
+  const { currentGame } = useGameActivity();
 
   // Real-time Kick/Ban Enforcement
   useEffect(() => {
@@ -40,7 +48,8 @@ export default function AppShell({
     // 2. Loading is finished
     // 3. We have members loaded (to avoid false positives during initial load)
     // 4. We have a logged in user
-    if (currentServer && !isLoading && members.length > 0 && user) {
+    // 5. User is NOT voluntarily leaving (isLeavingServer flag)
+    if (currentServer && !isLoading && members.length > 0 && user && !isLeavingServer) {
         const isMember = members.some(m => m.id === user.uid || m.userId === user.uid);
         
         // If user is not in the member list AND is not the owner (safety check)
@@ -51,7 +60,7 @@ export default function AppShell({
              toast.error("Bu sunucudan uzaklaştırıldınız.", { id: 'kick-notification' });
         }
     }
-  }, [currentServer, members, user, isLoading, router]);
+  }, [currentServer, members, user, isLoading, isLeavingServer, router]);
 
   useEffect(() => {
     setIsElectron(typeof window !== "undefined" && !!window.netrex);
@@ -175,6 +184,12 @@ export default function AppShell({
 
         </main>
       </div>
+      
+      {/* Global Settings Modal - Accessible from anywhere in the app */}
+      <SettingsModal 
+        isOpen={showSettingsModal} 
+        onClose={() => setSettingsOpen(false)} 
+      />
     </div>
   );
 }

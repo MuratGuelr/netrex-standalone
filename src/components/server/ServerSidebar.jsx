@@ -31,7 +31,7 @@ import ChannelSettingsModal from "./ChannelSettingsModal";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 
-export default function ServerSidebar({ onJoinChannel }) {
+export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   const { currentServer, channels, deleteServer, members, canUserViewChannel, voiceStates } = useServerStore();
   const { user } = useAuthStore();
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
@@ -224,7 +224,7 @@ export default function ServerSidebar({ onJoinChannel }) {
            <div className="space-y-1">
              {textChannels.map(channel => {
                 const hasUnread = unreadCounts[channel.id] > 0;
-                const isActive = currentChannel?.id === channel.id && showChatPanel;
+                const isActive = (currentChannel?.id === channel.id && showChatPanel) || activeTextChannelId === channel.id;
                 
                 return (
                  <div

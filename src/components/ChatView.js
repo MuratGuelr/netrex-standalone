@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback, memo, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
-import { useRoomContext } from "@livekit/components-react";
+import { useOptionalRoomContext } from "@/src/hooks/useOptionalRoomContext";
 import { RoomEvent } from "livekit-client";
 import { useChatStore } from "@/src/store/chatStore";
 import {
@@ -166,7 +166,7 @@ export default function ChatView({ channelId, username, userId }) {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const room = useRoomContext();
+  const room = useOptionalRoomContext();
   const containerRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1003,11 +1003,69 @@ export default function ChatView({ channelId, username, userId }) {
           className="flex-1 overflow-y-auto scrollbar-thin flex flex-col px-4 relative"
         >
           {isLoading ? (
-            <div className="flex-1 flex items-center justify-center text-white/60 text-sm gap-3 flex-col">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center backdrop-blur-sm">
-                <Loader2 className="animate-spin text-indigo-400" size={24} />
-              </div>
-              <span className="font-medium">Mesajlar yükleniyor...</span>
+            /* SKELETON LOADING - Tüm ekranı kaplayan gerçekçi mesaj yüklenme animasyonu */
+            <div className="flex flex-col h-full py-6 animate-in fade-in duration-300 overflow-hidden">
+              {/* Skeleton Messages - Ekranı dolduracak kadar */}
+              {[
+                { isSequence: false, nameWidth: 85, textWidth: 75, hasSecondLine: true, secondWidth: 45 },
+                { isSequence: true, nameWidth: 0, textWidth: 40, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: false, nameWidth: 110, textWidth: 85, hasSecondLine: true, secondWidth: 30 },
+                { isSequence: false, nameWidth: 70, textWidth: 55, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: true, nameWidth: 0, textWidth: 65, hasSecondLine: true, secondWidth: 25 },
+                { isSequence: false, nameWidth: 95, textWidth: 90, hasSecondLine: true, secondWidth: 50 },
+                { isSequence: true, nameWidth: 0, textWidth: 35, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: false, nameWidth: 75, textWidth: 60, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: true, nameWidth: 0, textWidth: 80, hasSecondLine: true, secondWidth: 40 },
+                { isSequence: false, nameWidth: 100, textWidth: 70, hasSecondLine: true, secondWidth: 35 },
+                { isSequence: false, nameWidth: 65, textWidth: 45, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: true, nameWidth: 0, textWidth: 55, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: false, nameWidth: 90, textWidth: 95, hasSecondLine: true, secondWidth: 55 },
+                { isSequence: true, nameWidth: 0, textWidth: 30, hasSecondLine: false, secondWidth: 0 },
+                { isSequence: false, nameWidth: 80, textWidth: 65, hasSecondLine: true, secondWidth: 28 },
+              ].map((skeleton, i) => (
+                <div key={i} className={`flex pr-4 pl-[72px] relative w-full ${!skeleton.isSequence ? 'mt-[17px]' : 'mt-[2px]'}`}>
+                  {/* Avatar Skeleton */}
+                  {!skeleton.isSequence && (
+                    <div className="absolute left-4 w-[50px] flex justify-start">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/[0.08] to-white/[0.04] animate-pulse" />
+                    </div>
+                  )}
+                  
+                  {/* Content Skeleton */}
+                  <div className="flex-1 min-w-0">
+                    {/* Username & Time Skeleton */}
+                    {!skeleton.isSequence && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <div 
+                          className="h-4 rounded-md bg-gradient-to-r from-white/[0.1] to-white/[0.05] animate-pulse"
+                          style={{ width: `${skeleton.nameWidth}px` }}
+                        />
+                        <div className="h-3 w-10 rounded-md bg-white/[0.05] animate-pulse" style={{ animationDelay: '150ms' }} />
+                      </div>
+                    )}
+                    
+                    {/* Message Text Skeleton */}
+                    <div className="space-y-1.5">
+                      <div 
+                        className="h-4 rounded-md bg-gradient-to-r from-white/[0.08] to-white/[0.03] animate-pulse"
+                        style={{ 
+                          width: `${skeleton.textWidth}%`,
+                          animationDelay: `${i * 50}ms`
+                        }}
+                      />
+                      {skeleton.hasSecondLine && (
+                        <div 
+                          className="h-4 rounded-md bg-gradient-to-r from-white/[0.06] to-white/[0.02] animate-pulse"
+                          style={{ 
+                            width: `${skeleton.secondWidth}%`,
+                            animationDelay: `${i * 50 + 25}ms`
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : messages.length === 0 ? (
             /* BOŞ KANAL KARŞILAMA EKRANI */

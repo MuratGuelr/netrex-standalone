@@ -45,6 +45,8 @@ import {
   CameraOff,
   X,
   Maximize2,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 import ChatView from "./ChatView";
@@ -271,7 +273,10 @@ function SettingsUpdater() {
     noiseSuppression,
     echoCancellation,
     autoGainControl,
-    noiseSuppressionMode, // EKLENDI
+    noiseSuppressionMode,
+    videoResolution, // Kamera çözünürlüğü
+    videoFrameRate, // Kamera FPS
+    videoCodec, // Video codec
   } = useSettingsStore();
 
   const prevSettingsRef = useRef({
@@ -280,7 +285,9 @@ function SettingsUpdater() {
     noiseSuppression,
     echoCancellation,
     autoGainControl,
-    noiseSuppressionMode, // EKLENDI
+    noiseSuppressionMode,
+    videoResolution,
+    videoFrameRate,
   });
   const isUpdatingRef = useRef(false);
 
@@ -299,6 +306,8 @@ function SettingsUpdater() {
         echoCancellation,
         autoGainControl,
         noiseSuppressionMode,
+        videoResolution,
+        videoFrameRate,
       };
       return;
     }
@@ -311,7 +320,11 @@ function SettingsUpdater() {
       prevSettingsRef.current.autoGainControl !== autoGainControl ||
       prevSettingsRef.current.noiseSuppressionMode !== noiseSuppressionMode;
 
-    const videoSettingsChanged = prevSettingsRef.current.videoId !== videoId;
+    // Video ayarları değişikliği - cihaz, çözünürlük veya FPS değişirse
+    const videoSettingsChanged = 
+      prevSettingsRef.current.videoId !== videoId ||
+      prevSettingsRef.current.videoResolution !== videoResolution ||
+      prevSettingsRef.current.videoFrameRate !== videoFrameRate;
 
     if (
       (!audioSettingsChanged && !videoSettingsChanged) ||
@@ -324,6 +337,8 @@ function SettingsUpdater() {
         echoCancellation,
         autoGainControl,
         noiseSuppressionMode,
+        videoResolution,
+        videoFrameRate,
       };
       return;
     }
@@ -409,14 +424,23 @@ function SettingsUpdater() {
           if (videoPublication?.track) {
             const oldTrack = videoPublication.track;
 
+            // Çözünürlük ayarlarını belirle (kullanıcı ayarlarına göre)
+            const resolutionMap = {
+              "240p": { width: 426, height: 240, bitrate: 150000 },
+              "360p": { width: 640, height: 360, bitrate: 300000 },
+              "480p": { width: 854, height: 480, bitrate: 500000 },
+            };
+            const selectedResolution = resolutionMap[videoResolution] || resolutionMap["240p"];
+            const selectedFps = videoFrameRate || 18;
+
             // Yeni constraint'lerle video stream'i al
             const constraints = {
               video: {
                 deviceId:
                   videoId !== "default" ? { exact: videoId } : undefined,
-                width: { ideal: 320, max: 320 },
-                height: { ideal: 240, max: 240 },
-                frameRate: { ideal: 18, max: 18 },
+                width: { ideal: selectedResolution.width, max: selectedResolution.width },
+                height: { ideal: selectedResolution.height, max: selectedResolution.height },
+                frameRate: { ideal: selectedFps, max: selectedFps },
               },
             };
 
@@ -440,16 +464,16 @@ function SettingsUpdater() {
                    return;
               }
 
-              // Yeni track'i publish et - Minimum bandwidth kullanımı
+              // Yeni track'i publish et - Kullanıcı ayarlarına göre
               const newPublication = await localParticipant.publishTrack(
                 newTrack,
                 {
                   source: Track.Source.Camera,
                   videoEncoding: {
-                    maxBitrate: 50000, // 50kbps (minimum bandwidth)
-                    maxFramerate: 18, // 18 fps
+                    maxBitrate: selectedResolution.bitrate,
+                    maxFramerate: selectedFps,
                   },
-                  videoCodec: "vp8",
+                  videoCodec: videoCodec || "vp8",
                   simulcast: false,
                 }
               );
@@ -471,7 +495,11 @@ function SettingsUpdater() {
               });
 
               if (process.env.NODE_ENV === "development") {
-                console.log("✅ Kamera ayarları güncellendi");
+                console.log("✅ Kamera ayarları güncellendi:", {
+                  resolution: videoResolution,
+                  fps: selectedFps,
+                  bitrate: selectedResolution.bitrate,
+                });
               }
             }
           }
@@ -487,6 +515,8 @@ function SettingsUpdater() {
           echoCancellation,
           autoGainControl,
           noiseSuppressionMode,
+          videoResolution,
+          videoFrameRate,
         };
       }
     };
@@ -501,6 +531,9 @@ function SettingsUpdater() {
     echoCancellation,
     autoGainControl,
     noiseSuppressionMode,
+    videoResolution,
+    videoFrameRate,
+    videoCodec,
   ]);
 
   return null;
@@ -1093,10 +1126,17 @@ export default function ActiveRoom({
 }) {
   const { user } = useAuthStore();
   const [token, setToken] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettingsLocal, setShowSettingsLocal] = useState(false);
   
-  // Voice State - Global Store'dan al
-  const { isMuted, isDeafened, toggleMute, toggleDeaf } = useSettingsStore();
+  // Voice State and Settings Modal - Global Store'dan al
+  const { isMuted, isDeafened, toggleMute, toggleDeaf, showSettingsModal, setSettingsOpen } = useSettingsStore();
+  
+  // Settings modal: hem lokal state hem de store'dan açılabilir
+  const showSettings = showSettingsLocal || showSettingsModal;
+  const setShowSettings = (value) => {
+    setShowSettingsLocal(value);
+    if (!value) setSettingsOpen(false); // Kapatırken store'u da sıfırla
+  };
 
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [hideIncomingVideo, setHideIncomingVideo] = useState(false);
@@ -2309,7 +2349,7 @@ function ScreenShareStage({
   activeStreamId,
 }) {
   const [showPip, setShowPip] = useState(false);
-  const { disableBackgroundEffects } = useSettingsStore();
+  const { disableBackgroundEffects, cameraMirrorEffect } = useSettingsStore();
   const pipGridRef = useRef(null);
   
 
@@ -2499,6 +2539,12 @@ function ScreenShareStage({
         <VideoTrack
           trackRef={trackRef}
           className="max-w-full max-h-full object-contain shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+          style={{
+            // Kamera track'i için ayna efekti uygula (sadece local participant ve kamera için)
+            transform: trackRef.source === Track.Source.Camera && trackRef.participant?.isLocal && cameraMirrorEffect 
+              ? 'scaleX(-1)' 
+              : undefined,
+          }}
         />
         {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && <audio ref={audioRef} autoPlay />}
 
@@ -2778,7 +2824,16 @@ function BottomControls({
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const { profileColor, enableCamera, videoId, videoResolution, videoFrameRate, videoCodec } = useSettingsStore();
+  const { 
+    profileColor, 
+    enableCamera, 
+    videoId, 
+    videoResolution, 
+    videoFrameRate, 
+    videoCodec,
+    controlBarHidden,
+    toggleControlBarHidden,
+  } = useSettingsStore();
   const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
@@ -2786,6 +2841,7 @@ function BottomControls({
   const screenShareButtonRef = useRef(null);
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
+  
   const stateRef = useRef({
     isMuted,
     isDeafened,
@@ -3580,8 +3636,32 @@ function BottomControls({
         onStart={startScreenShare}
       />
       
-      {/* Floating Control Bar Container - Absolute Overlay */}
-      <div className={`h-controls absolute bottom-0 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none pb-12 transition-all duration-300 ${!showChatPanel || chatPosition !== "left" ? "left-0" : "left-[380px]"} ${!showChatPanel || chatPosition !== "right" ? "right-0" : "right-[380px]"}`}>
+      {/* Show Toggle Button when control bar is hidden - Ultra Bright Indigo Neon */}
+      {controlBarHidden && (
+        <button
+          onClick={toggleControlBarHidden}
+          className="fixed bottom-6 right-6 z-[999] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-300 animate-fadeScaleIn group overflow-hidden"
+          title="Kontrolleri Göster"
+        >
+          {/* Glass Specular Highlight - Stronger */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-white/5 to-transparent pointer-events-none group-hover:opacity-100 transition-opacity"></div>
+          
+          {/* Inner Glow animation */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          
+          {/* Icon */}
+          <ChevronUp size={22} className="text-white drop-shadow-md relative z-10 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transition-all" strokeWidth={2.5} />
+        </button>
+      )}
+      
+      {/* Floating Control Bar Container */}
+      <div 
+        className={`h-controls absolute bottom-0 pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
+          controlBarHidden 
+            ? 'opacity-0 pointer-events-none translate-x-[calc(50vw-80px)] scale-[0.15]' 
+            : 'opacity-100 translate-x-0 scale-100'
+        } ${!showChatPanel || chatPosition !== "left" ? "left-0" : "left-[380px]"} ${!showChatPanel || chatPosition !== "right" ? "right-0" : "right-[380px]"}`}
+      >
         {/* Kontrol Butonları - Floating Glass Style */}
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 relative z-10 rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
           {/* Inner Glow */}
@@ -3717,6 +3797,18 @@ function BottomControls({
             title="Bağlantıyı Kes"
           >
             <PhoneOff size={20} className="sm:w-5 sm:h-5 relative z-10" />
+          </button>
+          
+          {/* Ayırıcı */}
+          <div className="w-px h-6 bg-white/10"></div>
+          
+          {/* Hide Button */}
+          <button
+            onClick={toggleControlBarHidden}
+            className="flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-all duration-200 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30"
+            title="Kontrolleri Gizle"
+          >
+            <ChevronDown size={16} className="text-white/40 hover:text-indigo-400 transition-colors" />
           </button>
         </div>
       </div>

@@ -2540,3 +2540,128 @@ ipcMain.handle("set-current-user-uid", (event, userUid) => {
   currentUserUid = userUid;
   return { success: true };
 });
+
+// --- OYUN ALGILAMA SİSTEMİ ---
+// Oyun listesini harici dosyadan al
+const { GAME_PROCESSES } = require('./games');
+
+// Aktif oyun durumu
+let currentGame = null;
+let gameCheckInterval = null;
+
+// Process listesini al
+async function getRunningProcesses() {
+  return new Promise((resolve, reject) => {
+    const { exec } = require("child_process");
+    // Windows'ta tasklist komutunu kullan
+    exec('tasklist /FO CSV /NH', { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+      if (error) {
+        log.error("Process listesi alınamadı:", error);
+        resolve([]);
+        return;
+      }
+      
+      // CSV formatını parse et
+      const processes = stdout
+        .split('\n')
+        .map(line => {
+          const match = line.match(/"([^"]+)"/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean);
+      
+      resolve(processes);
+    });
+  });
+}
+
+// Oyun algılama
+async function detectGame() {
+  try {
+    const processes = await getRunningProcesses();
+    
+    // Bilinen oyunları ara
+    for (const processName of processes) {
+      const game = GAME_PROCESSES[processName];
+      if (game) {
+        return { processName, ...game };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    log.error("Oyun algılama hatası:", error);
+    return null;
+  }
+}
+
+// Oyun durumu değişikliği kontrolü
+async function checkGameStatus() {
+  const detectedGame = await detectGame();
+  
+  // Durum değişti mi?
+  const previousGame = currentGame;
+  const gameChanged = 
+    (previousGame === null && detectedGame !== null) ||
+    (previousGame !== null && detectedGame === null) ||
+    (previousGame !== null && detectedGame !== null && previousGame.processName !== detectedGame.processName);
+  
+  if (gameChanged) {
+    currentGame = detectedGame;
+    
+    // Renderer'a bildir
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("game-activity-changed", currentGame);
+      log.info("Oyun durumu değişti:", currentGame ? currentGame.name : "Yok");
+    }
+  }
+}
+
+// Oyun algılama başlat (5 saniyede bir kontrol)
+function startGameDetection() {
+  if (gameCheckInterval) return;
+  
+  // İlk kontrol
+  checkGameStatus();
+  
+  // Periyodik kontrol (5 saniye - lokal kontrol, Firebase'e yazmıyor)
+  gameCheckInterval = setInterval(checkGameStatus, 5000);
+  log.info("Oyun algılama başlatıldı");
+}
+
+// Oyun algılama durdur
+function stopGameDetection() {
+  if (gameCheckInterval) {
+    clearInterval(gameCheckInterval);
+    gameCheckInterval = null;
+    log.info("Oyun algılama durduruldu");
+  }
+}
+
+// IPC Handlers for game detection
+ipcMain.handle("start-game-detection", () => {
+  startGameDetection();
+  return { success: true };
+});
+
+ipcMain.handle("stop-game-detection", () => {
+  stopGameDetection();
+  return { success: true };
+});
+
+ipcMain.handle("get-current-game", async () => {
+  const game = await detectGame();
+  return game;
+});
+
+// Uygulama hazır olduğunda oyun algılamayı otomatik başlat
+app.on("ready", () => {
+  setTimeout(() => {
+    startGameDetection();
+  }, 5000); // 5 saniye bekle, uygulama tam yüklensin
+});
+
+// Uygulama kapanırken durdur
+app.on("before-quit", () => {
+  stopGameDetection();
+});
