@@ -1227,3 +1227,20 @@ body.graphics-quality-low .glass-modal {
   background: #1e1f22 !important;
   border: 1px solid #313338 !important;
 }
+
+/* GPU Hızlandırma - Performans Yaması */
+.backdrop-blur-xl, 
+.backdrop-blur-md, 
+.animate-pulse {
+  /* Bu komut tarayıcıyı render işlemini GPU'ya vermeye zorlar */
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* Animasyonları devre dışı bırakma ayarı için (zaten js ile eklemişsin ama css levelinde de olsun) */
+body.disable-animations * {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+}

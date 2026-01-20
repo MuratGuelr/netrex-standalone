@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -75,7 +75,51 @@ import PipGrid from "./active-room/PipGrid";
 // --- STYLES ---
 // Styles moved to active-room/ActiveRoomStyles.js
 
-// --- MIKROFON YÖNETİCİSİ ---
+// 1. Statik Arka Plan (Sürekli render olmasın diye memoize edildi)
+const MemoizedBackground = React.memo(({ disableEffects }) => {
+  if (disableEffects) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Animasyonları azalttık, static render */}
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/[0.04] rounded-full blur-[100px]" />
+      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/[0.03] rounded-full blur-[80px]" />
+    </div>
+  );
+});
+
+// 2. İzole Edilmiş Mikrofon Yöneticisi
+const MemoizedMicrophoneManager = React.memo(() => {
+  const audioTracks = useTracks([Track.Source.Microphone]);
+  const { userVolumes } = useSettingsStore();
+
+  return (
+    <>
+      {audioTracks.map((trackRef) => {
+        const isRemote = !trackRef.participant.isLocal;
+        const volumePercent = isRemote ? userVolumes[trackRef.participant.identity] ?? 100 : undefined;
+        
+        // Hesaplamayı render içinde yap, component dışında değil
+        const volume = volumePercent !== undefined
+            ? volumePercent === 0
+              ? 0
+              : volumePercent <= 100
+              ? Math.pow(volumePercent / 100, 2.5)
+              : Math.min(1.0 - ((200 - volumePercent) / 100) * 0.2, 1.0)
+            : undefined;
+
+        return (
+          <AudioTrack
+            key={trackRef.publication.trackSid}
+            trackRef={trackRef}
+            volume={isRemote ? volume : undefined}
+          />
+        );
+      })}
+    </>
+  );
+});
+
+// --- MIKROFON YÖNETİCİSİ (ESKİ - ARTIK MEMOIZED KULLANILIYOR) ---
 function MicrophoneManager() {
   const audioTracks = useTracks([Track.Source.Microphone]);
   const { userVolumes } = useSettingsStore();
@@ -1505,6 +1549,7 @@ export default function ActiveRoom({
         console.log("🔌 LiveKitRoom disconnected:", reason);
       }}
     >
+      <MemoizedBackground disableEffects={disableBackgroundEffects} />
       <GlobalChatListener
         showChatPanel={showChatPanel}
         setShowChatPanel={setShowChatPanel}
@@ -1520,7 +1565,7 @@ export default function ActiveRoom({
         userId={userId}
         username={username}
       />
-      <MicrophoneManager />
+      <MemoizedMicrophoneManager />
       <ModerationHandler 
         setServerMuted={setServerMuted} 
         setServerDeafened={setServerDeafened}

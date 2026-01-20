@@ -81,6 +81,7 @@ let authServer;
 let isRecordingMode = false;
 let tray = null; // Tray değişkeni
 let isQuitting = false; // Gerçekten çıkıyor muyuz kontrolü
+let isWindowFocused = true; // Pencere odak durumunu takip etmek için global bir değişken
 
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
@@ -2017,6 +2018,10 @@ function createWindow() {
     mainWindow.webContents.send("window-state-changed", "shown");
   });
 
+  // BU SATIRLARI EKLE: Pencere odaklanma takibi
+  mainWindow.on('focus', () => { isWindowFocused = true; });
+  mainWindow.on('blur', () => { isWindowFocused = false; });
+
   createTray();
 
   // Güncelleme kontrolü (periyodik)
@@ -2618,15 +2623,21 @@ async function checkGameStatus() {
 }
 
 // Oyun algılama başlat (5 saniyede bir kontrol)
+// Oyun algılama başlat (15 saniyede bir kontrol)
 function startGameDetection() {
   if (gameCheckInterval) return;
   
-  // İlk kontrol
-  checkGameStatus();
+  checkGameStatus(); // İlk kontrol
   
-  // Periyodik kontrol (5 saniye - lokal kontrol, Firebase'e yazmıyor)
-  gameCheckInterval = setInterval(checkGameStatus, 5000);
-  log.info("Oyun algılama başlatıldı");
+  // SÜREYİ ARTIR: 5000 yerine 15000 (15 saniye)
+  gameCheckInterval = setInterval(() => {
+    // Eğer pencere odakta değilse (alt-tab) ve zaten bir oyun bulduysak, işlemciyi yorma
+    if (!isWindowFocused && currentGame) return;
+    
+    checkGameStatus();
+  }, 15000); 
+  
+  log.info("Oyun algılama başlatıldı (Optimize Mod: 15sn)");
 }
 
 // Oyun algılama durdur
