@@ -148,7 +148,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                   {currentServer.name}
                 </h1>
                 <div className="flex items-center gap-2 mt-1">
-                    <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                    {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı */}
+                    <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                     <span className="text-xs text-[#949ba4] font-medium">
                         {voiceStates ? Object.values(voiceStates).flat().length : 0} Sesli • {members.length} Üye
                     </span>
@@ -296,7 +297,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                                     p-1.5 rounded-lg transition-colors
                                     ${isActive ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'}
                                 `}>
-                                    {isActive ? <Signal size={14} className="animate-pulse" /> : <Volume2 size={14} />}
+                                    {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı */}
+                                    {isActive ? <Signal size={14} /> : <Volume2 size={14} />}
                                 </div>
                                 <span className={`truncate font-semibold text-sm ${isActive ? 'text-white' : 'text-[#949ba4] group-hover:text-white'}`}>
                                     {channel.name}

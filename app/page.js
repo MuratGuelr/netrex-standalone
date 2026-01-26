@@ -39,8 +39,8 @@ const UpdateNotification = dynamic(() => import("@/src/components/UpdateNotifica
 const InfoModal = dynamic(() => import("@/src/components/InfoModal"));
 
 import ServerMemberList from "@/src/components/server/ServerMemberList";
-import { usePresence } from "@/src/hooks/usePresence";
-import { useIdleDetection } from "@/src/hooks/useIdleDetection";
+// 🚀 OPTIMIZATION: usePresence ve useIdleDetection import'ları kaldırıldı
+// Bu hook'lar providers.js'de çağrılıyor, burada duplicate import gereksiz
 
 export default function Home() {
   const {
@@ -72,10 +72,8 @@ export default function Home() {
   const [showJoinServerModal, setShowJoinServerModal] = useState(false);
   const [showAddServerSelectionModal, setShowAddServerSelectionModal] = useState(false);
 
-  // Initialize presence tracking (online/idle/offline status)
-  usePresence();
-  // Initialize auto-idle detection
-  useIdleDetection();
+  // 🚀 OPTIMIZATION: usePresence ve useIdleDetection kaldırıldı
+  // Bu hook'lar zaten providers.js'de çağrılıyor - duplicate çağrı CPU tüketiyordu!
 
   // Initialize Authentication
   useEffect(() => {

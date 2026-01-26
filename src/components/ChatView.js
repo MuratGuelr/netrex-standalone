@@ -630,6 +630,7 @@ export default function ChatView({ channelId, username, userId }) {
         container.scrollTop = container.scrollHeight;
 
         // Asenkron yüklemeler (resim vb.) için sürekli kontrol et
+        // 🚀 OPTIMIZED: 50ms -> 100ms (CPU kullanımını azaltır)
         const intervalId = setInterval(() => {
             if (container) {
                 // Sadece scroll aşağıda değilse müdahale et (titremeyi önlemek için)
@@ -637,7 +638,7 @@ export default function ChatView({ channelId, username, userId }) {
                     container.scrollTop = container.scrollHeight;
                 }
             }
-        }, 50);
+        }, 100);
 
         // 1 saniye sonra serbest bırak
         const timeoutId = setTimeout(() => {

@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useSettingsStore } from '@/src/store/settingsStore';
 
 /**
- * Idle Detection Hook
+ * Idle Detection Hook (OPTIMIZED)
  * 
  * Sets user as "idle" under these conditions:
  * 1. Window is minimized for more than MINIMIZED_IDLE_DELAY
@@ -12,13 +12,19 @@ import { useSettingsStore } from '@/src/store/settingsStore';
  * User returns to "online" when:
  * 1. Any activity is detected (mouse move, keypress, etc.)
  * 2. Window is restored/focused/shown
+ * 
+ * OPTIMIZATION: Mousemove events are throttled to reduce CPU usage
  */
 
 // Delay before setting idle when minimized (30 seconds)
 const MINIMIZED_IDLE_DELAY = 30 * 1000;
 
+// Throttle delay for mousemove events (CPU optimization)
+const MOUSEMOVE_THROTTLE_MS = 150;
+
 export function useIdleDetection() {
   const { setIsAutoIdle, idleTimeout } = useSettingsStore();
+  const lastMouseMoveRef = useRef(0); // Throttle için son hareket zamanı
   
   // Timeout referansları
   const inactivityTimeoutRef = useRef(null);
@@ -27,10 +33,19 @@ export function useIdleDetection() {
   const isHiddenRef = useRef(false);
 
   useEffect(() => {
-    // Aktivite olduğunda idle'dan çık
-    const handleActivity = () => {
+    // Aktivite olduğunda idle'dan çık (throttled for mousemove)
+    const handleActivity = (isMouseMove = false) => {
       // Eğer pencere gizli veya minimize ise aktivite önemli değil
       if (isHiddenRef.current || isMinimizedRef.current) return;
+      
+      // 🚀 THROTTLE: Mousemove için throttle uygula (CPU optimizasyonu)
+      if (isMouseMove) {
+        const now = Date.now();
+        if (now - lastMouseMoveRef.current < MOUSEMOVE_THROTTLE_MS) {
+          return; // Throttle süresi içinde, atla
+        }
+        lastMouseMoveRef.current = now;
+      }
       
       // Önceki inaktivite timeout'unu temizle
       if (inactivityTimeoutRef.current) {
@@ -46,6 +61,11 @@ export function useIdleDetection() {
         setIsAutoIdle(true);
       }, idleTimeout || 300000); // Varsayılan 5 dk
     };
+    
+    // Throttled mousemove handler
+    const handleMouseMove = () => handleActivity(true);
+    // Non-throttled handlers (keydown, mousedown, focus)
+    const handleOtherActivity = () => handleActivity(false);
 
     // Pencere durumu değiştiğinde
     const handleWindowStateChange = (state) => {
@@ -108,13 +128,13 @@ export function useIdleDetection() {
     };
 
     // İlk yüklemede sayacı başlat
-    handleActivity();
+    handleOtherActivity();
 
-    // Browser event listener'ları
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('mousedown', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('focus', handleActivity);
+    // Browser event listener'ları (mousemove throttled)
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('mousedown', handleOtherActivity);
+    window.addEventListener('keydown', handleOtherActivity);
+    window.addEventListener('focus', handleOtherActivity);
 
     // Electron window state listener
     if (typeof window !== 'undefined' && window.netrex?.onWindowStateChanged) {
@@ -140,10 +160,10 @@ export function useIdleDetection() {
       if (minimizedTimeoutRef.current) {
         clearTimeout(minimizedTimeoutRef.current);
       }
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('mousedown', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('focus', handleActivity);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleOtherActivity);
+      window.removeEventListener('keydown', handleOtherActivity);
+      window.removeEventListener('focus', handleOtherActivity);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       
       // Electron listener cleanup

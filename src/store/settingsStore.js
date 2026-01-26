@@ -64,7 +64,6 @@ export const useSettingsStore = create(
 
       // Performans
       hardwareAcceleration: true, // Animasyonlar için GPU zorlama
-      hardwareAcceleration: true, // Animasyonlar için GPU zorlama
       graphicsQuality: "high", // "high" | "low" | "potato"
       disableAnimations: false, // Animasyonları tamamen kapat
       disableBackgroundEffects: false, // Arka plan efektlerini kapat

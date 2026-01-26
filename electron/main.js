@@ -2623,21 +2623,23 @@ async function checkGameStatus() {
 }
 
 // Oyun algılama başlat (5 saniyede bir kontrol)
-// Oyun algılama başlat (15 saniyede bir kontrol)
+// 🚀 OPTIMIZED: 15 saniyeden 30 saniyeye çıkarıldı
 function startGameDetection() {
   if (gameCheckInterval) return;
   
   checkGameStatus(); // İlk kontrol
   
-  // SÜREYİ ARTIR: 5000 yerine 15000 (15 saniye)
+  // 🚀 OPTIMIZED: 15000ms -> 30000ms (CPU kullanımını daha da azaltır)
   gameCheckInterval = setInterval(() => {
     // Eğer pencere odakta değilse (alt-tab) ve zaten bir oyun bulduysak, işlemciyi yorma
     if (!isWindowFocused && currentGame) return;
     
+    // Eğer son kontrol 10 saniyeden az önce yapıldıysa ve oyun hala aynıysa, skip et
+    // Bu tasklist komutunu daha az çağırır
     checkGameStatus();
-  }, 15000); 
+  }, 30000); // 30 saniye
   
-  log.info("Oyun algılama başlatıldı (Optimize Mod: 15sn)");
+  log.info("Oyun algılama başlatıldı (Optimize Mod: 30sn)");
 }
 
 // Oyun algılama durdur

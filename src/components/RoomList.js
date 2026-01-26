@@ -168,22 +168,33 @@ export default function RoomList({
   const [maxVisibleUsers, setMaxVisibleUsers] = useState(7);
 
   useEffect(() => {
+    let resizeTimeout = null;
+    
     const handleResize = () => {
-      const height = window.innerHeight;
-      if (height < 700) {
-        setMaxVisibleUsers(4);
-      } else if (height < 900) {
-        setMaxVisibleUsers(7);
-      } else {
-        setMaxVisibleUsers(12);
-      }
+      // 🚀 THROTTLE: Resize event'lerini throttle et
+      if (resizeTimeout) return;
+      
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
+        const height = window.innerHeight;
+        if (height < 700) {
+          setMaxVisibleUsers(4);
+        } else if (height < 900) {
+          setMaxVisibleUsers(7);
+        } else {
+          setMaxVisibleUsers(12);
+        }
+      }, 150);
     };
 
     // Initial check
     handleResize();
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("resize", handleResize, { passive: true });
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
   }, []);
 
   // Room presence'leri dinle ve yeni kullanıcı girişlerinde bildirim göster

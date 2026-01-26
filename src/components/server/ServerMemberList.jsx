@@ -2,13 +2,12 @@
 
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { X, Users, Crown, Shield, Circle } from "lucide-react";
 import Avatar from "@/src/components/ui/Avatar";
 import MemberContextMenu from "@/src/components/server/MemberContextMenu";
 import UserProfileModal from "@/src/components/server/UserProfileModal";
-import GameDuration from "@/src/components/ui/GameDuration";
-import GameIcon from "@/src/components/ui/GameIcon";
+import MemberItem from "@/src/components/server/MemberItem";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
 import { db } from "@/src/lib/firebase";
 import { collection, query, where, onSnapshot, documentId } from "firebase/firestore";
@@ -58,20 +57,20 @@ export default function ServerMemberList({ onClose }) {
     return () => unsubscribe();
   }, [members]);
 
-  // --- Logic Kısmı (Aynı Kaldı) ---
-  const handleMemberContextMenu = (e, member) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, member });
-  };
-
-  // Handle click to open profile modal
-  const handleMemberClick = (e, member) => {
+  // Handle click to open profile modal - useCallback ile memoize
+  const handleMemberClick = useCallback((e, member) => {
     e.stopPropagation();
     setProfileModal({ 
       member, 
       position: { x: e.clientX, y: e.clientY } 
     });
-  };
+  }, []);
+
+  // Context menu handler - useCallback ile memoize  
+  const handleMemberContextMenu = useCallback((e, member) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, member });
+  }, []);
 
   const enrichedMembers = useMemo(() => {
     return members.map(member => {
@@ -231,88 +230,18 @@ export default function ServerMemberList({ onClose }) {
                         <div className="h-px bg-white/5 flex-1 max-w-[50px] group-hover/header:max-w-[100px] transition-all duration-500" />
                     </div>
                     
-                    {/* Members Grid/List */}
+                    {/* 🚀 OPTIMIZED: MemberItem component with React.memo */}
                     <div className={`space-y-1 ${isOfflineGroup ? 'opacity-60 hover:opacity-100 transition-opacity duration-300' : ''}`}>
                         {group.members.map(member => (
-                            <div 
-                              key={member.id} 
-                              onClick={(e) => handleMemberClick(e, member)}
-                              onContextMenu={(e) => handleMemberContextMenu(e, member)}
-                              className="
-                                group relative
-                                flex items-center gap-3 
-                                px-3 py-2 
-                                rounded-xl
-                                border border-transparent
-                                hover:bg-white/[0.04] hover:border-white/[0.04]
-                                active:scale-[0.98]
-                                cursor-pointer 
-                                transition-all duration-200
-                              "
-                            >
-                                {/* Active Indicator Bar (Left) */}
-                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-
-                                {/* Avatar */}
-                                <div className="relative shrink-0">
-                                  <Avatar
-                                    src={member.photoURL}
-                                    name={member.displayName}
-                                    size="md"
-                                    status={member.presence || "online"}
-                                    className={`
-                                      rounded-xl transition-transform duration-300 group-hover:scale-105 
-                                      ${roleId === 'owner' ? 'ring-2 ring-amber-500/20' : ''}
-                                    `}
-                                  />
-                                  {/* Custom Crown Overlay for Owner (Optional) */}
-                                  {roleId === 'owner' && (
-                                    <div className="absolute -top-1 -right-1 bg-[#111214] rounded-full p-0.5 border border-amber-500/30">
-                                      <Crown size={8} className="text-amber-500 fill-amber-500" />
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                {/* Info */}
-                                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                    <div className="flex items-center gap-1.5">
-                                      <span 
-                                        className="text-sm font-medium truncate text-[#dbdee1] group-hover:text-white transition-colors"
-                                        style={{ 
-                                          color: !isOfflineGroup && roleId !== 'uncategorized' ? group.role.color : undefined 
-                                        }}
-                                      >
-                                          {member.displayName}
-                                      </span>
-                                      {/* Icons based on specific flags if you have them (e.g. Bot, Verified) */}
-                                    </div>
-
-                                    {/* Status Text */}
-                                    <div className="text-[11px] truncate text-[#949ba4] group-hover:text-[#b5bac1] transition-colors min-h-[16px] flex items-center">
-                                      {member.gameActivity && member.presence !== 'offline' ? (
-                                        <span className="flex items-center gap-1.5 text-green-400 group/game relative">
-                                          <GameIcon
-                                            iconUrl={member.gameActivity.iconUrl}
-                                            icon={member.gameActivity.icon}
-                                            name={member.gameActivity.name}
-                                            className="w-3.5 h-3.5 object-cover rounded-[2px]"
-                                          />
-                                          <span className="truncate max-w-[120px]">{member.gameActivity.name}</span>
-                                          <GameDuration startTime={member.gameActivity.startedAt} />
-                                        </span>
-                                      ) : member.customStatus ? (
-                                        <span style={{ color: member.customStatusColor || "inherit" }}>{member.customStatus}</span>
-                                      ) : member.presence === 'idle' ? (
-                                        <span className="flex items-center gap-1 text-amber-500/80">
-                                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                                          Uzakta
-                                        </span>
-                                      ) : member.presence === 'dnd' ? (
-                                        <span className="text-red-400/80">Rahatsız Etme</span>
-                                      ) : null}
-                                    </div>
-                                </div>
-                            </div>
+                            <MemberItem
+                              key={member.id}
+                              member={member}
+                              roleId={roleId}
+                              roleColor={group.role.color}
+                              isOfflineGroup={isOfflineGroup}
+                              onClick={handleMemberClick}
+                              onContextMenu={handleMemberContextMenu}
+                            />
                         ))}
                     </div>
                 </div>

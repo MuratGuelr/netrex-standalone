@@ -54,7 +54,8 @@ export function useAudioActivity(participant) {
         const AC = window.AudioContext || window.webkitAudioContext;
         ctx = new AC();
         analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
+        // 🚀 OPTIMIZED: 256 -> 128 (Daha az veri işleme, yeterli hassasiyet)
+        analyser.fftSize = 128;
 
         // MediaStream oluştur ve audio track'i kontrol et
         const mediaStream = new MediaStream([track.mediaStreamTrack]);
@@ -111,8 +112,8 @@ export function useAudioActivity(participant) {
         
         // İlk kontrol
         checkActivity();
-        // 75ms aralıklarla kontrol (CPU ve tepki dengesi)
-        raf = setInterval(checkActivity, 75);
+        // 🚀 OPTIMIZED: 75ms -> 150ms (Her participant için ayrı çalıştığından toplam CPU etkisi yüksek)
+        raf = setInterval(checkActivity, 150);
       } catch (e) {
         // Audio analiz hatası - sessizce yoksay (non-critical)
         cleanup();

@@ -79,9 +79,9 @@ export default function WelcomeScreen({
         {/* Grid Deseni */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black_40%,transparent_100%)]" />
         
-        {/* Hareketli Renk Topları */}
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[80px] animate-pulse" style={{ animationDuration: '10s', animationDelay: '1s' }} />
+        {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı - CPU tüketimini azaltır */}
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] opacity-60" style={{ willChange: 'transform' }} />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[80px] opacity-60" style={{ willChange: 'transform' }} />
       </div>
 
       {/* --- Üst Sağ Kısayol Butonu --- */}
@@ -110,8 +110,8 @@ export default function WelcomeScreen({
         
         {/* 1. Hero İkonu (Pulse Efektli) */}
         <div className="relative mb-12 group">
-          {/* Dış Halka Efekti */}
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700 animate-pulse" />
+          {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı */}
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700" />
           
           <div className="
             relative w-32 h-32 
@@ -134,9 +134,9 @@ export default function WelcomeScreen({
               " 
             />
             
-            {/* Dekoratif Işıltılar */}
-            <Sparkles size={20} className="absolute -top-4 -right-4 text-purple-400 opacity-60 animate-bounce" style={{ animationDuration: '3s' }} />
-            <Music size={16} className="absolute -bottom-2 -left-2 text-cyan-400 opacity-60 animate-bounce" style={{ animationDuration: '4s' }} />
+            {/* 🚀 OPTIMIZED: animate-bounce kaldırıldı */}
+            <Sparkles size={20} className="absolute -top-4 -right-4 text-purple-400 opacity-60" />
+            <Music size={16} className="absolute -bottom-2 -left-2 text-cyan-400 opacity-60" />
           </div>
         </div>
 

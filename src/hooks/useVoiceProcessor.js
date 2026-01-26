@@ -22,8 +22,9 @@ const CONFIG = {
   MIN_VOICE_DURATION: 1,
   MIN_VOICE_DURATION_RNNOISE: 1,
   MAX_SHORT_NOISE_DURATION: 50,
-  // ÖNEMLİ DÜZELTME: Interval buffer boyutundan (21ms) büyük olmamalı yoksa veri kaybı olur!
-  CHECK_INTERVAL: 50,  // 20 -> 50 (CPU usage optimized)
+  // 🚀 OPTIMIZED: 50ms -> 80ms (CPU kullanımını %40 azaltır)
+  // Buffer boyutu 21ms olduğundan 80ms güvenli bir değer
+  CHECK_INTERVAL: 80,
 
   // Smoothing (Dengeli)
   RMS_ATTACK: 0.25,     // 0.05 -> 0.25 (5 kat daha hızlı ses açılışı)

@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * 🏗️ AppShell - Main Layout Wrapper
+ * 🏗️ AppShell - Main Layout Wrapper (OPTIMIZED)
  * NDS v2.0 - Netrex Design System
  * 
  * The root layout component that provides structure for the entire application.
  * Includes: Titlebar, Sidebar, Main Content Area
+ * 
+ * OPTIMIZATION: useGameActivity hook removed - it should only run when connected to a room
  */
 
 import { useState, useEffect } from "react";
@@ -18,7 +20,6 @@ import { useServerStore } from "@/src/store/serverStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import SettingsModal from "@/src/components/SettingsModal";
 import { toast } from "sonner";
-import { useGameActivity } from "@/src/hooks/useGameActivity";
 
 
 export default function AppShell({ 
@@ -38,8 +39,9 @@ export default function AppShell({
   const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
   const { showSettingsModal, setSettingsOpen } = useSettingsStore();
   
-  // 🎮 Oyun Algılama - Firebase'e sadece oyun başlayınca/bitince yazıyor
-  const { currentGame } = useGameActivity();
+  // 🚀 OPTIMIZATION: useGameActivity hook kaldırıldı
+  // Oyun algılama electron/main.js tarafından otomatik yapılıyor
+  // ve sadece odaya bağlanıldığında Firebase'e yazılıyor (useGameActivity.js içinde)
 
   // Real-time Kick/Ban Enforcement
   useEffect(() => {
