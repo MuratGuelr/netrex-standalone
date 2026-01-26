@@ -1,4 +1,4 @@
-# 🚀 Netrex v5.2.0 Release Notes
+# 🚀 Netrex v5.0.0 Release Notes
 
 ## 🎨 UI/UX Improvements
 
@@ -96,7 +96,7 @@ src/components/active-room/UserCard.js (new border system)
 
 ---
 
-## 📈 What's New Since v5.1.0
+## 📈 What's New Since v4.4.2
 
 | Category | Changes |
 |----------|---------|
@@ -107,6 +107,6 @@ src/components/active-room/UserCard.js (new border system)
 
 ---
 
-**Version:** 5.2.0  
+**Version:** 5.0.0  
 **Date:** 2026-01-26  
 **Developer:** MuratGuelr
