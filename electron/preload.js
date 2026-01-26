@@ -19,11 +19,16 @@ contextBridge.exposeInMainWorld("netrex", {
   onRawKeydown: (callback) =>
     ipcRenderer.on("raw-keydown", (_, event) => callback(event)),
 
-  // LiveKit - Quota Efficient Token Generation
+  // LiveKit - Quota Efficient Token Generation (v5.2 - Server Pool Support)
   // identity: Persistent unique ID (userId_deviceShort) - prevents ghost participants
   // displayName: User-friendly name shown in UI
-  getLiveKitToken: (room, identity, displayName) =>
-    ipcRenderer.invoke("get-livekit-token", room, identity, displayName),
+  // serverIndex: (Optional) Which server's credentials to use (for server pool)
+  getLiveKitToken: (room, identity, displayName, serverIndex = 0) =>
+    ipcRenderer.invoke("get-livekit-token", room, identity, displayName, serverIndex),
+  
+  // 🚀 v5.2: LiveKit server pool support
+  getLiveKitServerInfo: (serverIndex = 0) =>
+    ipcRenderer.invoke("get-livekit-server-info", serverIndex),
 
   // Utils
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),

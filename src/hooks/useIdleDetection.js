@@ -2,12 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSettingsStore } from '@/src/store/settingsStore';
 
 /**
- * Idle Detection Hook (OPTIMIZED)
+ * Idle Detection Hook (OPTIMIZED v5.2)
  * 
  * Sets user as "idle" under these conditions:
  * 1. Window is minimized for more than MINIMIZED_IDLE_DELAY
  * 2. Window is hidden (sent to tray) - immediately idle
  * 3. No user activity (mouse/keyboard) for idleTimeout duration
+ * 
+ * 🚀 IMPORTANT: User is NEVER set to idle if they are in a voice room!
+ * This is because users often have Netrex on a second monitor while gaming,
+ * and they shouldn't appear "idle" just because they're not moving the mouse in the Netrex window.
  * 
  * User returns to "online" when:
  * 1. Any activity is detected (mouse move, keypress, etc.)
@@ -20,10 +24,11 @@ import { useSettingsStore } from '@/src/store/settingsStore';
 const MINIMIZED_IDLE_DELAY = 30 * 1000;
 
 // Throttle delay for mousemove events (CPU optimization)
-const MOUSEMOVE_THROTTLE_MS = 150;
+// 🚀 OPTIMIZATION v5.1: 150ms -> 300ms for better CPU usage
+const MOUSEMOVE_THROTTLE_MS = 300;
 
 export function useIdleDetection() {
-  const { setIsAutoIdle, idleTimeout } = useSettingsStore();
+  const { setIsAutoIdle, idleTimeout, isInVoiceRoom } = useSettingsStore();
   const lastMouseMoveRef = useRef(0); // Throttle için son hareket zamanı
   
   // Timeout referansları
@@ -57,6 +62,14 @@ export function useIdleDetection() {
 
       // Yeni timeout başlat (inaktivite için)
       inactivityTimeoutRef.current = setTimeout(() => {
+        // 🚀 v5.2: Ses odasındayken ASLA idle yapma!
+        // Kullanıcı 2. ekranda oyun oynarken Netrex'e mouse ile dokunmuyor olabilir
+        // ama hala arkadaşlarıyla konuşuyordur
+        const currentVoiceRoom = useSettingsStore.getState().isInVoiceRoom;
+        if (currentVoiceRoom) {
+          console.log('🎤 User is in voice room, skipping auto-idle');
+          return;
+        }
         // Süre dolduğunda idle yap (pencere aktifken inaktivite)
         setIsAutoIdle(true);
       }, idleTimeout || 300000); // Varsayılan 5 dk
@@ -84,9 +97,12 @@ export function useIdleDetection() {
           if (minimizedTimeoutRef.current) {
             clearTimeout(minimizedTimeoutRef.current);
           }
-          
-          // Hemen idle yap
-          setIsAutoIdle(true);
+          // 🚀 v5.2: Ses odasındayken idle yapma
+          const currentVoiceRoom = useSettingsStore.getState().isInVoiceRoom;
+          if (!currentVoiceRoom) {
+            // Hemen idle yap (sadece ses odasında değilse)
+            setIsAutoIdle(true);
+          }
           break;
           
         case 'minimized':
@@ -100,7 +116,9 @@ export function useIdleDetection() {
           
           // Belirli süre sonra idle yap
           minimizedTimeoutRef.current = setTimeout(() => {
-            if (isMinimizedRef.current) {
+            // 🚀 v5.2: Ses odasındayken idle yapma
+            const currentVoiceRoom = useSettingsStore.getState().isInVoiceRoom;
+            if (isMinimizedRef.current && !currentVoiceRoom) {
               setIsAutoIdle(true);
             }
           }, MINIMIZED_IDLE_DELAY);

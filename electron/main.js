@@ -2389,26 +2389,44 @@ ipcMain.handle("open-external-link", async (e, u) => {
   if (u.startsWith("http")) await shell.openExternal(u);
 });
 /**
- * LiveKit Token Generation
+ * LiveKit Token Generation (v5.2 - Server Pool Support)
  * 
  * Parameters:
  * - room: Room name to join
  * - identity: Persistent unique identifier (userId_deviceShort)
  *             This MUST be the same for reconnections to prevent ghost participants
  * - displayName: User-friendly display name (shown in UI)
+ * - serverIndex: (Optional) Hangi sunucunun credentials'ını kullanacağı
  * 
  * Why this matters for quota efficiency:
  * - If identity changes on reconnect, LiveKit thinks it's a new participant
  * - This causes "ghost participants" that drain quota until timeout
  * - Using persistent identity forces LiveKit to replace the old connection
+ * 
+ * Server Pool:
+ * - Birden fazla LiveKit sunucusu desteklenir
+ * - .env.local'da LIVEKIT_SERVERS_0_URL, LIVEKIT_SERVERS_0_KEY, LIVEKIT_SERVERS_0_SECRET şeklinde tanımlanır
+ * - Ücretsiz dakikalar bittiğinde otomatik olarak sonraki sunucuya geçilir
  */
-ipcMain.handle("get-livekit-token", async (e, room, identity, displayName) => {
+ipcMain.handle("get-livekit-token", async (e, room, identity, displayName, serverIndex = 0) => {
   // Fallback for backwards compatibility: if displayName is not provided, use identity
   const name = displayName || identity;
   
+  // 🚀 v5.2: Server pool desteği
+  // Önce indexed server'a bak, yoksa default'u kullan
+  let apiKey = process.env[`LIVEKIT_SERVERS_${serverIndex}_KEY`] || process.env.LIVEKIT_API_KEY;
+  let apiSecret = process.env[`LIVEKIT_SERVERS_${serverIndex}_SECRET`] || process.env.LIVEKIT_API_SECRET;
+  
+  // Eğer indexed credentials yoksa (geçersiz index), default'a düş
+  if (!apiKey || !apiSecret) {
+    console.warn(`⚠️ LiveKit server ${serverIndex} credentials not found, using default`);
+    apiKey = process.env.LIVEKIT_API_KEY;
+    apiSecret = process.env.LIVEKIT_API_SECRET;
+  }
+  
   const at = new AccessToken(
-    process.env.LIVEKIT_API_KEY,
-    process.env.LIVEKIT_API_SECRET,
+    apiKey,
+    apiSecret,
     { 
       identity: identity,  // Persistent identifier (userId_deviceShort)
       name: name,          // Display name (shown to other users)
@@ -2426,7 +2444,44 @@ ipcMain.handle("get-livekit-token", async (e, room, identity, displayName) => {
     canUpdateOwnMetadata: true,
   });
   
+  console.log(`🔑 LiveKit token generated for server ${serverIndex}`);
   return await at.toJwt();
+});
+
+/**
+ * LiveKit sunucu bilgisini al (client için)
+ */
+ipcMain.handle("get-livekit-server-info", async (e, serverIndex = 0) => {
+  // Kaç sunucu var?
+  let serverCount = 0;
+  for (let i = 0; i < 20; i++) { // Max 20 sunucu
+    if (process.env[`LIVEKIT_SERVERS_${i}_URL`]) {
+      serverCount++;
+    } else {
+      break;
+    }
+  }
+  
+  // Eğer server pool yoksa tek sunucu modu
+  if (serverCount === 0) {
+    return {
+      url: process.env.NEXT_PUBLIC_LIVEKIT_URL || '',
+      serverCount: 1,
+      serverIndex: 0,
+      poolMode: false,
+    };
+  }
+  
+  // Server pool modu
+  const actualIndex = Math.min(serverIndex, serverCount - 1);
+  const url = process.env[`LIVEKIT_SERVERS_${actualIndex}_URL`] || process.env.NEXT_PUBLIC_LIVEKIT_URL || '';
+  
+  return {
+    url,
+    serverCount,
+    serverIndex: actualIndex,
+    poolMode: true,
+  };
 });
 ipcMain.handle("update-hotkey", (e, a, k) => {
   try {
@@ -2546,135 +2601,10 @@ ipcMain.handle("set-current-user-uid", (event, userUid) => {
   return { success: true };
 });
 
-// --- OYUN ALGILAMA SİSTEMİ ---
-// Oyun listesini harici dosyadan al
-const { GAME_PROCESSES } = require('./games');
+// --- OYUN ALGILAMA SİSTEMİ KALDIRILDI ---
+// CPU ve RAM tasarrufu için oyun algılama devre dışı bırakıldı
 
-// Aktif oyun durumu
-let currentGame = null;
-let gameCheckInterval = null;
-
-// Process listesini al
-async function getRunningProcesses() {
-  return new Promise((resolve, reject) => {
-    const { exec } = require("child_process");
-    // Windows'ta tasklist komutunu kullan
-    exec('tasklist /FO CSV /NH', { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-      if (error) {
-        log.error("Process listesi alınamadı:", error);
-        resolve([]);
-        return;
-      }
-      
-      // CSV formatını parse et
-      const processes = stdout
-        .split('\n')
-        .map(line => {
-          const match = line.match(/"([^"]+)"/);
-          return match ? match[1] : null;
-        })
-        .filter(Boolean);
-      
-      resolve(processes);
-    });
-  });
-}
-
-// Oyun algılama
-async function detectGame() {
-  try {
-    const processes = await getRunningProcesses();
-    
-    // Bilinen oyunları ara
-    for (const processName of processes) {
-      const game = GAME_PROCESSES[processName];
-      if (game) {
-        return { processName, ...game };
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    log.error("Oyun algılama hatası:", error);
-    return null;
-  }
-}
-
-// Oyun durumu değişikliği kontrolü
-async function checkGameStatus() {
-  const detectedGame = await detectGame();
-  
-  // Durum değişti mi?
-  const previousGame = currentGame;
-  const gameChanged = 
-    (previousGame === null && detectedGame !== null) ||
-    (previousGame !== null && detectedGame === null) ||
-    (previousGame !== null && detectedGame !== null && previousGame.processName !== detectedGame.processName);
-  
-  if (gameChanged) {
-    currentGame = detectedGame;
-    
-    // Renderer'a bildir
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("game-activity-changed", currentGame);
-      log.info("Oyun durumu değişti:", currentGame ? currentGame.name : "Yok");
-    }
-  }
-}
-
-// Oyun algılama başlat (5 saniyede bir kontrol)
-// 🚀 OPTIMIZED: 15 saniyeden 30 saniyeye çıkarıldı
-function startGameDetection() {
-  if (gameCheckInterval) return;
-  
-  checkGameStatus(); // İlk kontrol
-  
-  // 🚀 OPTIMIZED: 15000ms -> 30000ms (CPU kullanımını daha da azaltır)
-  gameCheckInterval = setInterval(() => {
-    // Eğer pencere odakta değilse (alt-tab) ve zaten bir oyun bulduysak, işlemciyi yorma
-    if (!isWindowFocused && currentGame) return;
-    
-    // Eğer son kontrol 10 saniyeden az önce yapıldıysa ve oyun hala aynıysa, skip et
-    // Bu tasklist komutunu daha az çağırır
-    checkGameStatus();
-  }, 30000); // 30 saniye
-  
-  log.info("Oyun algılama başlatıldı (Optimize Mod: 30sn)");
-}
-
-// Oyun algılama durdur
-function stopGameDetection() {
-  if (gameCheckInterval) {
-    clearInterval(gameCheckInterval);
-    gameCheckInterval = null;
-    log.info("Oyun algılama durduruldu");
-  }
-}
-
-// IPC Handlers for game detection
-ipcMain.handle("start-game-detection", () => {
-  startGameDetection();
-  return { success: true };
-});
-
-ipcMain.handle("stop-game-detection", () => {
-  stopGameDetection();
-  return { success: true };
-});
-
-ipcMain.handle("get-current-game", async () => {
-  const game = await detectGame();
-  return game;
-});
-
-// Uygulama hazır olduğunda oyun algılamayı otomatik başlat
-app.on("ready", () => {
-  setTimeout(() => {
-    startGameDetection();
-  }, 5000); // 5 saniye bekle, uygulama tam yüklensin
-});
-
-// Uygulama kapanırken durdur
-app.on("before-quit", () => {
-  stopGameDetection();
-});
+// IPC Handlers - boş response döndür (uyumluluk için)
+ipcMain.handle("start-game-detection", () => ({ success: true }));
+ipcMain.handle("stop-game-detection", () => ({ success: true }));
+ipcMain.handle("get-current-game", async () => null);

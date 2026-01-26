@@ -52,8 +52,16 @@ export default function UserCard({
   );
   const hasScreenShare = !!screenShareTrack;
   const isCurrentlyWatching = activeStreamId === participant.identity;
-  const { profileColor: localProfileColor, cameraMirrorEffect } =
-    useSettingsStore(); // Local kullanıcı için ayarlardan renk al
+  // 🚀 v5.2: Performans modu için animasyon kontrolü eklendi
+  const { 
+    profileColor: localProfileColor, 
+    cameraMirrorEffect,
+    disableAnimations,
+    graphicsQuality 
+  } = useSettingsStore();
+  
+  // Performans modu: low veya potato ise animasyonları devre dışı bırak
+  const shouldDisableAnimations = disableAnimations || graphicsQuality === 'low' || graphicsQuality === 'potato';
   const remoteState = useMemo(() => {
     try {
       return metadata ? JSON.parse(metadata) : {};
@@ -148,49 +156,60 @@ export default function UserCard({
       ? true // Local participant için trackSid varsa göster
       : videoTrack?.isSubscribed || !!cameraPublication.track); // Remote için subscribed VEYA publication'da track mevcut olmalı
 
+  // 🎨 v5.2: Konuşurken gradient border için wrapper
+  const speakingBorderStyle = isSpeaking ? {
+    background: userColor.includes("gradient") 
+      ? userColor  // Gradient direkt kullan
+      : `linear-gradient(135deg, ${userColor}, ${userColor})`,
+    padding: '2.5px',
+    borderRadius: '18px',
+    boxShadow: userColor.includes("gradient")
+      ? `0 0 80px ${getBorderColor(userColor)}70, 0 0 40px ${getBorderColor(userColor)}50`
+      : `0 0 80px ${userColor}70, 0 0 40px ${userColor}50`,
+    transform: 'scale(1.02)',
+    zIndex: 10,
+    transition: 'all 0.25s ease-out',
+  } : {};
+
   return (
     <div
-      onContextMenu={onContextMenu}
-      className="relative w-full h-full rounded-2xl flex flex-col items-center justify-center group cursor-context-menu backdrop-blur-md hover:shadow-soft-lg hover:scale-[1.02]"
-      style={{
-        background: isSpeaking
-          ? userColor.includes("gradient")
-            ? `linear-gradient(135deg, ${getBorderColor(userColor)}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
-            : `linear-gradient(135deg, ${userColor}15 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)`
-          : isMuted || isDeafened
-          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)'
-          : 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(10,10,12,0.6) 50%, rgba(10,10,12,0.8) 100%)',
-        borderWidth: '2px',
-        borderStyle: 'solid',
-        borderColor: isSpeaking
-          ? getBorderColor(userColor)
-          : isMuted || isDeafened
-          ? "rgba(239, 68, 68, 0.4)"
-          : "rgba(255, 255, 255, 0.1)",
-        boxShadow: isSpeaking
-          ? userColor.includes("gradient")
-            ? `0 0 40px ${getBorderColor(userColor)}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${getBorderColor(userColor)}20`
-            : `0 0 40px ${userColor}60, 0 8px 30px rgba(0,0,0,0.4), inset 0 0 20px ${userColor}20`
-          : isMuted || isDeafened
-          ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
-          : '0 4px 24px rgba(0,0,0,0.3)',
-        overflow: "hidden",
-        transition: 'border-color 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), background 0.8s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-      }}
+      style={speakingBorderStyle}
+      className={`w-full h-full ${isSpeaking ? 'rounded-[18px]' : ''}`}
     >
-      {/* Animated background glow for speaking - Smooth fade in/out */}
       <div
-        className="absolute inset-0 rounded-2xl pointer-events-none"
+        onContextMenu={onContextMenu}
+        className={`relative w-full h-full rounded-2xl flex flex-col items-center justify-center group cursor-context-menu backdrop-blur-md ${!isSpeaking ? 'hover:shadow-soft-lg hover:scale-[1.02]' : ''}`}
         style={{
-          background: userColor.includes("gradient")
-            ? `radial-gradient(circle at center, ${getBorderColor(userColor)}20 0%, transparent 70%)`
-            : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
-          transform: "scale(0.95)",
-          opacity: isSpeaking ? 1 : 0,
-          animation: isSpeaking ? 'pulseGlowSlow 3s ease-in-out infinite' : 'none',
-          transition: 'opacity 0.8s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          background: isSpeaking
+            ? 'linear-gradient(135deg, rgba(15,15,20,0.98) 0%, rgba(10,10,12,0.99) 100%)'
+            : isMuted || isDeafened
+            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(10,10,12,0.7) 50%, rgba(10,10,12,0.85) 100%)'
+            : 'linear-gradient(135deg, rgba(30,30,35,0.95) 0%, rgba(10,10,12,0.98) 100%)',
+          // Border sadece muted/deafened durumunda görünür
+          border: isMuted || isDeafened ? '2px solid rgba(239, 68, 68, 0.4)' : 'none',
+          boxShadow: isMuted || isDeafened
+            ? `inset 0 0 0 3px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3)`
+            : '0 4px 15px rgba(0,0,0,0.15)',
+          overflow: "hidden",
+          transition: 'all 0.25s ease-out',
         }}
-      />
+      >
+      {/* Animated background glow for speaking - Smooth fade in/out */}
+      {/* 🚀 v5.2: Performans modunda animasyon devre dışı */}
+      {!shouldDisableAnimations && (
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{
+            background: userColor.includes("gradient")
+              ? `radial-gradient(circle at center, ${getBorderColor(userColor)}20 0%, transparent 70%)`
+              : `radial-gradient(circle at center, ${userColor}20 0%, transparent 70%)`,
+            transform: "scale(0.95)",
+            opacity: isSpeaking ? 1 : 0,
+            animation: isSpeaking ? 'pulseGlowSlow 3s ease-in-out infinite' : 'none',
+            transition: 'opacity 0.8s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          }}
+        />
+      )}
       <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10 ">
         {/* Screen share varsa ve izleniyorsa normal görünüm, izlenmiyorsa avatar/video gösterilmez */}
         {/* Screen share gizlenmişse (activeStreamId null) kamera gösterilmeli */}
@@ -235,7 +254,8 @@ export default function UserCard({
             />
 
             {/* Speaking durumunda animasyonlu arka plan glow - Resimdeki gibi - Container içinde kalacak şekilde */}
-            {isSpeaking && (
+            {/* 🚀 v5.2: Performans modunda animasyonlar devre dışı */}
+            {isSpeaking && !shouldDisableAnimations && (
               <>
                 {/* Ana glow layer - Radial gradient - Container içinde, padding ile */}
                 <div
@@ -422,7 +442,8 @@ export default function UserCard({
             </span>
 
             {/* Speaking pulse rings */}
-            {isSpeaking && (
+            {/* 🚀 v5.2: Performans modunda devre dışı */}
+            {isSpeaking && !shouldDisableAnimations && (
               <>
                 <div
                   className="absolute inset-0 rounded-2xl animate-ping"
@@ -585,7 +606,8 @@ export default function UserCard({
           </div>
         )}
       </div>
-      {!shouldShowVideo && isSpeaking && (
+      {/* 🚀 v5.2: Performans modunda animasyonlar devre dışı */}
+      {!shouldShowVideo && isSpeaking && !shouldDisableAnimations && (
         <>
           {/* Ana glow layer - Container içinde, padding ile */}
           <div
@@ -655,6 +677,7 @@ export default function UserCard({
           />
         </>
       )}
+      </div>
     </div>
   );
 }

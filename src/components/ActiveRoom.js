@@ -63,9 +63,12 @@ import { db } from "@/src/lib/firebase";
 import {
   doc,
   setDoc,
+  getDoc,
   updateDoc,
   arrayUnion,
   arrayRemove,
+  onSnapshot,
+  serverTimestamp,
 } from "firebase/firestore";
 import { generateLiveKitIdentity } from "@/src/utils/deviceId";
 import { styleInjection } from "./active-room/ActiveRoomStyles";
@@ -711,6 +714,7 @@ function RoomEventsHandler({
     notifyOnJoin,
     notifyOnLeave,
     notificationSound,
+    setInVoiceRoom,
   } = useSettingsStore();
   const { user } = useAuthStore();
 
@@ -811,16 +815,22 @@ function RoomEventsHandler({
 
     // Bağlantı event'leri
     const onRoomConnected = () => {
+      // 🚀 v5.2: Ses odasına bağlandı - idle detection'a bildir
+      setInVoiceRoom(true);
+      
       // Sadece development'ta log göster (spam'i önlemek için)
       if (process.env.NODE_ENV === "development") {
-        console.log("Room connected");
+        console.log("Room connected - idle detection disabled");
       }
       if (onConnected) onConnected();
     };
 
     const onRoomDisconnected = (reason) => {
+      // 🚀 v5.2: Ses odasından ayrıldı - idle detection'a bildir
+      setInVoiceRoom(false);
+      
       // Her zaman log göster (önemli bir event)
-      console.log("Room disconnected:", reason);
+      console.log("Room disconnected - idle detection enabled:", reason);
       if (onDisconnected) onDisconnected(reason);
     };
 
@@ -1208,6 +1218,84 @@ export default function ActiveRoom({
   const [hasConnectedOnce, setHasConnectedOnce] = useState(false); // Bağlantı başarılı oldu mu?
   const connectionTimeoutRef = useRef(null); // Bağlantı timeout'u
   const hasConnectedOnceRef = useRef(false); // Ref ile takip (timeout için)
+  
+  // 🚀 v5.2: LiveKit Server Pool
+  const [serverUrl, setServerUrl] = useState(process.env.NEXT_PUBLIC_LIVEKIT_URL || '');
+  const [serverIndex, setServerIndex] = useState(0);
+  const [serverPoolMode, setServerPoolMode] = useState(false);
+  const [serverCount, setServerCount] = useState(1);
+  const rotationCountRef = useRef(0); // Sonsuz döngüyü önlemek için sayaç
+  const MAX_ROTATIONS = 3; // Maksimum rotation sayısı
+  const poolDocRef = useRef(null); // Firebase pool document reference
+  const serverIndexRef = useRef(serverIndex); // Ref ile takip (callback'lerde güncel değer için)
+  
+  // serverIndex değiştiğinde ref'i güncelle
+  useEffect(() => {
+    serverIndexRef.current = serverIndex;
+  }, [serverIndex]);
+
+  // 🚀 v5.2: Firebase'den aktif sunucu indeksini dinle (tüm kullanıcılar senkronize olsun)
+  useEffect(() => {
+    if (!serverPoolMode) return;
+    
+    poolDocRef.current = doc(db, "system", "livekitPool");
+    
+    // Real-time listener
+    const unsubscribe = onSnapshot(poolDocRef.current, async (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        const firebaseIndex = data.activeServerIndex || 0;
+        
+        // Eğer Firebase'deki index farklıysa, değiştir (ref kullan - güncel değer için)
+        if (firebaseIndex !== serverIndexRef.current) {
+          console.log(`🔄 Firebase'den sunucu değişikliği algılandı: ${serverIndexRef.current} → ${firebaseIndex}`);
+          
+          try {
+            const serverInfo = await window.netrex.getLiveKitServerInfo(firebaseIndex);
+            if (serverInfo && serverInfo.url) {
+              setServerIndex(firebaseIndex);
+              setServerUrl(serverInfo.url);
+              // NOT: Token useEffect tarafından otomatik yenilenecek
+            }
+          } catch (e) {
+            console.error("Firebase sunucu değişikliği uygulanamadı:", e);
+          }
+        }
+      }
+    }, (error) => {
+      console.error("Firebase pool listener hatası:", error);
+    });
+    
+    return () => unsubscribe();
+  }, [serverPoolMode]); // serverIndex dependency'den kaldırıldı - ref kullanıyoruz
+
+  // Firebase'de pool document'ı oluştur/güncelle (ilk bağlantıda)
+  useEffect(() => {
+    if (!serverPoolMode || serverCount <= 1) return;
+    
+    const initializePoolDoc = async () => {
+      try {
+        const poolRef = doc(db, "system", "livekitPool");
+        const poolDoc = await getDoc(poolRef);
+        
+        if (!poolDoc.exists()) {
+          // İlk kez oluştur
+          await setDoc(poolRef, {
+            activeServerIndex: 0,
+            serverCount: serverCount,
+            lastRotation: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          });
+          console.log("✅ Firebase LiveKit pool oluşturuldu");
+        }
+      } catch (e) {
+        console.error("Firebase pool init hatası:", e);
+      }
+    };
+    
+    initializePoolDoc();
+  }, [serverPoolMode, serverCount]);
+
 
   const { 
     noiseSuppression, 
@@ -1309,19 +1397,64 @@ export default function ActiveRoom({
     (async () => {
       try {
         if (window.netrex) {
+          // 🚀 v5.2: Server pool - önce sunucu bilgisini al
+          let currentServerIndex = serverIndex;
+          let currentServerUrl = serverUrl;
+          
+          try {
+            // Önce electron'dan pool bilgisini al
+            const serverInfo = await window.netrex.getLiveKitServerInfo(currentServerIndex);
+            
+            if (serverInfo && serverInfo.poolMode) {
+              // Pool modu aktif - Firebase'den aktif sunucu indeksini oku
+              try {
+                const poolRef = doc(db, "system", "livekitPool");
+                const poolDoc = await getDoc(poolRef);
+                
+                if (poolDoc.exists()) {
+                  const firebaseIndex = poolDoc.data().activeServerIndex || 0;
+                  console.log(`📡 Firebase'den aktif sunucu okundu: ${firebaseIndex}`);
+                  
+                  // Firebase'deki indekse göre sunucu bilgisini al
+                  const activeServerInfo = await window.netrex.getLiveKitServerInfo(firebaseIndex);
+                  if (activeServerInfo && activeServerInfo.url) {
+                    currentServerUrl = activeServerInfo.url;
+                    currentServerIndex = activeServerInfo.serverIndex;
+                  }
+                }
+              } catch (firebaseError) {
+                console.warn("Firebase pool okunamadı, varsayılan sunucu kullanılıyor:", firebaseError);
+              }
+              
+              setServerPoolMode(true);
+              setServerCount(serverInfo.serverCount || 1);
+            } else if (serverInfo) {
+              // Tek sunucu modu - serverInfo'dan URL al
+              currentServerUrl = serverInfo.url || currentServerUrl;
+              currentServerIndex = serverInfo.serverIndex || 0;
+            }
+            
+            setServerUrl(currentServerUrl);
+            setServerIndex(currentServerIndex);
+            rotationCountRef.current = 0; // Başarılı bağlantıda sayacı sıfırla
+            console.log(`🔌 LiveKit server: ${currentServerUrl} (index: ${currentServerIndex}, pool: ${serverInfo?.poolMode}, count: ${serverInfo?.serverCount})`);
+          } catch (serverInfoError) {
+            console.warn('⚠️ Server info alınamadı, default kullanılıyor:', serverInfoError);
+          }
+          
           // Use userId directly as identity to prevent ghost participants
           // generateLiveKitIdentity adds device suffix which causes duplicates on refresh
           const identity = userId;
           
-          // Get token with stable identity and display name
-          const t = await window.netrex.getLiveKitToken(roomName, identity, username);
+          // Get token with stable identity, display name, and server index
+          const t = await window.netrex.getLiveKitToken(roomName, identity, username, currentServerIndex);
           setToken(t);
 
           // 20 saniye içinde bağlantı kurulamazsa hata göster
           connectionTimeoutRef.current = setTimeout(() => {
             // Eğer hala bağlanmadıysa hata göster
             if (!hasConnectedOnceRef.current) {
-              setConnectionError(`Odaya bağlanılamadı (Timeout). URL: ${process.env.NEXT_PUBLIC_LIVEKIT_URL}`);
+              setConnectionError(`Odaya bağlanılamadı (Timeout). URL: ${currentServerUrl}`);
             }
           }, 20000); // 20 saniye
         }
@@ -1338,7 +1471,7 @@ export default function ActiveRoom({
         connectionTimeoutRef.current = null;
       }
     };
-  }, [roomName, username, userId]);
+  }, [roomName, username, userId, serverIndex]);
 
   // Component unmount veya room değiştiğinde cleanup
   useEffect(() => {
@@ -1454,11 +1587,86 @@ export default function ActiveRoom({
   };
 
   // Bağlantı hatası (sadece kritik hatalar için)
-  const handleError = (error) => {
+  // 🚀 v5.2: Server pool - hata durumunda sonraki sunucuya geç
+  const handleError = async (error) => {
     console.error("LiveKit bağlantı hatası:", error);
+    
+    const errorMessage = error?.message || '';
+    
+    // Quota/limit hataları - server pool ile çözülebilir
+    const quotaErrors = [
+      'quota exceeded',
+      'rate limit',
+      'limit reached',
+      'connection limit',
+      'participant limit',
+      'minutes exceeded',
+      'free tier',
+      '429',
+      '503',
+    ];
+    
+    const isQuotaError = quotaErrors.some(q => 
+      errorMessage.toLowerCase().includes(q.toLowerCase())
+    );
+    
+    // Server pool modunda ve quota hatası aldıysak
+    if (serverPoolMode && isQuotaError) {
+      // Sonsuz döngü koruması
+      if (rotationCountRef.current >= MAX_ROTATIONS) {
+        console.error(`❌ Maksimum rotation sayısına ulaşıldı (${MAX_ROTATIONS}). Tüm sunucular dolu olabilir.`);
+        setConnectionError(`Tüm LiveKit sunucuları dolu. Lütfen daha sonra tekrar deneyin.`);
+        return;
+      }
+      
+      rotationCountRef.current++;
+      console.warn(`⚠️ LiveKit quota hatası algılandı, sunucu değiştiriliyor... (rotation ${rotationCountRef.current}/${MAX_ROTATIONS})`);
+      
+      try {
+        // Sonraki sunucuyu al (modulo ile döngüsel)
+        // serverCount en az 2 olmalı rotation için
+        if (serverCount < 2) {
+          console.warn('⚠️ Sadece 1 sunucu var, rotation yapılamaz');
+          // Tek sunucu modunda hata göster
+          if (hasConnectedOnce) {
+            setConnectionError(`Bağlantı hatası: ${errorMessage || "Sunucu kotası dolmuş olabilir."}`);
+          }
+          return;
+        }
+        const nextIndex = (serverIndex + 1) % serverCount;
+        const serverInfo = await window.netrex.getLiveKitServerInfo(nextIndex);
+        
+        if (serverInfo && serverInfo.url) {
+          // 🚀 v5.2: Firebase'i güncelle - TÜM kullanıcılar bu sunucuya geçecek
+          try {
+            const poolRef = doc(db, "system", "livekitPool");
+            // setDoc with merge: true - doküman yoksa oluşturur, varsa günceller
+            await setDoc(poolRef, {
+              activeServerIndex: serverInfo.serverIndex,
+              lastRotation: serverTimestamp(),
+              lastError: errorMessage,
+              lastErrorTime: serverTimestamp(),
+            }, { merge: true });
+            console.log(`📡 Firebase güncellendi: activeServerIndex = ${serverInfo.serverIndex}`);
+          } catch (firebaseError) {
+            console.error("Firebase güncelleme hatası:", firebaseError);
+          }
+          
+          // Yeni sunucuya geç (bu useEffect'i tetikleyecek ve yeni token alınacak)
+          setServerIndex(serverInfo.serverIndex);
+          setServerUrl(serverInfo.url);
+          setConnectionError(null); // Hatayı temizle
+          console.log(`🔄 LiveKit server rotated: ${serverIndex} → ${serverInfo.serverIndex}`);
+          return; // Hata gösterme, yeniden dene
+        }
+      } catch (rotationError) {
+        console.error('Server rotation hatası:', rotationError);
+      }
+    }
+    
     // Sadece başarılı bağlantıdan sonra hata olursa göster
     if (hasConnectedOnce) {
-      setConnectionError(`${error?.message || "Bağlantı hatası oluştu."} (URL: ${process.env.NEXT_PUBLIC_LIVEKIT_URL})`);
+      setConnectionError(`${errorMessage || "Bağlantı hatası oluştu."} (URL: ${serverUrl})`);
     }
     // İlk bağlantı hatasında sadece timeout'ta hata göster
   };
@@ -1510,13 +1718,14 @@ export default function ActiveRoom({
 
   return (
     <LiveKitRoom
-      // KEY: roomName değiştiğinde component'i tamamen yeniden mount et (eski room'dan disconnect için)
-      key={roomName}
+      // KEY: roomName + serverIndex değiştiğinde component'i tamamen yeniden mount et
+      key={`${roomName}-${serverIndex}`}
       // DÜZELTME: video={false} yapıyoruz ki otomatik yönetim manuel fonksiyonumuzla çakışmasın.
       video={false}
       audio={true}
       token={token}
-      serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
+      // 🚀 v5.2: Server pool - dinamik URL
+      serverUrl={serverUrl}
       data-lk-theme="default"
       className="flex-1 flex flex-col bg-gradient-to-b from-[#1a1b1f] to-[#0e0f12]"
       // Quota-Efficient Connection Options
@@ -2516,11 +2725,18 @@ function ScreenShareStage({
   };
 
   // Mouse movement tracking - overlay ve cursor kontrolü
+  // 🚀 OPTIMIZATION: Throttle eklendi
+  const lastOverlayMouseMoveRef = useRef(0);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleMouseMove = () => {
+      // 🚀 THROTTLE: 100ms aralıklarla işle
+      const now = Date.now();
+      if (now - lastOverlayMouseMoveRef.current < 100) return;
+      lastOverlayMouseMoveRef.current = now;
+
       // Overlay'i göster
       setShowOverlay(true);
       setShowCursor(true);
@@ -2549,7 +2765,7 @@ function ScreenShareStage({
       setShowCursor(true);
     };
 
-    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousemove", handleMouseMove, { passive: true });
     container.addEventListener("mouseenter", handleMouseEnter);
 
     return () => {

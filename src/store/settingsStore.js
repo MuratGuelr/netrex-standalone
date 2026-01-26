@@ -81,6 +81,9 @@ export const useSettingsStore = create(
       userStatus: "online", // "online" | "idle" | "offline" | "invisible"
       isAutoIdle: false, // Otomatik idle modu mu (pencere arka planda veya inaktivite)?
       idleTimeout: 5 * 60 * 1000, // 5 dakika inaktivite sonrası idle (ms)
+      
+      // 🚀 v5.2: Ses odasında olma durumu (idle detection için kullanılır)
+      isInVoiceRoom: false, // Kullanıcı bir ses odasında mı?
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
@@ -254,6 +257,9 @@ export const useSettingsStore = create(
         }
         return {};
       }),
+      
+      // 🚀 v5.2: Ses odasında olma durumunu ayarla
+      setInVoiceRoom: (inRoom) => set({ isInVoiceRoom: inRoom }),
 
       syncWithElectron: async () => {
         if (window.netrex) {

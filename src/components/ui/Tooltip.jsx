@@ -80,8 +80,9 @@ export default function Tooltip({
   useEffect(() => {
     if (isVisible) {
       updatePosition();
-      window.addEventListener("scroll", updatePosition, true);
-      window.addEventListener("resize", updatePosition);
+      // 🚀 OPTIMIZATION: passive flag eklendi
+      window.addEventListener("scroll", updatePosition, { capture: true, passive: true });
+      window.addEventListener("resize", updatePosition, { passive: true });
     }
 
     return () => {
