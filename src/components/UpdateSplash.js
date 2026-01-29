@@ -38,7 +38,7 @@ export default function UpdateSplash({ onComplete }) {
       // Kısa bir gecikme ile ana ekrana geç (kullanıcı ekranı görebilsin)
       setTimeout(() => {
         onComplete?.();
-      }, 800);
+      }, 300);
     };
 
     // Güncelleme durumunu dinle

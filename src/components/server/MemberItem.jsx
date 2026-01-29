@@ -39,9 +39,8 @@ const MemberItem = memo(function MemberItem({
         rounded-xl
         border border-transparent
         hover:bg-white/[0.04] hover:border-white/[0.04]
-        active:scale-[0.98]
         cursor-pointer 
-        transition-all duration-200
+        transition-colors duration-200
       "
     >
       {/* Active Indicator Bar (Left) */}
@@ -55,7 +54,7 @@ const MemberItem = memo(function MemberItem({
           size="md"
           status={member.presence || "online"}
           className={`
-            rounded-xl transition-transform duration-300 group-hover:scale-105 
+            rounded-xl 
             ${roleId === 'owner' ? 'ring-2 ring-amber-500/20' : ''}
           `}
         />

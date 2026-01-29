@@ -249,6 +249,7 @@ function RailItem({
             overflow-hidden
             group
             z-10
+            transform-gpu will-change-transform
             ${active 
                 ? 'rounded-[15px] bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-[0_4px_12px_rgba(99,102,241,0.4)] ring-1 ring-white/10' 
                 : 'bg-[#313338] hover:bg-gradient-to-br hover:from-indigo-500 hover:to-indigo-600 hover:shadow-lg'

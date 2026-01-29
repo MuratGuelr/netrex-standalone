@@ -78,7 +78,8 @@ import PipGrid from "./active-room/PipGrid";
 // --- STYLES ---
 // Styles moved to active-room/ActiveRoomStyles.js
 
-// 1. Statik Arka Plan (Sürekli render olmasın diye memoize edildi)
+// --- STYLES ---
+// Styles moved to active-room/ActiveRoomStyles.js
 const MemoizedBackground = React.memo(({ disableEffects }) => {
   if (disableEffects) return null;
   return (
@@ -1178,6 +1179,28 @@ export default function ActiveRoom({
   currentTextChannel,
   userId,
 }) {
+  // --- GLOBAL INPUT LISTENER (CPU OPTIMIZATION) ---
+  useEffect(() => {
+    let timeoutId;
+    if (window.netrex) {
+      // 🚀 Bağlantı başlangıcında Main Process'i yormamak için biraz beklet
+      // Bu, WebRTC handshake'inin (bağlantı kurma) takılmadan tamamlanmasını sağlar
+      console.log("🎤 Global input dinleyicisi için bekleniyor (Handshake koruması)...");
+      timeoutId = setTimeout(() => {
+         console.log("🎤 Odaya girildi: Global input dinleyicisi başlatılıyor...");
+         window.netrex.startInputListener();
+      }, 1500);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (window.netrex) {
+        console.log("👋 Odadan çıkıldı: Global input dinleyicisi durduruluyor...");
+        window.netrex.stopInputListener();
+      }
+    };
+  }, []);
+
   const { user } = useAuthStore();
   const [token, setToken] = useState("");
   const [showSettingsLocal, setShowSettingsLocal] = useState(false);

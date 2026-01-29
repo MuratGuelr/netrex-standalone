@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useOptionalRoomContext } from "@/src/hooks/useOptionalRoomContext";
 import { RoomEvent } from "livekit-client";
 import { useChatStore } from "@/src/store/chatStore";
+import { Virtuoso } from "react-virtuoso";
 import {
   Send,
   Trash2,
@@ -174,6 +175,28 @@ export default function ChatView({ channelId, username, userId }) {
   const [pendingImage, setPendingImage] = useState(null);
   const [pendingImageFile, setPendingImageFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  
+  const virtuosoRef = useRef(null);
+
+  // Otomatik scroll yönetimi - Yeni mesaj gönderildiğinde
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      // Son mesaj benimse kesinlikle aşağı kaydır
+      if (lastMessage.userId === userId) {
+        // Render cycle ve layout update'i bekle
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            virtuosoRef.current?.scrollToIndex({ 
+              index: messages.length - 1, 
+              align: 'end', 
+              behavior: 'smooth' 
+            });
+          });
+        }, 150);
+      }
+    }
+  }, [messages, userId]);
   
   // Image Viewer Manipulation States
   const [imgZoom, setImgZoom] = useState(1);
@@ -584,101 +607,14 @@ export default function ChatView({ channelId, username, userId }) {
   }, [canUseNotifications]);
 
   const handleLoadOlderMessages = useCallback(async () => {
-    if (!currentChannel || !containerRef.current) return;
-    
-    // Yükleme öncesi scroll yüksekliğini kaybet
-    setPrevScrollHeight(containerRef.current.scrollHeight);
-    setPreservingScroll(true);
-    
+    if (!currentChannel) return;
     await loadOlderMessages(currentChannel.id);
   }, [currentChannel, loadOlderMessages]);
 
   const shouldShowNotificationBanner =
     canUseNotifications && notificationPermission !== "granted";
 
-  const hasScrolledToBottomRef = useRef(false);
-
-  // Kanal değiştiğinde scroll durumunu sıfırla
-  useEffect(() => {
-    hasScrolledToBottomRef.current = false;
-  }, [channelId]);
-
-  // Akıllı Scroll Yönetimi
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // 1. Durum: Eski mesajlar yüklendiğinde pozisyonu koru
-    if (preservingScroll && prevScrollHeight > 0) {
-      const newScrollHeight = container.scrollHeight;
-      const heightDifference = newScrollHeight - prevScrollHeight;
-      
-      // Scroll'u aşağı kaydırarak kullanıcının kaldığı yeri koru
-      container.scrollTop = heightDifference;
-      
-      setPreservingScroll(false);
-      setPrevScrollHeight(0);
-      return;
-    }
-
-    // 2. Durum: İlk yüklemede scroll (Agresif Yöntem)
-    // Mesajlar yüklendiğinde, resimler ve layout oturana kadar (1 sn) aşağı scroll'u zorla
-    // Bu, "biraz scroll yapıp kalma" sorununu çözer
-    if (!hasScrolledToBottomRef.current && messages.length > 0) {
-        
-        // Hemen en alta al
-        container.scrollTop = container.scrollHeight;
-
-        // Asenkron yüklemeler (resim vb.) için sürekli kontrol et
-        // 🚀 OPTIMIZED: 50ms -> 100ms (CPU kullanımını azaltır)
-        const intervalId = setInterval(() => {
-            if (container) {
-                // Sadece scroll aşağıda değilse müdahale et (titremeyi önlemek için)
-                if (container.scrollHeight - container.scrollTop > container.clientHeight + 5) {
-                    container.scrollTop = container.scrollHeight;
-                }
-            }
-        }, 100);
-
-        // 1 saniye sonra serbest bırak
-        const timeoutId = setTimeout(() => {
-            clearInterval(intervalId);
-            hasScrolledToBottomRef.current = true;
-            // Son bir kez scroll
-            if (container) container.scrollTop = container.scrollHeight;
-        }, 1000);
-        
-        return () => {
-            clearInterval(intervalId);
-            clearTimeout(timeoutId);
-        };
-    }
-
-    // 3. Durum: Yeni mesaj geldiğinde
-    const threshold = 300; // Threshold daha da artırıldı
-    // Eğer kullanıcı en alttan threshold kadar yukarıdaysa "Near Bottom" sayılır
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isNearBottom = distanceFromBottom < threshold;
-    
-    if (messages.length > 0) {
-       const lastMessage = messages[messages.length - 1];
-       const isMyMessage = lastMessage?.userId === userId;
-
-       // Benim mesajımsa veya kullanıcı zaten aşağıdaysa kaydır
-       if (isMyMessage || isNearBottom) {
-           // Smooth scroll yerine requestAnimationFrame ile doğal kaydırma daha iyi
-           if (isMyMessage) {
-              container.scrollTop = container.scrollHeight;
-           } else {
-              // Smooth scroll için
-               setTimeout(() => {
-                   messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-               }, 50);
-           }
-       }
-    }
-    
-  }, [messages, preservingScroll, prevScrollHeight, userId, channelId]);
+  // Scroll logic handled by Virtuoso
 
   const handleContextMenu = useCallback((e, msg, isInSequence) => {
     e.preventDefault();
@@ -999,70 +935,31 @@ export default function ChatView({ channelId, username, userId }) {
 
       {/* Mesaj Alanı ve Member List Container */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative z-10">
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-y-auto scrollbar-thin flex flex-col px-4 relative"
-        >
+        <div className="flex-1 overflow-hidden relative" style={{ display: 'flex', flexDirection: 'column' }}>
           {isLoading ? (
-            /* SKELETON LOADING - Tüm ekranı kaplayan gerçekçi mesaj yüklenme animasyonu */
-            <div className="flex flex-col h-full py-6 animate-in fade-in duration-300 overflow-hidden">
-              {/* Skeleton Messages - Ekranı dolduracak kadar */}
+            /* SKELETON LOADING */
+            <div className="flex flex-col h-full py-6 animate-in fade-in duration-300 overflow-hidden px-4">
+              {/* Skeleton Messages */}
               {[
                 { isSequence: false, nameWidth: 85, textWidth: 75, hasSecondLine: true, secondWidth: 45 },
                 { isSequence: true, nameWidth: 0, textWidth: 40, hasSecondLine: false, secondWidth: 0 },
                 { isSequence: false, nameWidth: 110, textWidth: 85, hasSecondLine: true, secondWidth: 30 },
                 { isSequence: false, nameWidth: 70, textWidth: 55, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: true, nameWidth: 0, textWidth: 65, hasSecondLine: true, secondWidth: 25 },
-                { isSequence: false, nameWidth: 95, textWidth: 90, hasSecondLine: true, secondWidth: 50 },
-                { isSequence: true, nameWidth: 0, textWidth: 35, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: false, nameWidth: 75, textWidth: 60, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: true, nameWidth: 0, textWidth: 80, hasSecondLine: true, secondWidth: 40 },
-                { isSequence: false, nameWidth: 100, textWidth: 70, hasSecondLine: true, secondWidth: 35 },
-                { isSequence: false, nameWidth: 65, textWidth: 45, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: true, nameWidth: 0, textWidth: 55, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: false, nameWidth: 90, textWidth: 95, hasSecondLine: true, secondWidth: 55 },
-                { isSequence: true, nameWidth: 0, textWidth: 30, hasSecondLine: false, secondWidth: 0 },
-                { isSequence: false, nameWidth: 80, textWidth: 65, hasSecondLine: true, secondWidth: 28 },
               ].map((skeleton, i) => (
                 <div key={i} className={`flex pr-4 pl-[72px] relative w-full ${!skeleton.isSequence ? 'mt-[17px]' : 'mt-[2px]'}`}>
-                  {/* Avatar Skeleton */}
-                  {!skeleton.isSequence && (
+                   {!skeleton.isSequence && (
                     <div className="absolute left-4 w-[50px] flex justify-start">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/[0.08] to-white/[0.04] animate-pulse" />
                     </div>
                   )}
-                  
-                  {/* Content Skeleton */}
                   <div className="flex-1 min-w-0">
-                    {/* Username & Time Skeleton */}
                     {!skeleton.isSequence && (
                       <div className="flex items-center gap-2 mb-2">
-                        <div 
-                          className="h-4 rounded-md bg-gradient-to-r from-white/[0.1] to-white/[0.05] animate-pulse"
-                          style={{ width: `${skeleton.nameWidth}px` }}
-                        />
-                        <div className="h-3 w-10 rounded-md bg-white/[0.05] animate-pulse" style={{ animationDelay: '150ms' }} />
+                        <div className="h-4 rounded-md bg-gradient-to-r from-white/[0.1] to-white/[0.05] animate-pulse" style={{ width: `${skeleton.nameWidth}px` }} />
                       </div>
                     )}
-                    
-                    {/* Message Text Skeleton */}
                     <div className="space-y-1.5">
-                      <div 
-                        className="h-4 rounded-md bg-gradient-to-r from-white/[0.08] to-white/[0.03] animate-pulse"
-                        style={{ 
-                          width: `${skeleton.textWidth}%`,
-                          animationDelay: `${i * 50}ms`
-                        }}
-                      />
-                      {skeleton.hasSecondLine && (
-                        <div 
-                          className="h-4 rounded-md bg-gradient-to-r from-white/[0.06] to-white/[0.02] animate-pulse"
-                          style={{ 
-                            width: `${skeleton.secondWidth}%`,
-                            animationDelay: `${i * 50 + 25}ms`
-                          }}
-                        />
-                      )}
+                      <div className="h-4 rounded-md bg-gradient-to-r from-white/[0.08] to-white/[0.03] animate-pulse" style={{ width: `${skeleton.textWidth}%` }} />
                     </div>
                   </div>
                 </div>
@@ -1070,7 +967,7 @@ export default function ChatView({ channelId, username, userId }) {
             </div>
           ) : messages.length === 0 ? (
             /* BOŞ KANAL KARŞILAMA EKRANI */
-            <div className="flex-1 flex flex-col justify-end pb-12 select-none animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className="flex-1 flex flex-col justify-end pb-12 select-none animate-in fade-in slide-in-from-bottom-4 duration-700 px-4">
               <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 shadow-[0_8px_32px_rgba(99,102,241,0.15)] border border-white/10 backdrop-blur-sm">
                 <Hash size={44} className="text-white/90" />
               </div>
@@ -1083,41 +980,46 @@ export default function ChatView({ channelId, username, userId }) {
               </p>
             </div>
           ) : (
-            <div className="flex flex-col min-h-full pb-4 pt-6">
-              {/* Spacer to push messages to bottom when content is less than container height */}
-              <div className="flex-grow" />
-              
-              {hasMoreMessages && (
-                <button
-                  onClick={handleLoadOlderMessages}
-                  disabled={isLoadingOlderMessages}
-                  className="mx-auto mb-4 px-4 py-1.5 text-caption font-semibold text-nds-text-secondary bg-nds-bg-deep rounded-full border border-nds-border-light hover:border-nds-info hover:text-nds-text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isLoadingOlderMessages && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  )}
-                  {isLoadingOlderMessages
-                    ? "Daha fazla mesaj yükleniyor..."
-                    : "Daha eski mesajları göster"}
-                </button>
+            <Virtuoso
+              ref={virtuosoRef}
+              style={{ height: '100%' }}
+              data={messages}
+              initialTopMostItemIndex={messages.length - 1}
+              followOutput="auto"
+              startReached={handleLoadOlderMessages}
+              atTopThreshold={50}
+              className="scrollbar-thin"
+              components={{
+                Header: () => (
+                  (hasMoreMessages || isLoadingOlderMessages) ? (
+                    <div className="py-4 flex justify-center w-full">
+                       <div className="px-4 py-1.5 text-caption font-semibold text-nds-text-secondary bg-nds-bg-deep rounded-full border border-nds-border-light flex items-center gap-2">
+                         {isLoadingOlderMessages ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                         {isLoadingOlderMessages ? "Yükleniyor..." : "Daha eski mesajları yüklemek için yukarı kaydır"}
+                       </div>
+                    </div>
+                  ) : <div className="h-4" />
+                ),
+                Footer: () => <div className="h-24" /> // Increased footer space
+              }}
+              itemContent={(index, message) => (
+                <div className="px-4">
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    prevMessage={messages[index - 1]}
+                    messageIndex={index}
+                    onContextMenu={handleContextMenu}
+                    renderText={renderMessageText}
+                    formatTime={formatTime}
+                    formatDateHeader={formatDateHeader}
+                    isInSequence={isMessageInSequence(message, index)}
+                    onImageClick={setSelectedImage}
+                  />
+                </div>
               )}
-              {messages.map((message, index) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  prevMessage={messages[index - 1]}
-                  messageIndex={index}
-                  onContextMenu={handleContextMenu}
-                  renderText={renderMessageText}
-                  formatTime={formatTime}
-                  formatDateHeader={formatDateHeader}
-                  isInSequence={isMessageInSequence(message, index)}
-                  onImageClick={setSelectedImage}
-                />
-              ))}
-            </div>
+            />
           )}
-          <div ref={messagesEndRef} />
         </div>
         
         {/* Right Sidebar: Member List removed */}

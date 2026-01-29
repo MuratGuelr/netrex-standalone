@@ -10,7 +10,7 @@
  * OPTIMIZATION: useGameActivity hook removed - it should only run when connected to a room
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Titlebar from "./Titlebar";
@@ -18,8 +18,9 @@ import { Users, ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import SettingsModal from "@/src/components/SettingsModal";
 import { toast } from "sonner";
+
+const SettingsModal = lazy(() => import("@/src/components/SettingsModal"));
 
 
 export default function AppShell({ 
@@ -188,10 +189,14 @@ export default function AppShell({
       </div>
       
       {/* Global Settings Modal - Accessible from anywhere in the app */}
-      <SettingsModal 
-        isOpen={showSettingsModal} 
-        onClose={() => setSettingsOpen(false)} 
-      />
+      {showSettingsModal && (
+        <Suspense fallback={null}>
+          <SettingsModal 
+            isOpen={showSettingsModal} 
+            onClose={() => setSettingsOpen(false)} 
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

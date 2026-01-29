@@ -20,11 +20,11 @@ import { motion, AnimatePresence } from "framer-motion";
 // ============================================================================
 const CONFIG = {
   // Timing (in seconds)
-  drawDuration: 2.0,        // How long the SVG path takes to draw
-  fillDelay: 0.3,           // Delay before fill animation starts
-  fillDuration: 0.8,        // How long the fill transition takes
-  holdDuration: 0.5,        // How long to show the filled logo
-  exitDuration: 0.6,        // Fade out duration
+  drawDuration: 1.2,        // Faster draw
+  fillDelay: 0.1,           // Almost immediate fill start
+  fillDuration: 0.4,        // Quick fill
+  holdDuration: 0.2,        // Short hold
+  exitDuration: 0.4,        // Snappy fade out
   
   // Colors
   strokeColor: "#a855f7",   // Purple stroke while drawing

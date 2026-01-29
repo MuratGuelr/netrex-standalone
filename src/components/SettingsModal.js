@@ -1098,10 +1098,17 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
   const [gradStart, setGradStart] = useState(parsed.start);
   const [gradEnd, setGradEnd] = useState(parsed.end);
   const [gradAngle, setGradAngle] = useState(parsed.angle);
+  const [localSolidColor, setLocalSolidColor] = useState(parsed.solidColor);
   const isUpdatingFromStore = useRef(false);
 
   // profileColor değiştiğinde state'leri güncelle (dışarıdan değişiklik olursa)
   useEffect(() => {
+    // Eğer update bizden gittiyse (store update'i biz tetikledik) local state'i ezmemek için skip edebiliriz
+    // Ama debounce olduğu için, store update olana kadar local zaten ileride olabilir.
+    // Basit mantık: Store'dan gelen değer ile bizim local değerimiz farklıysa store'u esas al.
+    // Ancak sürükleme sırasında bu çakışma yaratabilir.
+    // isUpdatingFromStore flag'i tam burada işe yarar.
+    
     if (isUpdatingFromStore.current) {
       isUpdatingFromStore.current = false;
       return;
@@ -1119,16 +1126,36 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
     if (newParsed.angle !== gradAngle) {
       setGradAngle(newParsed.angle);
     }
+    if (newParsed.solidColor !== localSolidColor) {
+      setLocalSolidColor(newParsed.solidColor);
+    }
   }, [profileColor, parseProfileColor]);
 
+  // Debounced Update for Gradient
   useEffect(() => {
     if (colorMode === "gradient") {
-      isUpdatingFromStore.current = true;
-      setProfileColor(
-        `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`
-      );
+      const timer = setTimeout(() => {
+        isUpdatingFromStore.current = true;
+        setProfileColor(
+          `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`
+        );
+      }, 100); // 100ms debounce
+      return () => clearTimeout(timer);
     }
   }, [gradStart, gradEnd, gradAngle, colorMode, setProfileColor]);
+
+  // Debounced Update for Solid Color
+  useEffect(() => {
+    if (colorMode === "solid") {
+      const timer = setTimeout(() => {
+        isUpdatingFromStore.current = true;
+        setProfileColor(localSolidColor);
+      }, 100); // 100ms debounce
+      return () => clearTimeout(timer);
+    }
+  }, [localSolidColor, colorMode, setProfileColor]);
+  
+  // ... (Logout handlers) ... 
   const handleLogout = () => {
     setShowLogoutModal(true);
   };
@@ -1154,7 +1181,7 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
 
         <div
           className="h-28 w-full transition-all duration-300 relative"
-          style={{ background: profileColor }}
+          style={{ background: colorMode === "solid" ? localSolidColor : `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)` }}
         >
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/20"></div>
@@ -1165,7 +1192,7 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
               <div className="p-1.5 bg-[#1e1f22] rounded-full">
                 <div
                   className="w-24 h-24 rounded-full flex items-center justify-center text-white text-4xl font-bold shadow-sm relative overflow-hidden"
-                  style={{ background: profileColor }}
+                  style={{ background: colorMode === "solid" ? localSolidColor : `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)` }}
                 >
                   {user?.photoURL ? (
                     <img
@@ -1264,6 +1291,7 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
                 setColorMode("solid");
                 if (profileColor.includes("gradient")) {
                   const parsed = parseProfileColor(profileColor);
+                  setLocalSolidColor(parsed.solidColor);
                   setProfileColor(parsed.solidColor);
                 }
               }}
@@ -1282,6 +1310,7 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
                 if (!profileColor.includes("gradient")) {
                   const parsed = parseProfileColor(profileColor);
                   setGradStart(parsed.solidColor);
+                  // Immediate switch for UI
                   setProfileColor(
                     `linear-gradient(${gradAngle}deg, ${parsed.solidColor} 0%, ${gradEnd} 100%)`
                   );
@@ -1305,7 +1334,8 @@ const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSecti
                   <input
                     type="color"
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    onChange={(e) => setProfileColor(e.target.value)}
+                    onChange={(e) => setLocalSolidColor(e.target.value)}
+                    value={localSolidColor}
                   />
                   <Pipette
                     size={16}

@@ -10,8 +10,8 @@ export const MAX_SERVERS_PER_USER = 10;
 
 export const MESSAGE_MAX_LENGTH = 2000;
 export const MESSAGE_COOLDOWN_MS = 1000; // 1 second - sadece spam koruması için
-export const MESSAGE_SPAM_THRESHOLD_MS = 1000; // 1 saniye içinde mesaj gönderilirse spam sayılır
-export const MESSAGE_SPAM_COOLDOWN_MS = 5000; // Spam tespit edilirse 5 saniye cooldown
+export const MESSAGE_SPAM_THRESHOLD_MS = 500; // 0.5 saniye içinde mesaj gönderilirse spam sayılır
+export const MESSAGE_SPAM_COOLDOWN_MS = 3000; // Spam tespit edilirse 3 saniye cooldown
 export const CHANNEL_CREATION_COOLDOWN_MS = 10_000; // 10 seconds
 
 export const MESSAGE_PAGE_SIZE = 50;

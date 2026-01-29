@@ -3,21 +3,21 @@
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { X, Users, Crown, Shield, Circle } from "lucide-react";
-import Avatar from "@/src/components/ui/Avatar";
+import { X, Users, Crown, Shield } from "lucide-react";
 import MemberContextMenu from "@/src/components/server/MemberContextMenu";
 import UserProfileModal from "@/src/components/server/UserProfileModal";
 import MemberItem from "@/src/components/server/MemberItem";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
 import { db } from "@/src/lib/firebase";
 import { collection, query, where, onSnapshot, documentId } from "firebase/firestore";
+import { Virtuoso } from "react-virtuoso";
 
 export default function ServerMemberList({ onClose }) {
   const { members, roles, currentServer } = useServerStore();
   const { user: currentUser } = useAuthStore();
   const [contextMenu, setContextMenu] = useState(null);
-  const [profileModal, setProfileModal] = useState(null); // { member, position }
-  const [userProfiles, setUserProfiles] = useState({}); // userId -> { gameActivity, customStatus }
+  const [profileModal, setProfileModal] = useState(null);
+  const [userProfiles, setUserProfiles] = useState({});
 
   // 🎮 Listen to users collection for gameActivity and customStatus (real-time)
   useEffect(() => {
@@ -31,7 +31,6 @@ export default function ServerMemberList({ onClose }) {
 
     if (memberIds.length === 0) return;
 
-    // Query users collection for these members
     const q = query(
       collection(db, "users"),
       where(documentId(), "in", memberIds)
@@ -57,7 +56,7 @@ export default function ServerMemberList({ onClose }) {
     return () => unsubscribe();
   }, [members]);
 
-  // Handle click to open profile modal - useCallback ile memoize
+  // Handle click to open profile modal
   const handleMemberClick = useCallback((e, member) => {
     e.stopPropagation();
     setProfileModal({ 
@@ -66,7 +65,7 @@ export default function ServerMemberList({ onClose }) {
     });
   }, []);
 
-  // Context menu handler - useCallback ile memoize  
+  // Context menu handler
   const handleMemberContextMenu = useCallback((e, member) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, member });
@@ -76,26 +75,14 @@ export default function ServerMemberList({ onClose }) {
     return members.map(member => {
       const memberId = member.id || member.userId;
       const userProfile = userProfiles[memberId] || {};
-      
-      // Calculate effective presence based on lastSeen timestamp
-      // This handles "ghost online" when computer was shut down without closing app
       const effectivePresence = getEffectivePresence({ ...member, ...userProfile });
       
-      if (currentUser && (member.id === currentUser.uid || member.userId === currentUser.uid)) {
-        return {
-          ...member,
-          displayName: member.displayName || member.nickname || currentUser.displayName || "User",
-          photoURL: member.photoURL || currentUser.photoURL || null,
-          presence: effectivePresence,
-          gameActivity: userProfile.gameActivity,
-          customStatus: userProfile.customStatus || member.customStatus,
-          customStatusColor: userProfile.customStatusColor,
-        };
-      }
+      const isCurrentUser = currentUser && (member.id === currentUser.uid || member.userId === currentUser.uid);
+      
       return {
         ...member,
-        displayName: member.displayName || member.nickname || `User${member.id?.slice(-4) || ''}`,
-        photoURL: member.photoURL || null,
+        displayName: member.displayName || member.nickname || (isCurrentUser ? currentUser.displayName : `User${member.id?.slice(-4) || ''}`),
+        photoURL: member.photoURL || (isCurrentUser ? currentUser.photoURL : null),
         presence: effectivePresence,
         gameActivity: userProfile.gameActivity,
         customStatus: userProfile.customStatus || member.customStatus,
@@ -134,18 +121,47 @@ export default function ServerMemberList({ onClose }) {
     return groups;
   }, [enrichedMembers, roles, currentServer]);
 
-  const sortedRoleIds = useMemo(() => {
-      if (!roles) return [];
-      const ids = [];
-      if (groupedMembers && groupedMembers['owner']) ids.push('owner');
-      const roleIds = [...roles].sort((a, b) => (b.order || 0) - (a.order || 0)).map(r => r.id);
-      ids.push(...roleIds);
-      ids.push('uncategorized');
-      ids.push('offline');
-      return ids.filter(id => groupedMembers && groupedMembers[id]);
-  }, [roles, groupedMembers]);
+  // Flatten the Groups for Virtualization
+  const flatData = useMemo(() => {
+    if (!roles) return [];
+    
+    // Order: Owner -> Roles -> Uncategorized -> Offline
+    const ids = [];
+    if (groupedMembers && groupedMembers['owner']) ids.push('owner');
+    const roleIds = [...roles].sort((a, b) => (b.order || 0) - (a.order || 0)).map(r => r.id);
+    ids.push(...roleIds);
+    ids.push('uncategorized');
+    ids.push('offline');
+    
+    const validGroupKeys = ids.filter(id => groupedMembers && groupedMembers[id]);
 
-  if (!currentServer) return null;
+    const items = [];
+    validGroupKeys.forEach(key => {
+        const group = groupedMembers[key];
+        // Header Item
+        items.push({
+            type: 'header',
+            roleId: key,
+            roleName: group.role.name,
+            roleColor: group.role.color,
+            count: group.members.length,
+            isOffline: key === 'offline'
+        });
+        
+        // Member Items
+        group.members.forEach(member => {
+            items.push({
+                type: 'member',
+                member,
+                roleId: key,
+                roleColor: group.role.color,
+                isOfflineGroup: key === 'offline'
+            });
+        });
+    });
+    
+    return items;
+  }, [groupedMembers, roles]);
 
   const getRoleIcon = (roleId, roleName) => {
     const lowerName = roleName?.toLowerCase() || '';
@@ -158,7 +174,45 @@ export default function ServerMemberList({ onClose }) {
     return null;
   };
 
-  // --- Render ---
+  if (!currentServer) return null;
+
+  // Row Renderer
+  const rowContent = (index, item) => {
+    if (item.type === 'header') {
+        const roleIcon = getRoleIcon(item.roleId, item.roleName);
+        return (
+            <div className="flex items-center px-4 pt-3 pb-1">
+                <div className="flex items-center gap-2 flex-1 group/header cursor-default">
+                    <div className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wide flex items-center gap-2 flex-1">
+                        {roleIcon}
+                        <span 
+                            className="transition-colors group-hover/header:text-[#dbdee1]"
+                            style={{ color: !item.isOffline && item.roleId !== 'uncategorized' ? item.roleColor : undefined }}
+                        >
+                            {item.roleName}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="px-2 py-[2px]">
+           <div className={item.isOfflineGroup ? 'opacity-60 hover:opacity-100 transition-opacity duration-300' : ''}>
+                <MemberItem
+                    member={item.member}
+                    roleId={item.roleId}
+                    roleColor={item.roleColor}
+                    isOfflineGroup={item.isOfflineGroup}
+                    onClick={handleMemberClick}
+                    onContextMenu={handleMemberContextMenu}
+                />
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="w-full h-full bg-[#111214] flex flex-col relative overflow-hidden border-l border-white/[0.06]">
       {/* Ambient Glow Effects */}
@@ -197,56 +251,14 @@ export default function ServerMemberList({ onClose }) {
         )}
       </div>
       
-      {/* MEMBER LIST */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-[#2b2d31] scrollbar-track-transparent relative z-10">
-        {sortedRoleIds.map((roleId, index) => {
-            const group = groupedMembers[roleId];
-            if (!group || group.members.length === 0) return null;
-
-            const roleIcon = getRoleIcon(roleId, group.role.name);
-            const isOfflineGroup = roleId === 'offline';
-
-            return (
-                <div 
-                  key={roleId} 
-                  className={`animate-in fade-in slide-in-from-right-4 duration-500`}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                    {/* Role Header */}
-                    <div className="flex items-center gap-2 mb-2 px-2 group/header select-none sh">
-                        <div className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wide flex items-center gap-2 flex-1">
-                            {roleIcon}
-                            <span 
-                              className="transition-colors group-hover/header:text-[#dbdee1] shrink-0"
-                              style={{ color: !isOfflineGroup && roleId !== 'uncategorized' ? group.role.color : undefined }}
-                            >
-                              {group.role.name}
-                            </span>
-                            <span className="shrink-0 text-[10px] text-[#5c5e66] font-mono">
-                               — {group.members.length}
-                            </span>
-                        </div>
-                        {/* Decorative Line */}
-                        <div className="h-px bg-white/5 flex-1 max-w-[50px] group-hover/header:max-w-[100px] transition-all duration-500" />
-                    </div>
-                    
-                    {/* 🚀 OPTIMIZED: MemberItem component with React.memo */}
-                    <div className={`space-y-1 ${isOfflineGroup ? 'opacity-60 hover:opacity-100 transition-opacity duration-300' : ''}`}>
-                        {group.members.map(member => (
-                            <MemberItem
-                              key={member.id}
-                              member={member}
-                              roleId={roleId}
-                              roleColor={group.role.color}
-                              isOfflineGroup={isOfflineGroup}
-                              onClick={handleMemberClick}
-                              onContextMenu={handleMemberContextMenu}
-                            />
-                        ))}
-                    </div>
-                </div>
-            );
-        })}
+      {/* MEMBER LIST - VIRTUALIZED */}
+      <div className="flex-1 relative z-10">
+        <Virtuoso
+            style={{ height: '100%', width: '100%' }}
+            data={flatData}
+            itemContent={rowContent}
+            className="scrollbar-thin scrollbar-thumb-[#2b2d31] scrollbar-track-transparent"
+        />
       </div>
 
       {/* Context Menu */}
