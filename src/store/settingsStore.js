@@ -83,7 +83,12 @@ export const useSettingsStore = create(
       idleTimeout: 5 * 60 * 1000, // 5 dakika inaktivite sonrası idle (ms)
       
       // 🚀 v5.2: Ses odasında olma durumu (idle detection için kullanılır)
-      isInVoiceRoom: false, // Kullanıcı bir ses odasında mı?
+      setInVoiceRoom: (inRoom) => set({ isInVoiceRoom: inRoom }),
+      
+      // 🚀 v5.3: Processed Voice Activity State (Local VAD)
+      // This reflects the ACTUAL audio being sent (after noise suppression gating)
+      isLocalSpeaking: false,
+      setLocalSpeaking: (speaking) => set({ isLocalSpeaking: speaking }),
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),

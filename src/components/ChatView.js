@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useOptionalRoomContext } from "@/src/hooks/useOptionalRoomContext";
 import { RoomEvent } from "livekit-client";
 import { useChatStore } from "@/src/store/chatStore";
+import { useAuthStore } from "@/src/store/authStore";
 import { Virtuoso } from "react-virtuoso";
 import {
   Send,
@@ -80,9 +81,22 @@ const MessageItem = memo(({
         {/* SOL TARA: AVATAR VEYA SAAT */}
         <div className="absolute left-4 w-[50px] flex justify-start select-none">
           {!isSequence || showDateSeparator ? (
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-lg shadow-sm group-hover:scale-105 transition-transform">
-              {message.username?.charAt(0).toUpperCase()}
-            </div>
+            message.photoURL ? (
+              <img 
+                src={message.photoURL} 
+                alt={message.username} 
+                className="w-10 h-10 rounded-xl border border-white/10 shadow-sm object-cover group-hover:scale-105 transition-transform bg-[#1e1f22]"
+              />
+            ) : (
+              <div 
+                className="w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center text-white font-bold text-lg shadow-sm group-hover:scale-105 transition-transform"
+                style={{
+                  background: message.profileColor || "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(168,85,247,0.2))"
+                }}
+              >
+                {message.username?.charAt(0).toUpperCase()}
+              </div>
+            )
           ) : (
             <span className="text-[10px] text-[#949ba4] hidden group-hover:inline-block w-full text-left pl-2 mt-1.5 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
               {formatTime(message.timestamp)}
@@ -137,6 +151,9 @@ const MessageItem = memo(({
 });
 
 export default function ChatView({ channelId, username, userId }) {
+  const { user } = useAuthStore();
+  // ⚡ Performans: Sadece profileColor değişince render olsun
+  const profileColor = useSettingsStore(s => s.profileColor);
   const {
     messages,
     loadChannelMessages,
@@ -539,7 +556,12 @@ export default function ChatView({ channelId, username, userId }) {
         username,
         room,
         currentChannel?.serverId,
-        { type: imageUrl ? 'image' : 'text', imageUrl }
+        { 
+          type: imageUrl ? 'image' : 'text', 
+          imageUrl,
+          photoURL: user?.photoURL, // Google Fotoğrafı
+          profileColor: profileColor // Üye rengi
+        }
       );
       
       if (!result?.success) {

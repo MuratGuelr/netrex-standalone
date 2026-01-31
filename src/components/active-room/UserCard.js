@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, memo } from "react";
 import {
   useParticipantInfo,
   useTracks,
@@ -11,7 +11,7 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAudioActivity } from "./hooks/useAudioActivity";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 
-export default function UserCard({
+function UserCard({
   participant,
   totalCount,
   onContextMenu,
@@ -53,12 +53,13 @@ export default function UserCard({
   const hasScreenShare = !!screenShareTrack;
   const isCurrentlyWatching = activeStreamId === participant.identity;
   // 🚀 v5.2: Performans modu için animasyon kontrolü eklendi
-  const { 
-    profileColor: localProfileColor, 
-    cameraMirrorEffect,
-    disableAnimations,
-    graphicsQuality 
-  } = useSettingsStore();
+  // 🚀 v5.2: Performans modu için animasyon kontrolü eklendi
+  // ⚡ Store Optimizasyonu: Sadece gerekli değişkenleri dinle (gereksiz render önleme)
+  const localProfileColor = useSettingsStore(s => s.profileColor);
+  const cameraMirrorEffect = useSettingsStore(s => s.cameraMirrorEffect);
+  const disableAnimations = useSettingsStore(s => s.disableAnimations);
+  const graphicsQuality = useSettingsStore(s => s.graphicsQuality);
+  const isLocalSpeaking = useSettingsStore(s => s.isLocalSpeaking);
   
   // Performans modu: low veya potato ise animasyonları devre dışı bırak
   const shouldDisableAnimations = disableAnimations || graphicsQuality === 'low' || graphicsQuality === 'potato';
@@ -93,7 +94,11 @@ export default function UserCard({
       ? remoteState.isDeafened
       : false
     : remoteState.isDeafened;
-  const isSpeaking = (audioActive || participantIsSpeaking) && !isMuted && !isDeafened;
+  // 🚀 v5.3: Local participant için processed VAD kullan (UserCard)
+  // Remote için normal audioActive (raw analysis) veya participantIsSpeaking (LiveKit internal)
+  const activeSource = participant.isLocal ? isLocalSpeaking : audioActive;
+  
+  const isSpeaking = (activeSource || participantIsSpeaking) && !isMuted && !isDeafened;
   const avatarSize = compact
     ? "w-10 h-10 text-base"
     : totalCount <= 2
@@ -155,6 +160,9 @@ export default function UserCard({
     (participant.isLocal
       ? true // Local participant için trackSid varsa göster
       : videoTrack?.isSubscribed || !!cameraPublication.track); // Remote için subscribed VEYA publication'da track mevcut olmalı
+
+  // 🚀 v5.3: Ekran paylaşımı veya kamera açıksa büyük mute overlay'i gösterme
+  const hasVisibleContent = (shouldShowVideo && videoTrack) || (hasScreenShare && screenShareTrack);
 
   // 🎨 v5.2: Konuşurken gradient border için wrapper
   const speakingBorderStyle = isSpeaking ? {
@@ -278,16 +286,24 @@ export default function UserCard({
               {userInitials}
             </span>
 
-            {/* Hover overlay - Katıl */}
+            {/* Hover overlay - Katıl (Minimalist & Şık) */}
             {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
               <div
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer z-50 rounded-2xl"
+                className="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer z-50 rounded-2xl"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveStreamId?.(participant.identity);
                 }}
               >
-                 <Tv size={16} />
+                 {/* Glassy Circle Icon */}
+                 <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-300">
+                    <Tv size={20} className="text-white drop-shadow-md" />
+                 </div>
+                 
+                 {/* Simple Label */}
+                 <span className="text-[12px] font-semibold text-white/90 tracking-wide drop-shadow-md">
+                   Yayını İzle
+                 </span>
               </div>
             )}
           </div>
@@ -303,7 +319,15 @@ export default function UserCard({
                 : "bottom-3 left-3 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm shadow-sm"
           }`}
         >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {/* Status Icons for Video Mode */}
+              {(isMuted || isDeafened) && hasVisibleContent && (
+                 isDeafened ? (
+                    <VolumeX size={compact ? 10 : 14} className="text-red-500" />
+                 ) : (
+                    <MicOff size={compact ? 10 : 14} className="text-red-500" />
+                 )
+              )}
               <span className={`font-semibold text-white tracking-wide truncate drop-shadow-md ${compact ? "text-[10px]" : "text-xs"}`}>
                 {displayName}
               </span>
@@ -324,7 +348,8 @@ export default function UserCard({
       </div>
 
       {/* 🔇 Mute/Deafen Overlay (Professional Glassmorphism with Text) */}
-      {(isMuted || isDeafened) && (
+      {/* SADECE GÖRÜNTÜ YOKSA GÖSTER (Avatar modu) */}
+      {(isMuted || isDeafened) && !hasVisibleContent && (
         <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none rounded-xl overflow-hidden">
            {/* Backdrop Dimmer & Blur */}
            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-all duration-300" />
@@ -351,3 +376,5 @@ export default function UserCard({
     </div>
   );
 }
+
+export default memo(UserCard);

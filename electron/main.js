@@ -155,7 +155,68 @@ if (!gotTheLock) {
   });
 }
 
-app.on("before-quit", () => {});
+// --- GRACEFUL EXIT HANDLING ---
+let isExitInProgress = false;
+let cleanupCompleted = false;
+
+app.on("before-quit", async (event) => {
+  // If cleanup already done or splash already shown, let it quit
+  if (cleanupCompleted) return;
+  
+  // Prevent immediate quit
+  event.preventDefault();
+  
+  // Prevent multiple exit attempts
+  if (isExitInProgress) return;
+  isExitInProgress = true;
+  
+  const mainWindow = getMainWindow();
+  
+  // Show exit splash
+  const { ipcMain } = require('electron');
+  const exitSplash = createExitSplashWindow();
+  
+  // Hide main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+  
+  // Setup cleanup completion listener
+  const cleanupListener = () => {
+    log.info("✅ Cleanup completed signal received");
+    cleanupCompleted = true;
+  };
+  ipcMain.once("cleanup-complete", cleanupListener);
+  
+  // Request cleanup from renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("app-will-quit");
+  }
+  
+  // Wait for cleanup with timeout (max 5 seconds)
+  const startTime = Date.now();
+  const maxWait = 5000;
+  
+  const checkAndQuit = () => {
+    if (cleanupCompleted || Date.now() - startTime > maxWait) {
+      // Cleanup done or timeout
+      ipcMain.removeListener("cleanup-complete", cleanupListener);
+      cleanupCompleted = true;
+      
+      // Close exit splash and quit (longer delay to show the animation)
+      setTimeout(() => {
+        if (exitSplash && !exitSplash.isDestroyed()) {
+          exitSplash.close();
+        }
+        app.exit(0);
+      }, 1500); // 1.5 second delay to enjoy the exit animation
+    } else {
+      setTimeout(checkAndQuit, 100);
+    }
+  };
+  
+  checkAndQuit();
+});
 
 app.on("will-quit", () => {
    const { uIOhook } = require("uiohook-napi");
