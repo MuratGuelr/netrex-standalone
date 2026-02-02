@@ -88,6 +88,7 @@ export function useVoiceProcessor() {
     noiseProfiling,
     spectralFiltering,
     aiNoiseSuppression,
+    setLocalSpeaking // 🚀 v5.3: Sync VAD state
   } = settings;
 
   // DÜZELTME: Eğer noiseSuppressionMode "krisp" ise ama aiNoiseSuppression false ise,
@@ -854,6 +855,9 @@ export function useVoiceProcessor() {
                      frequencyDataArray
                   );
 
+                  // 🚀 v5.3: Global State Sync
+                  setLocalSpeaking(isSpeaking);
+
                   // 9. Microphone Control Logic (Same as before)
                   if (isSpeaking) {
                       impactBlockTimestampRef.current = 0;
@@ -939,5 +943,6 @@ export function useVoiceProcessor() {
     noiseProfiling,
     spectralFiltering,
     aiNoiseSuppression,
+    setLocalSpeaking
   ]);
 }

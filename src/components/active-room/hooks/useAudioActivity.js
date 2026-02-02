@@ -4,6 +4,11 @@ import { useParticipantInfo } from "@livekit/components-react";
 import { Track, RoomEvent } from "livekit-client";
 
 export function useAudioActivity(participant) {
+  // 🚀 CPU OPTİMİZASYONU: Remote kullanıcılar için AudioContext OLUŞTURMA!
+  // Uzaktaki kullanıcılar için zaten LiveKit sunucusundan gelen "isSpeaking" verisi var (UserCard.js içinde kullanılıyor).
+  // Bu hook'u çağırmak her bir kullanıcı için ayrı bir ses motoru açıp işlemciyi boğuyordu.
+  if (!participant?.isLocal) return false;
+
   const [isActive, setIsActive] = useState(false);
   const { isMuted } = useParticipantInfo({ participant });
   useEffect(() => {

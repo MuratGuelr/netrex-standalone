@@ -228,7 +228,9 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQu
      }
   });
 
-  ipcMain.handle("cleanup-complete", () => {});
+  ipcMain.on("cleanup-complete", () => {
+    // Cleanup signal received from renderer - handled in main.js before-quit
+  });
 
   // DevTools / Admin
   ipcMain.handle("is-admin", (event, userUid) => isAdminUser(userUid));

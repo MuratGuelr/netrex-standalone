@@ -241,7 +241,6 @@ export const useSettingsStore = create(
       toggleControlBarHidden: () => set((state) => ({ controlBarHidden: !state.controlBarHidden })),
 
       // Online/Offline ayarları
-      // Online/Offline ayarları
       setUserStatus: (status) => set({ userStatus: status, isAutoIdle: false }), // Manuel statüs değişimi otomatik modu kapatır
       setIsAutoIdle: (isIdle) => set((state) => {
         // IDLE OLMA DURUMU:
