@@ -3,6 +3,7 @@ const path = require('path');
 const Store = require('electron-store');
 const { AccessToken } = require("livekit-server-sdk");
 const log = require('electron-log');
+const { quitAndInstall: updateQuitAndInstall } = require('./updateManager');
 
 // Local imports
 const { getLoginHtml, getSuccessHtml } = require('./utils');
@@ -86,7 +87,7 @@ const startLocalAuthServer = (mainWindow) => {
   });
 };
 
-function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager) {
+function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQuittingFn) {
   
   // Auth
   ipcMain.handle("start-oauth", async () => {
@@ -97,6 +98,12 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager) {
     } catch (e) {
       console.error(e);
     }
+  });
+
+  // Force Quit (Graceful exit completed)
+  ipcMain.handle("app-quit-force", () => {
+      if (setQuittingFn) setQuittingFn(true);
+      app.quit();
   });
 
   // Utils
@@ -184,7 +191,7 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager) {
   });
 
   // Auto Updater
-  ipcMain.handle("quit-and-install", () => autoUpdater.quitAndInstall());
+  ipcMain.handle("quit-and-install", () => updateQuitAndInstall());
 
   ipcMain.handle("splash-complete", () => {
     showMainWindowFn();

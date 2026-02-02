@@ -156,6 +156,9 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
       contextIsolation: true,
       sandbox: false,
       backgroundThrottling: false,
+      // 🚀 v5.3 CPU OPTİMİZASYONU:
+      enableBlinkFeatures: '', // Gereksiz Blink özelliklerini kapat
+      spellcheck: false, // Yazım denetimi CPU kullanır
     },
     icon: getIconPath(),
   });
@@ -166,7 +169,8 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   // CSP
   session.defaultSession.webRequest.onHeadersReceived((d, c) => {
     const isDev = !app.isPackaged;
-    const scriptSrc = isDev ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'";
+    // 🛡️ v5.3: Production'da da 'unsafe-eval' ekledik çünkü bazı Next.js chunk'ları buna ihtiyaç duyabiliyor
+    const scriptSrc = "'self' 'unsafe-inline' 'unsafe-eval'";
     
     c({
       responseHeaders: {
@@ -199,7 +203,8 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   });
 
   if (!app.isPackaged) {
-    mainWindow.loadURL("http://localhost:3000");
+    const port = process.env.PORT || 3000;
+    mainWindow.loadURL(`http://localhost:${port}`);
   } else {
     const indexPath = path.join(__dirname, "../../out/index.html");
     mainWindow.loadFile(indexPath);
@@ -208,11 +213,24 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   // --- KAPATMA DAVRANIŞI (TRAY) ---
   mainWindow.on("close", (event) => {
     const closeToTray = currentStore.get("settings.closeToTray", true);
-    if (!isQuitting && closeToTray) {
-      event.preventDefault();
-      mainWindow.hide();
-      mainWindow.webContents.send("window-state-changed", "hidden");
-      return false;
+    if (!isQuitting) {
+        event.preventDefault();
+        
+        if (closeToTray) {
+            mainWindow.hide();
+            mainWindow.webContents.send("window-state-changed", "hidden");
+        } else {
+            // Graceful Exit Flow
+            // Send request to renderer to show exit splash and cleanup
+            mainWindow.webContents.send("request-exit");
+            
+            // Show window if hidden so splash is visible
+            if (!mainWindow.isVisible()) {
+                mainWindow.show();
+            }
+            mainWindow.focus();
+        }
+        return false;
     }
   });
 

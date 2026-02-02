@@ -7,11 +7,19 @@
 
 import ChatView from "@/src/components/ChatView";
 import { useChatStore } from "@/src/store/chatStore";
+import { useServerStore } from "@/src/store/serverStore";
+import { useMemo } from "react";
 import { Hash, MessageSquare } from "lucide-react";
 
 export default function StandaloneChatView({ channelId, username, userId }) {
   const { currentChannel } = useChatStore();
-  const channelName = currentChannel?.name || "-";
+  const { channels } = useServerStore();
+  
+  const channelName = useMemo(() => {
+    if (currentChannel?.name) return currentChannel.name;
+    const channel = channels.find(c => c.id === channelId);
+    return channel?.name || "-";
+  }, [currentChannel, channels, channelId]);
 
   return (
     <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12]">

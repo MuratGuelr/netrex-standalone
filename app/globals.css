@@ -491,6 +491,27 @@
   }
 }
 
+/* 🚀 PERFORMANCE OPTIMIZATIONS v5.3 */
+.will-change-opacity {
+  will-change: opacity;
+}
+
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-filter {
+  will-change: filter;
+}
+
+/* Optimize backdrop-blur performance */
+.backdrop-blur-md, 
+.backdrop-blur-xl, 
+.backdrop-blur-2xl {
+  transform: translateZ(0); /* Force GPU acceleration */
+  backface-visibility: hidden;
+}
+
 /* Keyframe Definitions */
 @keyframes ndsFadeIn {
   from { opacity: 0; }
@@ -1177,10 +1198,74 @@
 }
 
 /* Progress bar */
+/* 🚀 PREMIUM TOAST STYLES (Sonner Overrides) */
+[data-sonner-toaster] {
+  font-family: 'Inter', sans-serif !important;
+}
+
+[data-sonner-toast] {
+  background: linear-gradient(135deg, rgba(30, 31, 34, 0.95) 0%, rgba(20, 20, 22, 0.98) 100%) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 0, 0, 0.2) !important;
+  padding: 14px 18px !important;
+  overflow: hidden !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+[data-sonner-toast]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--nds-accent-primary);
+  opacity: 0.8;
+}
+
+[data-sonner-toast][data-type="success"]::before { background: var(--nds-success); }
+[data-sonner-toast][data-type="error"]::before { background: var(--nds-danger); }
+[data-sonner-toast][data-type="info"]::before { background: var(--nds-accent-primary); }
+[data-sonner-toast][data-type="warning"]::before { background: var(--nds-warning); }
+
+/* Progress bar modernizer */
 [data-sonner-toaster] [data-sonner-toast] [data-progress] {
   background: linear-gradient(90deg, var(--nds-accent-primary) 0%, var(--nds-accent-secondary) 100%) !important;
   height: 3px !important;
-  border-radius: 0 0 16px 16px !important;
+  border-radius: 0 0 18px 18px !important;
+  opacity: 0.8;
+}
+
+[data-sonner-toast] [data-title] {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: #fff !important;
+  font-size: 14px !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: #949ba4 !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  margin-top: 4px !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  top: 10px !important;
+  right: 10px !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.1);
 }
 /* --- PERFORMANCE & GPU ACCELERATION --- */
 

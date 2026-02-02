@@ -40,6 +40,10 @@ contextBridge.exposeInMainWorld("netrex", {
     ),
   onUpdateProgress: (callback) =>
     ipcRenderer.on("update-progress", (_, percent) => callback(percent)),
+  onUpdateRestarting: (callback) =>
+    ipcRenderer.on("update-restarting", () => callback()),
+  onUpdateRestartFailed: (callback) =>
+    ipcRenderer.on("update-restart-failed", (_, error) => callback(error)),
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 
   // Screen Share
@@ -99,4 +103,9 @@ contextBridge.exposeInMainWorld("netrex", {
   // --- GLOBAL INPUT LISTENER (CPU OPTIMIZATION) ---
   startInputListener: () => ipcRenderer.invoke("start-input-listener"),
   stopInputListener: () => ipcRenderer.invoke("stop-input-listener"),
+
+  // Exit Handling
+  onRequestExit: (callback) => 
+    ipcRenderer.on("request-exit", (_, event) => callback(event)),
+  forceQuitApp: () => ipcRenderer.invoke("app-quit-force"),
 });

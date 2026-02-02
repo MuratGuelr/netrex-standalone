@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * 🎮 useGameActivity - Oyun Algılama Hook
- * 
- * ⚠️ DEVRE DIŞI: Oyun algılama sistemi kaldırıldı
- * CPU ve RAM tasarrufu için devre dışı bırakıldı.
- * Hook uyumluluk için korunuyor ama hiçbir şey yapmıyor.
- */
-
 import { useState, useCallback } from "react";
 
 export function useGameActivity() {

@@ -15,16 +15,17 @@ const CONFIG = {
   BUFFER_SIZE: 2048,
 
   // KRISP BENZERİ TEPKİ AYARLARI
-  RELEASE_TIME: 350,
-  RELEASE_TIME_RNNOISE: 600, // Biraz daha uzun release (yarım kelime arası kesilmesin)
+  RELEASE_TIME: 250, // v5.3: 350 -> 250 (daha hızlı kapanma)
+  RELEASE_TIME_RNNOISE: 350, // v5.3: 600 -> 350 (daha instant)
+  // 🚀 v5.3: UI Speaking Indicator için ayrı release (daha kısa)
+  UI_RELEASE_TIME: 100, // v5.3: 150ms -> 100ms (daha akıcı)
   ATTACK_TIME: 0,      // Hemen aç
   ATTACK_TIME_RNNOISE: 0,
   MIN_VOICE_DURATION: 1,
   MIN_VOICE_DURATION_RNNOISE: 1,
   MAX_SHORT_NOISE_DURATION: 50,
-  // 🚀 OPTIMIZED: 50ms -> 80ms (CPU kullanımını %40 azaltır)
-  // Buffer boyutu 21ms olduğundan 80ms güvenli bir değer (Worklet tarafından kontrol edilir)
-  CHECK_INTERVAL: 80,
+  // 🚀 OPTIMIZED v5.3: 120ms -> 85ms (Akıcılık için hafif artırıldı)
+  CHECK_INTERVAL: 85,
 
   // Smoothing (Dengeli)
   RMS_ATTACK: 0.25,     // 0.05 -> 0.25 (5 kat daha hızlı ses açılışı)
@@ -138,6 +139,10 @@ export function useVoiceProcessor() {
   const consecutiveVoiceDetectionsRef = useRef(0);
   const consecutiveSilenceDetectionsRef = useRef(0);
   const impactBlockTimestampRef = useRef(0);
+  
+  // 🚀 v5.3: UI Speaking Indicator için ayrı state (daha instant response)
+  const lastUISpeakingTimeRef = useRef(0);
+  const currentUISpeakingRef = useRef(false);
 
   // ========== YARDIMCI FONKSİYONLAR ==========
 
@@ -487,6 +492,12 @@ export function useVoiceProcessor() {
   // ========== TEMİZLİK ==========
   const cleanup = useCallback((preserveRNNoise = false) => {
     isCleaningUpRef.current = true;
+    
+    // 🚀 v5.3: UI speaking state'i kapat
+    if (currentUISpeakingRef.current) {
+      currentUISpeakingRef.current = false;
+      useSettingsStore.getState().setLocalIsSpeaking(false);
+    }
 
     if (rnnoiseCheckIntervalRef.current) {
       clearInterval(rnnoiseCheckIntervalRef.current);
@@ -631,6 +642,27 @@ export function useVoiceProcessor() {
 
       let currentNode = source;
 
+      // Helper to resolve resource paths (Electron vs Web)
+      const getResourcePath = async (filename) => {
+         // 🚀 Fix for Dev Mode: If serving from localhost (http), DO NOT use file:// protocol.
+         // Browsers block file:// access from http:// origins.
+         if (process.env.NODE_ENV === "development" || window.location.protocol.startsWith("http")) {
+            return `/${filename}`;
+         }
+
+         if (window.netrex && window.netrex.getResourcesPath) {
+             try {
+                const resourcesPath = await window.netrex.getResourcesPath();
+                // Windows path fix: Convert backslashes to forward slashes for URL
+                const cleanPath = resourcesPath.replace(/\\/g, '/');
+                return `file:///${cleanPath}/${filename}`.replace(/([^:]\/)\/+/g, "$1"); // Normalize slashes
+             } catch (e) {
+                console.warn("Failed to get resources path:", e);
+             }
+         }
+         return `/${filename}`;
+      };
+
       // ... RNNoise Setup ... (Same as before)
       if (noiseSuppressionMode === "krisp") {
           if (!rnnoiseNodeRef.current) {
@@ -641,10 +673,8 @@ export function useVoiceProcessor() {
                const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModuleRef.current;
                
                // Path handling
-               let workletUrl = "/rnnoise.worklet.js";
-               let wasmUrl = "/rnnoise.wasm";
-               // Electron path fix if needed for file:// protocol, can reuse previous logic if needed.
-               // Assuming standard public path works for now.
+               let workletUrl = await getResourcePath('rnnoise.worklet.js');
+               let wasmUrl = await getResourcePath('rnnoise.wasm');
                
                const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
                await RNNoiseNode.register(ctx, assets);
@@ -718,10 +748,10 @@ export function useVoiceProcessor() {
       try {
           // Load the worklet
           try {
-             await ctx.audioWorklet.addModule('/voice-processor.worklet.js');
+             const processorPath = await getResourcePath('voice-processor.worklet.js');
+             await ctx.audioWorklet.addModule(processorPath);
           } catch(e) {
-             console.warn("Worklet module load failed, trying absolute path logic...", e);
-             // Fallback logic for production if needed
+             console.warn("Worklet module load failed:", e);
           }
 
           const processorNode = new AudioWorkletNode(ctx, 'voice-processor');
@@ -846,6 +876,16 @@ export function useVoiceProcessor() {
                              if (!originalStreamTrack.enabled) originalStreamTrack.enabled = true;
                          }
                       }
+                      
+                      // 🚀 v5.3: UI Speaking Indicator - Hemen aç (Sadece bağlıysa)
+                      lastUISpeakingTimeRef.current = now;
+                      if (!currentUISpeakingRef.current) {
+                          // EĞER BAĞLI DEĞİLSE GÖSTERME
+                          if (room.state === ConnectionState.Connected) {
+                              currentUISpeakingRef.current = true;
+                              useSettingsStore.getState().setLocalIsSpeaking(true);
+                          }
+                      }
                   } else {
                       // Silence
                       if (firstVoiceDetectionTimeRef.current > 0 && (now - firstVoiceDetectionTimeRef.current) < CONFIG.MAX_SHORT_NOISE_DURATION) {
@@ -855,6 +895,13 @@ export function useVoiceProcessor() {
                       if ((now - lastSpeakingTimeRef.current) > releaseMap) {
                           firstVoiceDetectionTimeRef.current = 0;
                           if (originalStreamTrack.enabled) originalStreamTrack.enabled = false;
+                      }
+                      
+                      // 🚀 v5.3: UI Speaking Indicator - Kısa release ile kapat (80ms)
+                      // Bağlantı kopsa bile kapatmayı garanti et
+                      if (currentUISpeakingRef.current && ((now - lastUISpeakingTimeRef.current) > CONFIG.UI_RELEASE_TIME || room.state !== ConnectionState.Connected)) {
+                          currentUISpeakingRef.current = false;
+                          useSettingsStore.getState().setLocalIsSpeaking(false);
                       }
                   }
               }

@@ -11,19 +11,11 @@ import {
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import {
-  Plus,
   Volume2,
-  Settings,
   Hash,
-  Trash2,
   Shield,
-  ChevronDown,
   Loader2,
   HelpCircle,
-  Circle,
-  CircleOff,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { useChatStore } from "@/src/store/chatStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -467,10 +459,10 @@ export default function RoomList({
           <div className="flex items-center gap-3 group">
             {/* Logo container with glow */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl blur-md opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
+              <div className="absolute inset-0 bg-indigo-500/20 rounded-xl opacity-40 group-hover:opacity-60 transition-opacity duration-300 will-change-opacity" />
               <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg overflow-hidden">
                 <img 
-                  src="/logo.png" 
+                  src="logo.png" 
                   alt="Netrex" 
                   className="w-10 h-10 object-contain" 
                   onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} 

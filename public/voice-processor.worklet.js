@@ -6,9 +6,9 @@ class VoiceProcessor extends AudioWorkletProcessor {
     this._buffer = new Float32Array(this._bufferSize);
     this._bufferIndex = 0;
     
-    // Report every 80ms (approx)
-    // 80ms / (128 samples / 48000 Hz) ≈ 30 quanta
-    this._reportIntervalQuanta = 30;
+    // Report every 85ms (approx) - Balanced for CPU vs Responsiveness
+    // 85ms / (128 samples / 48000 Hz) ≈ 32 quanta
+    this._reportIntervalQuanta = 32;
     this._quantaCount = 0;
   }
 

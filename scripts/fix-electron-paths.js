@@ -33,6 +33,15 @@ function fixPathsInFile(filePath) {
     content = content.replace(/\/_next\/static/g, './_next/static');
     content = content.replace(/\.\.\/_next\/static/g, './_next/static');
     
+    // 🖼️ FIX: Common public assets should be relative
+    // This fixes broken images like /logo.png in Electron build
+    content = content.replace(/src="\/logo\.png"/g, 'src="./logo.png"');
+    content = content.replace(/src="\/logo\.svg"/g, 'src="./logo.svg"');
+    content = content.replace(/src="\/logo\.ico"/g, 'src="./logo.ico"');
+    content = content.replace(/src="\/favicon\.ico"/g, 'src="./favicon.ico"');
+    // Generic fix for any src starting with / that isn't _next or absolute URL
+    content = content.replace(/src="\/([^h_/][^"]*)"/g, 'src="./$1"');
+    
     // Fix paths in __next_f.push arrays that reference chunks
     // Pattern: "static/chunks/..." should become "./_next/static/chunks/..."
     content = content.replace(/"static\/chunks\//g, '"./_next/static/chunks/');

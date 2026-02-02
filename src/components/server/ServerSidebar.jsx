@@ -123,8 +123,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
             }
           `}
         >
-            {/* Header Glow */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-2xl -translate-y-10 translate-x-10 group-hover:translate-x-5 transition-transform duration-500" />
+            {/* Header Glow - Simplified (No move, GPU friendly) */}
+            <div className="absolute inset-0 bg-white/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
             
             <div className="flex items-start justify-between relative z-10">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg overflow-hidden">

@@ -77,7 +77,10 @@ export function usePresence() {
 
       await updateDoc(doc(db, 'users', user.uid), updateData);
       
-      console.log(`👤 Presence updated: ${status}`);
+      // 🚀 v5.3: Log only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`👤 Presence updated: ${status}`);
+      }
     } catch (error) {
       console.error('Failed to update presence:', error);
     }
@@ -101,7 +104,10 @@ export function usePresence() {
         presence: currentStatus || 'online'
       });
       
-      console.log('💓 Heartbeat sent (Optimized)');
+      // 🚀 v5.3: Log only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('💓 Heartbeat sent (Optimized)');
+      }
     } catch (error) {
       // Silently ignore heartbeat errors
     }

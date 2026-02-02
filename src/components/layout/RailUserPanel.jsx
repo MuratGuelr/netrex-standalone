@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Settings, ChevronRight, User } from "lucide-react";
+import { Settings, ChevronRight, User, Zap, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useUpdateStore } from "@/src/store/updateStore";
 import { createPortal } from "react-dom";
 
 export default function RailUserPanel() {
@@ -16,6 +17,7 @@ export default function RailUserPanel() {
     userStatus, 
     setUserStatus 
   } = useSettingsStore();
+  const { status: updateStatus } = useUpdateStore();
 
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -102,13 +104,20 @@ export default function RailUserPanel() {
                    </div>
                </div>
 
-               {/* Status Dot (Avatar Üzerinde) */}
-               <div className={`
-                 absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-[3px] border-[#1e1f22] z-20 
-                 ${currentStatus.color} ${currentStatus.shadow}
-                 transition-all duration-300
-               `} />
-          </button>
+                {/* Status Dot (Avatar Üzerinde) */}
+                <div className={`
+                  absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-[3px] border-[#1e1f22] z-20 
+                  ${currentStatus.color} ${currentStatus.shadow}
+                  transition-all duration-300
+                `} />
+
+                {/* Update Badge (Avatar Üzerinde - Sol Üst) */}
+                {updateStatus === 'downloaded' && (
+                  <div className="absolute -top-1 -left-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-[#1e1f22] z-30 flex items-center justify-center animate-bounce shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+                     <Zap size={8} className="text-white fill-white" />
+                  </div>
+                )}
+           </button>
       </div>
 
       {showMenu && typeof document !== 'undefined' && createPortal(
@@ -206,10 +215,38 @@ export default function RailUserPanel() {
                   </div>
                   <span className="text-sm font-medium">Uygulama Ayarları</span>
                   <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0" />
+            </button>
+
+            {/* Update Ready Button in Menu */}
+            {updateStatus === 'downloaded' && (
+              <button 
+                  onClick={(e) => {
+                     e.stopPropagation();
+                     if (window.netrex) window.netrex.quitAndInstall();
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 mt-1 transition-all group"
+              >
+                  <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <RefreshCw size={16} className="animate-spin-slow" />
+                  </div>
+                  <span className="text-sm font-bold">Yeni Sürümü Kur</span>
+                  <Zap size={14} className="ml-auto animate-pulse" />
               </button>
+            )}
         </div>,
         document.body
       )}
+
+      {/* Global slow spin animation */}
+      <style jsx global>{`
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 3s linear infinite;
+        }
+      `}</style>
     </>
   );
 }

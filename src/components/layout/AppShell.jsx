@@ -5,7 +5,7 @@
  * NDS v2.0 - Netrex Design System
  * 
  * The root layout component that provides structure for the entire application.
- * Includes: Titlebar, Sidebar, Main Content Area
+ * Includes: Sidebar, Main Content Area
  * 
  * OPTIMIZATION: useGameActivity hook removed - it should only run when connected to a room
  */
@@ -13,12 +13,13 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import Titlebar from "./Titlebar";
-import { Users, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import { toast } from "sonner";
+import { useSoundManagerStore } from "@/src/store/soundManagerStore";
+import { toast } from "@/src/utils/toast";
+import ErrorBoundary from "@/src/components/ui/ErrorBoundary";
 
 const SettingsModal = lazy(() => import("@/src/components/SettingsModal"));
 
@@ -28,7 +29,6 @@ export default function AppShell({
   sidebar,
   rightSidebar,
   serverRail,
-  showTitlebar = true,
   showRightSidebar = true,
   onToggleRightSidebar,
   hasRightSidebarContent = false,
@@ -67,6 +67,8 @@ export default function AppShell({
 
   useEffect(() => {
     setIsElectron(typeof window !== "undefined" && !!window.netrex);
+    // 🚀 v5.3: Sistem seslerini RAM'e ön-yükle (Zero Latency)
+    useSoundManagerStore.getState().init();
   }, []);
 
   return (
@@ -80,7 +82,6 @@ export default function AppShell({
       select-none
       ${className}
     `}>
-      {/* Titlebar removed as requested */}
 
       {/* Main App Container */}
       <div className="flex-1 flex overflow-hidden">
@@ -124,7 +125,9 @@ export default function AppShell({
           flex
         ">
           <div className="flex-1 flex flex-col h-full overflow-hidden">
-             {children}
+             <ErrorBoundary>
+               {children}
+             </ErrorBoundary>
           </div>
 
           {/* Right Sidebar with integrated Toggle Button */}

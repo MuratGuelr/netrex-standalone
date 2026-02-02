@@ -84,6 +84,10 @@ export const useSettingsStore = create(
       
       // 🚀 v5.2: Ses odasında olma durumu (idle detection için kullanılır)
       isInVoiceRoom: false, // Kullanıcı bir ses odasında mı?
+      
+      // 🚀 v5.3: Local participant speaking durumu (useVoiceProcessor'dan gelir)
+      // Bu sayede useAudioActivity hook'u local için gerekli değil - sıfır ek CPU maliyeti
+      localIsSpeaking: false,
 
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
@@ -260,6 +264,9 @@ export const useSettingsStore = create(
       
       // 🚀 v5.2: Ses odasında olma durumunu ayarla
       setInVoiceRoom: (inRoom) => set({ isInVoiceRoom: inRoom }),
+      
+      // 🚀 v5.3: Local speaking durumunu ayarla (useVoiceProcessor tarafından çağrılır)
+      setLocalIsSpeaking: (speaking) => set({ localIsSpeaking: speaking }),
 
       syncWithElectron: async () => {
         if (window.netrex) {

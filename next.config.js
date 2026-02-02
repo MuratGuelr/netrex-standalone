@@ -13,11 +13,25 @@ const nextConfig = {
     unoptimized: true,
   },
 
-  // Optional: If you use trailing slashes in your file system routing
-  trailingSlash: true,
+  // Electron için trailing slash kapalı olmalı (dizin yapısı yerine dosya yapısı)
+  trailingSlash: false,
 
   // Electron için asset prefix'i göreceli yap
   assetPrefix: process.env.NODE_ENV === 'production' ? './' : undefined,
+
+  // 🚀 v5.3 PRODUCTION OPTİMİZASYONU:
+  // Console.log'ları production'da kaldır (CPU ve memory tasarrufu)
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'], // Sadece error ve warn'ları tut
+    } : false,
+  },
+
+  // React Strict Mode production'da kapalı (double render yok)
+  reactStrictMode: false,
+  
+  // SWC minifier (daha hızlı ve küçük bundle)
+  swcMinify: true,
 
   // Environment variables - build sırasında bake edilir
   env: {

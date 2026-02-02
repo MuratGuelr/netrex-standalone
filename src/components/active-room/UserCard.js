@@ -1,17 +1,16 @@
-
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   useParticipantInfo,
   useTracks,
+  useIsSpeaking,
   VideoTrack,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { Tv, Maximize, VolumeX, MicOff } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import { useAudioActivity } from "./hooks/useAudioActivity";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 
-export default function UserCard({
+const UserCard = React.memo(({
   participant,
   totalCount,
   onContextMenu,
@@ -19,11 +18,12 @@ export default function UserCard({
   hideIncomingVideo,
   setActiveStreamId,
   activeStreamId,
-}) {
+}) => {
   // Extract both identity (for tracking) and name (for display)
   // identity = persistent unique ID (e.g., "userId_deviceShort")
   // name = user-friendly display name (e.g., "sk jsksos")
-  const { identity, name, metadata, isSpeaking: participantIsSpeaking } = useParticipantInfo({ participant });
+  const { identity, name, metadata } = useParticipantInfo({ participant });
+  const livekitIsSpeaking = useIsSpeaking(participant);
   
   // Use name for display, fallback to identity if name is not set
   // For anonymous users, this ensures we have something to display
@@ -43,7 +43,15 @@ export default function UserCard({
   };
   
   const userInitials = getInitials(displayName);
-  const audioActive = useAudioActivity(participant);
+  
+  // 🚀 v5.3: Speaking indicator - SIFIR EK CPU MALİYETİ
+  // Local: Store'dan al (useVoiceProcessor zaten VAD yapıyor)
+  // Remote: LiveKit native isSpeaking kullan
+  // 🚀 v5.3: Rasyonel Optimizasyon - Sadece ilgili değerleri dinle (Selector mantığı)
+  const localProfileColor = useSettingsStore(s => s.profileColor);
+  const disableAnimations = useSettingsStore(s => s.disableAnimations);
+  const graphicsQuality = useSettingsStore(s => s.graphicsQuality);
+  const localIsSpeaking = useSettingsStore(s => s.localIsSpeaking);
 
   // Screen share track kontrolü
   const screenShareTracks = useTracks([Track.Source.ScreenShare]);
@@ -52,13 +60,6 @@ export default function UserCard({
   );
   const hasScreenShare = !!screenShareTrack;
   const isCurrentlyWatching = activeStreamId === participant.identity;
-  // 🚀 v5.2: Performans modu için animasyon kontrolü eklendi
-  const { 
-    profileColor: localProfileColor, 
-    cameraMirrorEffect,
-    disableAnimations,
-    graphicsQuality 
-  } = useSettingsStore();
   
   // Performans modu: low veya potato ise animasyonları devre dışı bırak
   const shouldDisableAnimations = disableAnimations || graphicsQuality === 'low' || graphicsQuality === 'potato';
@@ -69,6 +70,16 @@ export default function UserCard({
       return {};
     }
   }, [metadata]);
+
+  // 🚀 v5.3: Rasyonel Optimizasyon - Sadece ilgili değerleri dinle (Selector mantığı)
+  const storeIsMuted = useSettingsStore(s => s.isMuted);
+  const storeIsDeafened = useSettingsStore(s => s.isDeafened);
+  
+  // Local participant için direkt store'dan, remote için metadata'dan oku
+  // Bu sayede "SJ" kartındaki simge saniyesinde değişir, senkron kaybı yaşanmaz.
+  const isMuted = participant.isLocal ? storeIsMuted : remoteState.isMuted;
+  const isDeafened = participant.isLocal ? storeIsDeafened : remoteState.isDeafened;
+
   // Local participant ise settings'den, değilse metadata'dan renk al
   const userColor = participant.isLocal
     ? localProfileColor || "#6366f1"
@@ -82,18 +93,23 @@ export default function UserCard({
     return match ? match[0] : "#6366f1";
   };
 
-  // Local participant için de metadata'dan oku (kendi durumunu görmek için)
-  const isMuted = participant.isLocal
-    ? remoteState.isMuted !== undefined
-      ? remoteState.isMuted
-      : false
-    : remoteState.isMuted;
-  const isDeafened = participant.isLocal
-    ? remoteState.isDeafened !== undefined
-      ? remoteState.isDeafened
-      : false
-    : remoteState.isDeafened;
-  const isSpeaking = (audioActive || participantIsSpeaking) && !isMuted && !isDeafened;
+  // 🚀 v5.5: Debounced Speaking State - Mikro-dalgalanmaları filtrele
+  const [debouncedIsSpeaking, setDebouncedIsSpeaking] = React.useState(false);
+  
+  useEffect(() => {
+    const rawIsSpeaking = participant.isLocal ? localIsSpeaking : livekitIsSpeaking;
+    const isSpeakingNow = rawIsSpeaking && !isMuted && !isDeafened;
+    
+    if (isSpeakingNow) {
+        setDebouncedIsSpeaking(true);
+    } else {
+        // Sustuğunda 150ms bekle, böylece 'stutter' (kekeleme) etkisi olmaz
+        const timer = setTimeout(() => setDebouncedIsSpeaking(false), 150);
+        return () => clearTimeout(timer);
+    }
+  }, [livekitIsSpeaking, localIsSpeaking, isMuted, isDeafened, participant.isLocal]);
+
+  const isSpeaking = debouncedIsSpeaking;
   const avatarSize = compact
     ? "w-10 h-10 text-base"
     : totalCount <= 2
@@ -125,9 +141,13 @@ export default function UserCard({
     Track.Source.Camera
   );
 
-  // Debug: Track durumunu kontrol et
+  // Debug: Track durumunu kontrol et (Sadece DEV ve throttled)
   useEffect(() => {
-    if (process.env.NODE_ENV === "development" && cameraPublication) {
+    // 🚀 v5.3: Production'da debug log yok
+    if (process.env.NODE_ENV !== "development" || !cameraPublication) return;
+    
+    // Throttle: Max 2 saniyede bir log
+    const logTimeout = setTimeout(() => {
       console.log(
         `📹 ${
           participant.isLocal ? "Local" : "Remote"
@@ -141,7 +161,9 @@ export default function UserCard({
           isSubscribed: videoTrack?.isSubscribed,
         }
       );
-    }
+    }, 2000);
+    
+    return () => clearTimeout(logTimeout);
   }, [cameraPublication, participant, videoTrack]);
 
   // Track görünürlük kontrolü
@@ -157,197 +179,214 @@ export default function UserCard({
       : videoTrack?.isSubscribed || !!cameraPublication.track); // Remote için subscribed VEYA publication'da track mevcut olmalı
 
   // 🎨 v5.2: Konuşurken gradient border için wrapper
-  const speakingBorderStyle = isSpeaking ? {
-    background: userColor.includes("gradient") 
-      ? userColor  // Gradient direkt kullan
-      : `linear-gradient(135deg, ${userColor}, ${userColor})`,
-    padding: '2.5px',
-    borderRadius: '18px',
-    boxShadow: userColor.includes("gradient")
-      ? `0 0 80px ${getBorderColor(userColor)}70, 0 0 40px ${getBorderColor(userColor)}50`
-      : `0 0 80px ${userColor}70, 0 0 40px ${userColor}50`,
-    transform: 'scale(1.02)',
-    zIndex: 10,
-    transition: 'all 0.25s ease-out',
-  } : {};
 
   return (
     <div
-      className="w-full h-full p-1"
+      className="w-full h-full p-1 will-change-transform"
     >
       <div
         onContextMenu={onContextMenu}
-        className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center group cursor-context-menu overflow-hidden transition-colors duration-200`}
+        className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center group cursor-context-menu overflow-hidden transition-all duration-200 will-change-[border-color,box-shadow,background-color]`}
         style={{
-          background: "rgba(20, 20, 24, 0.85)", // Eski koyu ton, ama daha opak (belirgin)
-          // 🚀 CPU OPTİMİZASYONU: Border animate etme, sadece renk değiştir (GPU dostu)
+          background: "rgba(20, 20, 24, 0.85)",
           border: isSpeaking 
-            ? `2px solid ${getBorderColor(userColor)}` 
+            ? shouldDisableAnimations ? `2px solid ${getBorderColor(userColor)}60` : `2px solid ${userColor}80`
             : isMuted || isDeafened 
               ? '2px solid rgba(239, 68, 68, 0.4)' 
-              : '2px solid rgba(255, 255, 255, 0.08)', // Varsayılan border biraz daha belirgin
+              : '2px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: isSpeaking ? `0 0 15px ${getBorderColor(userColor)}20` : "none",
         }}
       >
-      {/* 🔮 Background Glow - Static (No Animation) */}
-      {isSpeaking && (
+        {/* 🔮 Background Glow - Visual Smoothing - Snappier Transition */}
         <div
-            className="absolute inset-0 pointer-events-none opacity-20"
-            style={{
-                background: userColor.includes("gradient") ? userColor : `radial-gradient(circle, ${userColor} 0%, transparent 70%)`
-            }}
+          className="absolute inset-0 pointer-events-none will-change-opacity z-0 transition-opacity duration-300"
+          style={{
+            background: userColor,
+            opacity: isSpeaking ? 0.15 : 0,
+            animation: (isSpeaking && !shouldDisableAnimations) ? "pulse-glow 3s infinite ease-in-out" : "none"
+          }}
         />
-      )}
 
-      <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10 ">
-        {shouldShowVideo && videoTrack ? (
-          <div
-            className="relative w-full h-full rounded-xl overflow-hidden z-20 group/camera"
-            onClick={(e) => {
-              if (
-                !isCurrentlyWatching &&
-                setActiveStreamId &&
-                participant.identity &&
-                ((hasScreenShare && screenShareTrack) || (shouldShowVideo && videoTrack))
-              ) {
-                e.stopPropagation();
-                setActiveStreamId(participant.identity);
-              }
-            }}
-            style={{
-              cursor:
-                (hasScreenShare && screenShareTrack && !isCurrentlyWatching) ||
-                (shouldShowVideo && videoTrack && !isCurrentlyWatching)
-                  ? "pointer"
-                  : "default",
-            }}
-          >
-            <VideoTrack
-              trackRef={videoTrack}
-              className="w-full h-full object-cover relative z-0"
-            />
+        <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
+          {shouldShowVideo && videoTrack ? (
+            <div
+              className="relative w-full h-full rounded-xl overflow-hidden z-20 group/camera"
+              onClick={(e) => {
+                if (
+                  !isCurrentlyWatching &&
+                  setActiveStreamId &&
+                  participant.identity &&
+                  ((hasScreenShare && screenShareTrack) || (shouldShowVideo && videoTrack))
+                ) {
+                  e.stopPropagation();
+                  setActiveStreamId(participant.identity);
+                }
+              }}
+              style={{
+                cursor:
+                  (hasScreenShare && screenShareTrack && !isCurrentlyWatching) ||
+                  (shouldShowVideo && videoTrack && !isCurrentlyWatching)
+                    ? "pointer"
+                    : "default",
+              }}
+            >
+              <VideoTrack
+                trackRef={videoTrack}
+                className="w-full h-full object-cover relative z-0"
+              />
 
-            {/* Speaking Indicator for Video - Simple Border Overlay */}
-            {isSpeaking && (
+              {/* Speaking Indicator for Video - Simple Border Overlay */}
+              {isSpeaking && (
                 <div className="absolute inset-0 rounded-xl border-2 border-white/20 pointer-events-none"></div>
-            )}
+              )}
 
-            {/* Hover overlay - Yayına Katıl */}
-            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer z-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveStreamId?.(participant.identity);
-                }}
-              >
-                <div className="bg-indigo-600 px-3 py-1.5 rounded-lg text-white text-xs font-medium flex items-center gap-2">
-                  <Tv size={14} />
-                  <span>İzle</span>
+              {/* Hover overlay - Yayına Katıl (Video View) */}
+              {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+                <div
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveStreamId?.(participant.identity);
+                  }}
+                >
+                  <Tv size={32} className="text-white drop-shadow-lg" />
+                  <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Yayına Katıl</span>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Hover overlay - Kamerayı Büyüt */}
-             {!hasScreenShare && shouldShowVideo && videoTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer z-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveStreamId?.(participant.identity);
-                }}
-              >
-                <div className="bg-indigo-600 px-3 py-1.5 rounded-lg text-white text-xs font-medium flex items-center gap-2">
-                  <Maximize size={14} />
-                  <span>Büyüt</span>
+              {/* Hover overlay - Kamerayı Büyüt */}
+              {!hasScreenShare && shouldShowVideo && videoTrack && !isCurrentlyWatching && (
+                <div
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm opacity-0 group-hover/camera:opacity-100 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveStreamId?.(participant.identity);
+                  }}
+                >
+                  <Maximize size={32} className="text-white drop-shadow-lg scale-90 group-hover/camera:scale-100 transition-transform duration-200" />
+                  <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Büyüt</span>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
+              )}
+            </div>
+          ) : (
+            <div
+              className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold z-10 relative transition-transform duration-300 group/avatar ${
+                isSpeaking ? "scale-[1.02]" : ""
+              }`}
+              style={{
+                background: userColor,
+                transform: 'translateZ(0)', // Force GPU
+              }}
+            >
+              {/* 🚀 v5.5: GPU Optimized Speaking Rings */}
+              {isSpeaking && !shouldDisableAnimations && (
+                <>
+                   <div className="absolute inset-0 rounded-2xl ring-4 ring-emerald-500/40 animate-pulse border-2 border-emerald-400/50 z-20" />
+                   <div className="absolute inset-0 rounded-2xl animate-speaking-ring border-2 border-emerald-500/30 -z-10" />
+                </>
+              )}
+              {/* Letter */}
+              <span className="relative z-10 drop-shadow-md">
+                {userInitials}
+              </span>
+
+              {/* Hover overlay - Katıl (Avatar View) */}
+              {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+                <div
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 rounded-2xl gap-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveStreamId?.(participant.identity);
+                  }}
+                >
+                  <Tv size={32} className="text-white drop-shadow-lg" />
+                  <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Yayına Katıl</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* İsim & Durum Badge */}
           <div
-            className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold z-10 relative transition-transform duration-200 group/avatar`}
-            style={{
-              background: userColor, // 🎨 Background is ALWAYS user color now (overlay handles the 'dimming')
-              // 🚀 CPU OPTİMİZASYONU: Box-shadow animasyonu yerine basit outline
-              outline: isSpeaking ? `3px solid ${getBorderColor(userColor)}` : 'none',
-              outlineOffset: '2px'
-            }}
+            className={`absolute z-40 max-w-[90%] ${
+              compact 
+                ? "bottom-1 left-1 bg-black/40 px-2 py-1 rounded-md backdrop-blur-sm shadow-sm"
+                : shouldShowVideo
+                  ? "bottom-2 left-2 bg-black/60 px-2.5 py-1.5 rounded-lg backdrop-blur-sm"
+                  : "bottom-3 left-3 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm shadow-sm"
+            }`}
           >
-            {/* Letter */}
-            <span className="relative z-10 drop-shadow-md">
-              {userInitials}
-            </span>
-
-            {/* Hover overlay - Katıl */}
-            {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-              <div
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer z-50 rounded-2xl"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveStreamId?.(participant.identity);
-                }}
-              >
-                 <Tv size={16} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* İsim & Durum Badge - Her zaman sol altta ve isim görünür - Overlay'in üzerinde olması için z-40 */}
-        <div
-          className={`absolute z-40 max-w-[90%] ${
-            compact 
-              ? "bottom-1 left-1 bg-black/40 px-2 py-1 rounded-md backdrop-blur-sm shadow-sm"
-              : shouldShowVideo
-                ? "bottom-2 left-2 bg-black/60 px-2.5 py-1.5 rounded-lg backdrop-blur-sm"
-                : "bottom-3 left-3 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm shadow-sm"
-          }`}
-        >
             <div className="flex items-center gap-2">
               <span className={`font-semibold text-white tracking-wide truncate drop-shadow-md ${compact ? "text-[10px]" : "text-xs"}`}>
                 {displayName}
               </span>
             </div>
+          </div>
+
+          {/* Screen Share Preview */}
+          {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
+            <ScreenSharePreviewComponent trackRef={screenShareTrack} />
+          )}
+
+          {/* Live Badge */}
+          {hasScreenShare && screenShareTrack && (
+            <div className="absolute top-2 left-2 z-40 bg-red-600/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-sm">
+              CANLI
+            </div>
+          )}
         </div>
 
-        {/* Screen Share Preview (Small) */}
-        {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
-          <ScreenSharePreviewComponent trackRef={screenShareTrack} />
-        )}
-
-        {/* Live Badge (Simple) */}
-        {hasScreenShare && screenShareTrack && (
-          <div className="absolute top-2 left-2 z-40 bg-red-600/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-sm">
-            CANLI
+        {/* 🔇 Mute/Deafen Overlay - Simplified for Performance */}
+        {(isMuted || isDeafened) && (
+          <div 
+            className={`absolute z-30 pointer-events-none rounded-xl overflow-hidden transition-opacity duration-300 ${
+              (shouldShowVideo && videoTrack) 
+                ? "top-2 right-2 flex flex-col items-end group-hover:opacity-0" 
+                : `inset-0 flex items-center justify-center ${
+                    ((hasScreenShare && screenShareTrack)) ? "group-hover:opacity-0" : ""
+                  }`
+            }`}
+          >
+             {/* 🚀 CPU OPTİMİZASYONU: Backdrop blur kaldırıldı */}
+             {!(shouldShowVideo && videoTrack) && (
+                <div className="absolute inset-0 bg-black/50 transition-all duration-300" />
+             )}
+             
+             <div className={`relative flex flex-col items-center 
+                ${(shouldShowVideo && videoTrack) ? 'gap-1' : (compact ? 'gap-1.5' : 'gap-3')}
+             `}>
+               <div className={`
+                  bg-zinc-900 border border-white/10 flex items-center justify-center rounded-full
+                  ${(shouldShowVideo && videoTrack) ? 'p-1.5' : (compact ? 'p-2' : 'p-4')}
+               `}>
+                  {isDeafened ? (
+                    <VolumeX 
+                      size={(shouldShowVideo && videoTrack) ? 16 : (compact ? 18 : 32)} 
+                      className="text-red-500" 
+                      strokeWidth={2.5} 
+                    />
+                  ) : (
+                    <MicOff 
+                      size={(shouldShowVideo && videoTrack) ? 16 : (compact ? 18 : 32)} 
+                      className="text-red-500" 
+                      strokeWidth={2.5} 
+                    />
+                  )}
+               </div>
+               
+               {!(shouldShowVideo && videoTrack) && (
+                 <div className={`bg-black/60 rounded-full border border-white/5 ${compact ? 'px-2 py-0.5' : 'px-3 py-1'}`}>
+                   <span className={`font-bold text-white/90 tracking-wide uppercase leading-none block ${compact ? 'text-[9px]' : 'text-xs'}`}>
+                     {isDeafened ? "SAĞIRLAŞTIRDI" : "SUSTURDU"}
+                   </span>
+                 </div>
+               )}
+             </div>
           </div>
         )}
       </div>
-
-      {/* 🔇 Mute/Deafen Overlay (Professional Glassmorphism with Text) */}
-      {(isMuted || isDeafened) && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none rounded-xl overflow-hidden">
-           {/* Backdrop Dimmer & Blur */}
-           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-all duration-300" />
-           
-           {/* Icon & Text Container */}
-           <div className={`relative flex flex-col items-center ${compact ? 'gap-1.5' : 'gap-3'} animate-in fade-in zoom-in-95 duration-200`}>
-             <div className={`${compact ? 'p-2' : 'p-4'} bg-zinc-900/80 rounded-full border border-white/10 shadow-2xl backdrop-blur-md flex items-center justify-center`}>
-                {isDeafened ? (
-                  <VolumeX size={compact ? 18 : 32} className="text-red-500 drop-shadow-md" strokeWidth={2.5} />
-                ) : (
-                  <MicOff size={compact ? 18 : 32} className="text-red-500 drop-shadow-md" strokeWidth={2.5} />
-                )}
-             </div>
-             {/* Text Label */}
-             <div className={`${compact ? 'px-2 py-0.5' : 'px-3 py-1'} bg-black/50 rounded-full backdrop-blur-md border border-white/5`}>
-               <span className={`${compact ? 'text-[9px]' : 'text-xs'} font-bold text-white/90 tracking-wide uppercase drop-shadow-lg leading-none block`}>
-                 {isDeafened ? "SAĞIRLAŞTIRDI" : "SUSTURDU"}
-               </span>
-             </div>
-           </div>
-        </div>
-      )}
-      </div>
     </div>
   );
-}
+});
+
+export default UserCard;

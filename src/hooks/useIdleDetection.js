@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, } from 'react';
 import { useSettingsStore } from '@/src/store/settingsStore';
 
 /**
@@ -24,8 +24,8 @@ import { useSettingsStore } from '@/src/store/settingsStore';
 const MINIMIZED_IDLE_DELAY = 30 * 1000;
 
 // Throttle delay for mousemove events (CPU optimization)
-// 🚀 OPTIMIZATION v5.1: 150ms -> 300ms for better CPU usage
-const MOUSEMOVE_THROTTLE_MS = 300;
+// 🚀 OPTIMIZATION v5.3: 300ms -> 500ms for better CPU usage in build
+const MOUSEMOVE_THROTTLE_MS = 500;
 
 export function useIdleDetection() {
   const { setIsAutoIdle, idleTimeout, isInVoiceRoom } = useSettingsStore();

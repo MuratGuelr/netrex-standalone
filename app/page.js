@@ -9,8 +9,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/src/store/authStore";
-import RoomList from "@/src/components/RoomList";
-import { toast } from "sonner";
+import { toast } from "@/src/utils/toast";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/src/lib/firebase";
 
 // Page Components
 import { LoginPage, LoadingScreen } from "@/src/components/pages";
@@ -18,6 +19,7 @@ import { WelcomeScreen } from "@/src/components/layout";
 
 // Splash Screen (direct import for immediate availability)
 import SplashScreen from "@/src/components/SplashScreen";
+import ExitSplashScreen from "@/src/components/ExitSplashScreen";
 import { AppShell } from "@/src/components/layout";
 import ServerRail from "@/src/components/layout/ServerRail";
 import CreateServerModal from "@/src/components/server/CreateServerModal";
@@ -27,6 +29,7 @@ import ServerSidebar from "@/src/components/server/ServerSidebar";
 import { useServerStore } from "@/src/store/serverStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useChatStore } from "@/src/store/chatStore";
+import { useUpdateStore } from "@/src/store/updateStore";
 
 const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
   loading: () => <LoadingScreen message="Oda yükleniyor..." />,
@@ -34,13 +37,13 @@ const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
 const StandaloneChatView = dynamic(() => import("@/src/components/StandaloneChatView"), {
   loading: () => <LoadingScreen message="Sohbet yükleniyor..." />,
 });
-const SettingsModal = dynamic(() => import("@/src/components/SettingsModal"));
-const UpdateNotification = dynamic(() => import("@/src/components/UpdateNotification"));
-const InfoModal = dynamic(() => import("@/src/components/InfoModal"));
+
+import SettingsModal from "@/src/components/SettingsModal";
+import UpdateNotification from "@/src/components/UpdateNotification";
+import InfoModal from "@/src/components/InfoModal";
+const InstallUpdateSplash = dynamic(() => import("@/src/components/InstallUpdateSplash"));
 
 import ServerMemberList from "@/src/components/server/ServerMemberList";
-// 🚀 OPTIMIZATION: usePresence ve useIdleDetection import'ları kaldırıldı
-// Bu hook'lar providers.js'de çağrılıyor, burada duplicate import gereksiz
 
 export default function Home() {
   const {
@@ -55,11 +58,33 @@ export default function Home() {
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
-  const [showChatPanel, setShowChatPanel] = useState(false); // For smooth chat animation
-  const [showSettings, setShowSettings] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
   const [viewMode, setViewMode] = useState("voice");
-  const [showSplash, setShowSplash] = useState(true); // Splash screen visibility
-  const [showMemberList, setShowMemberList] = useState(true); // Added state
+  const [showSplash, setShowSplash] = useState(true);
+  const [showExitSplash, setShowExitSplash] = useState(false);
+  const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
+  const [showMemberList, setShowMemberList] = useState(true);
+
+  useEffect(() => {
+    if (window.netrex && window.netrex.onRequestExit) {
+      window.netrex.onRequestExit(() => {
+        setShowExitSplash(true);
+      });
+    }
+
+    if (window.netrex && window.netrex.onUpdateRestarting) {
+        window.netrex.onUpdateRestarting(() => {
+            setShowInstallUpdateSplash(true);
+        });
+
+        window.netrex.onUpdateRestartFailed((error) => {
+            setShowInstallUpdateSplash(false);
+            useUpdateStore.getState().reset();
+            if (error) toast.info(error);
+        });
+    }
+  }, []);
+
   const { showSettingsModal, setSettingsOpen } = useSettingsStore();
 
   const [infoModal, setInfoModal] = useState({
@@ -72,15 +97,11 @@ export default function Home() {
   const [showJoinServerModal, setShowJoinServerModal] = useState(false);
   const [showAddServerSelectionModal, setShowAddServerSelectionModal] = useState(false);
 
-  // 🚀 OPTIMIZATION: usePresence ve useIdleDetection kaldırıldı
-  // Bu hook'lar zaten providers.js'de çağrılıyor - duplicate çağrı CPU tüketiyordu!
-
-  // Initialize Authentication
   useEffect(() => {
     initializeAuth();
+    useUpdateStore.getState().initialize();
   }, [initializeAuth]);
 
-  // Handle Splash Screen Display
   useEffect(() => {
     if (!isLoading && showSplash) {
       const timer = setTimeout(() => setShowSplash(false), 1500);
@@ -88,22 +109,54 @@ export default function Home() {
     }
   }, [isLoading, showSplash]);
 
-  // Show Loading Screen while authenticating
+  // Reset local state when server changes or is deselected (Home)
+  useEffect(() => {
+    setCurrentRoom(null);
+    setCurrentTextChannel(null);
+    setShowChatPanel(false);
+    setViewMode("voice");
+    useChatStore.getState().clearCurrentChannel();
+    useChatStore.getState().setShowChatPanel(false);
+  }, [currentServer?.id]);
+
+  if (showExitSplash) {
+    return (
+      <ExitSplashScreen 
+        onComplete={async () => {
+          if (user?.uid) {
+            try {
+              await updateDoc(doc(db, 'users', user.uid), {
+                presence: 'offline',
+                lastSeen: serverTimestamp(),
+                gameActivity: null
+              });
+            } catch (e) {
+              console.error("Failed to set offline:", e);
+            }
+          }
+          if (window.netrex?.forceQuitApp) {
+            window.netrex.forceQuitApp();
+          }
+        }} 
+      />
+    );
+  }
+
+  if (showInstallUpdateSplash) {
+      return <InstallUpdateSplash />;
+  }
+
   if (isLoading || showSplash) {
     return <SplashScreen />;
   }
 
-  // Show Login Page if not authenticated
   if (!isAuth) {
     return (
       <LoginPage
         onGoogleLogin={async () => {
           if (window.netrex?.startOAuth) {
             try {
-              // Start OAuth flow - this opens browser and local auth server handles the rest
               await window.netrex.startOAuth();
-              // The auth success will be handled by onOAuthSuccess callback
-              // which is set up in authStore's initializeAuth
             } catch (error) {
               console.error("Google login failed:", error);
               toast.error("Google ile giriş başarısız oldu");
@@ -115,6 +168,7 @@ export default function Home() {
         onAnonymousLogin={async (username) => {
           try {
             await loginAnonymously(username);
+            toast.success("Giriş başarılı! Netrex'e hoş geldin.");
           } catch (error) {
             console.error("Anonymous login failed:", error);
             toast.error("Misafir girişi başarısız oldu");
@@ -124,7 +178,6 @@ export default function Home() {
     );
   }
 
-  // --- MAIN APPLICATION ---
   return (
     <AppShell
       serverRail={
@@ -147,30 +200,23 @@ export default function Home() {
             activeTextChannelId={currentTextChannel}
             onJoinChannel={(channel) => {
                if (channel.type === 'voice') {
-                 if (currentRoom?.id === channel.id) {
-                   // Already in this room
-                 } else {
+                 if (currentRoom?.id !== channel.id) {
                    setCurrentRoom(channel);
                    setCurrentTextChannel(null);
                    setViewMode("voice");
                  }
                } else {
-                 // Text channel - toggle behavior
                  if (currentTextChannel === channel.id && showChatPanel) {
-                   // Already viewing this channel - close it
                    setShowChatPanel(false);
-                   // Delay the state cleanup to allow exit animation
                    setTimeout(() => {
                      setCurrentTextChannel(null);
                      setViewMode("voice");
                      useChatStore.getState().clearCurrentChannel();
-                   }, 320); // Match animation duration
+                   }, 320);
                  } else {
-                   // Open text channel (or switch to different channel)
                    setCurrentTextChannel(channel.id);
                    setShowChatPanel(true);
                    setViewMode("chat");
-                   // Load channel messages
                    useChatStore.getState().loadChannelMessages(channel.id, currentServer?.id);
                  }
                }
@@ -187,7 +233,6 @@ export default function Home() {
         onClose={() => setSettingsOpen(false)}
       />
 
-      {/* Info Modal */}
       <InfoModal
         isOpen={infoModal.isOpen}
         title={infoModal.title}
@@ -195,7 +240,6 @@ export default function Home() {
         onClose={() => setInfoModal({ isOpen: false, title: "", message: "" })}
       />
 
-      {/* Add Server Selection Modal */}
       <AddServerSelectionModal 
         isOpen={showAddServerSelectionModal}
         onClose={() => setShowAddServerSelectionModal(false)}
@@ -209,7 +253,6 @@ export default function Home() {
         }}
       />
 
-      {/* Create Server Modal */}
       <CreateServerModal 
         isOpen={showCreateServerModal}
         onClose={() => setShowCreateServerModal(false)}
@@ -219,7 +262,6 @@ export default function Home() {
         }}
       />
 
-      {/* Join Server Modal */}
       <JoinServerModal 
         isOpen={showJoinServerModal}
         onClose={() => setShowJoinServerModal(false)}
@@ -229,7 +271,6 @@ export default function Home() {
         }}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col relative overflow-hidden h-full">
         {currentRoom ? (
           <ActiveRoom
@@ -240,9 +281,7 @@ export default function Home() {
               setCurrentRoom(null);
               setCurrentTextChannel(null);
               setViewMode("voice");
-              setShowChatPanel(false); // Reset local state
-              
-              // Clear chat store state too
+              setShowChatPanel(false);
               useChatStore.getState().clearCurrentChannel();
               useChatStore.getState().setShowChatPanel(false);
             }}
@@ -252,54 +291,43 @@ export default function Home() {
             userId={user.uid}
           />
         ) : (
-          /* Main content area - Welcome or Chat */
           <div className="h-full w-full relative">
-            {/* Welcome Screen - Always rendered, fades based on chat state */}
-            <motion.div
-              initial={false}
-              animate={{ 
-                opacity: showChatPanel ? 0 : 1
-              }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="absolute inset-0"
-              style={{ 
-                pointerEvents: showChatPanel ? 'none' : 'auto',
-                zIndex: showChatPanel ? 0 : 1
-              }}
-            >
-              <WelcomeScreen
-                userName={user?.displayName || "Misafir"}
-                version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
-              />
-            </motion.div>
-            
-            {/* Chat Panel - Slides in from left like right sidebar */}
-            <motion.div
-              initial={false}
-              animate={{ 
-                x: showChatPanel ? 0 : '-100%',
-                opacity: showChatPanel ? 1 : 0
-              }}
-              transition={{ 
-                duration: 0.32, 
-                ease: [0.4, 0, 0.2, 1],
-                opacity: { duration: 0.15 }
-              }}
-              className="absolute inset-0"
-              style={{ 
-                zIndex: showChatPanel ? 2 : 0
-              }}
-            >
-              {currentTextChannel && (
-                <div className="h-full w-full">
-                  <StandaloneChatView
-                    channelId={currentTextChannel}
-                    username={user.displayName || user.email || "Misafir"}
-                    userId={user.uid}
+            <AnimatePresence mode="wait">
+              {!showChatPanel ? (
+                <motion.div
+                  key="welcome"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0"
+                >
+                  <WelcomeScreen
+                    userName={user?.displayName || "Misafir"}
+                    version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
                   />
-                </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="chat"
+                  initial={{ x: '-20%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: '-20%', opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute inset-0"
+                >
+                  {currentTextChannel && (
+                    <div className="h-full w-full">
+                      <StandaloneChatView
+                        channelId={currentTextChannel}
+                        username={user.displayName || user.email || "Misafir"}
+                        userId={user.uid}
+                      />
+                    </div>
+                  )}
+                </motion.div>
               )}
-            </motion.div>
+            </AnimatePresence>
           </div>
         )}
       </div>

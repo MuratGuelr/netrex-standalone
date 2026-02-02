@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from "react";
 import { Sparkles, Shield, Users, Zap, Radio, ArrowRight, Eye, EyeOff, User } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/src/utils/toast";
 
 // Google Icon SVG
 const GoogleIcon = () => (
@@ -123,7 +123,7 @@ export default function LoginPage({
                     <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-transparent" />
                     
                     <img 
-                      src="/logo.png" 
+                      src="logo.png" 
                       alt="Netrex Logo" 
                       className="relative w-20 h-20 sm:w-24 sm:h-24 object-contain drop-shadow-lg"
                       onError={(e) => {

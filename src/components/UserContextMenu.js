@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Volume2, Volume1, VolumeX, MicOff, Mic, Headphones, ShieldAlert } from "lucide-react";
+import { Volume2, Volume1, VolumeX, MicOff, Headphones, ShieldAlert } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";

@@ -14,6 +14,7 @@ export function useAudioActivity(participant) {
     let ctx, analyser, raf;
     let currentTrack = null;
     let trackPublishedHandler = null;
+    let visibilityHandler = null; // 🚀 Visibility handler ref
     let retryCount = 0;
     const MAX_RETRIES = 15;
 
@@ -21,6 +22,11 @@ export function useAudioActivity(participant) {
       if (raf) {
         clearInterval(raf); // cancelAnimationFrame -> clearInterval
         raf = null;
+      }
+      // 🚀 Visibility listener cleanup
+      if (visibilityHandler) {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+        visibilityHandler = null;
       }
       if (ctx && ctx.state !== "closed") {
         try {
@@ -112,8 +118,20 @@ export function useAudioActivity(participant) {
         
         // İlk kontrol
         checkActivity();
-        // 🚀 OPTIMIZED: 75ms -> 150ms (Her participant için ayrı çalıştığından toplam CPU etkisi yüksek)
-        raf = setInterval(checkActivity, 150);
+        // 🚀 OPTIMIZED v5.3: 150ms -> 250ms (Her participant için ayrı çalıştığından toplam CPU etkisi yüksek)
+        // Visibility API ile arka planda durdurma eklendi
+        raf = setInterval(checkActivity, 250);
+        
+        // 🚀 CPU OPT: Document hidden olduğunda interval'i durdur
+        visibilityHandler = () => {
+          if (document.hidden && raf) {
+            clearInterval(raf);
+            raf = null;
+          } else if (!document.hidden && !raf && track?.mediaStreamTrack?.readyState !== "ended") {
+            raf = setInterval(checkActivity, 250);
+          }
+        };
+        document.addEventListener('visibilitychange', visibilityHandler);
       } catch (e) {
         // Audio analiz hatası - sessizce yoksay (non-critical)
         cleanup();
@@ -200,7 +218,7 @@ export function useAudioActivity(participant) {
     }
 
     return () => {
-      cleanup();
+      cleanup(); // cleanup() zaten visibilityHandler'ı temizliyor
       if (trackPublishedHandler) {
         participant.off(RoomEvent.TrackPublished, trackPublishedHandler);
       }

@@ -26,6 +26,7 @@ const {
 } = require("./managers/ipcHandlers");
 
 const { setupInputListeners } = require("./managers/inputManager");
+const { setupUpdateManager, checkForUpdates, quitAndInstall: updateQuitAndInstall } = require("./managers/updateManager");
 
 // --- LOGLAMA AYARLARI ---
 autoUpdater.logger = log;
@@ -62,6 +63,20 @@ if (livekitUrl) {
 }
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
+// 🚀 v5.3 CPU & SES OPTİMİZASYONU:
+app.commandLine.appendSwitch('disable-renderer-backgrounding'); // Arka planda CPU kullanımını engelleme
+app.commandLine.appendSwitch('disable-background-timer-throttling'); // Timer throttling'i kapat (ses için gerekli)
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows'); // Gizli pencere throttle'ı kapat
+app.commandLine.appendSwitch('enable-features', 'HardwareMediaKeyHandling,WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'); // Audio priority aktif
+app.commandLine.appendSwitch('audio-renderer-threads', '2'); // Ses render'ı için ek thread
+app.commandLine.appendSwitch('force-fieldtrials', 'WebRTC-Audio-Priority/Enabled/');
+
+// GPU Optimizasyonları
+if (app.isPackaged) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization'); // GPU rasterization (CPU yükünü GPU'ya aktar)
+  app.commandLine.appendSwitch('enable-zero-copy'); // Zero-copy GPU memory
+}
+
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -87,7 +102,18 @@ if (!gotTheLock) {
   // --- APP READY ---
   app.on("ready", async () => {
     // Platform Specifics
-    if (process.platform === "win32") app.setAppUserModelId("Netrex Client");
+    if (process.platform === "win32") {
+        app.setAppUserModelId("Netrex Client");
+        // 🚀 v5.3: Set process priority to 'Above Normal' safely
+        try {
+            const os = require('os');
+            // process.pid is correct, but the function is in 'os' module
+            os.setPriority(process.pid, -5); // Windows 'Above Normal'
+            console.log("✅ Process priority set to Above Normal");
+        } catch (e) {
+            console.warn("Could not set process priority:", e);
+        }
+    }
     if (process.platform === "darwin") {
       const { systemPreferences } = require('electron');
       systemPreferences.askForMediaAccess("microphone");
@@ -100,7 +126,12 @@ if (!gotTheLock) {
 
     // Initialize Managers
     // PASS inputManager to registerIpcHandlers
-    registerIpcHandlers(getMainWindow, showMainWindow, inputManager);
+    // Initialize Managers
+    // PASS inputManager and setQuitting to registerIpcHandlers
+    registerIpcHandlers(getMainWindow, showMainWindow, inputManager, setQuitting);
+    
+    // Setup Updates
+    setupUpdateManager(getMainWindow);
     
     // Create Splash
     const splash = createSplashWindow(); 
@@ -110,13 +141,17 @@ if (!gotTheLock) {
     
     // Tray
     createTray(mainWindow, () => {
-        setQuitting(true);
-        app.quit();
+        // Graceful exit from Tray
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("request-exit");
+            if (!mainWindow.isVisible()) mainWindow.show();
+            mainWindow.focus();
+        }
     });
 
-    // Update Check
+    // Initial Update Check
     if (app.isPackaged) {
-       autoUpdater.checkForUpdates().catch(e => log.error(e));
+       checkForUpdates();
     }
   });
 
@@ -133,26 +168,7 @@ if (!gotTheLock) {
     }
   });
 
-  // --- AUTO UPDATER EVENTS ---
-  autoUpdater.on("checking-for-update", () => getMainWindow()?.webContents.send("update-status", "checking"));
-  autoUpdater.on("update-available", (info) => {
-    getMainWindow()?.webContents.send("update-status", "available", info);
-    if (Notification.isSupported() && getMainWindow()) {
-        new Notification({ title: "Netrex Güncellemesi Mevcut", body: `Yeni sürüm ${info.version}`, icon: require('./managers/windowManager').getIconPath }).show();
-    }
-    autoUpdater.downloadUpdate();
-  });
-  autoUpdater.on("update-not-available", () => getMainWindow()?.webContents.send("update-status", "not-available"));
-  autoUpdater.on("error", (err) => getMainWindow()?.webContents.send("update-status", "error", err.toString()));
-  autoUpdater.on("download-progress", (p) => getMainWindow()?.webContents.send("update-progress", p.percent));
-  autoUpdater.on("update-downloaded", (info) => {
-    getMainWindow()?.webContents.send("update-status", "downloaded", info);
-    if (Notification.isSupported() && getMainWindow()) {
-        const n = new Notification({ title: "Netrex Güncellemesi Hazır", body: "Yeniden başlatmak için tıklayın." });
-        n.on("click", () => showMainWindow());
-        n.show();
-    }
-  });
+  // --- AUTO UPDATER EVENTS MOVED TO UpdateManager.js ---
 }
 
 app.on("before-quit", () => {});

@@ -14,6 +14,7 @@ import {
   limit,
   startAfter,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { deleteImageFromCloudinary } from "@/src/utils/imageUpload";
@@ -42,6 +43,7 @@ export const useChatStore = create((set, get) => ({
   isLoading: false,
   isLoadingOlderMessages: false,
   hasMoreMessages: false,
+  typingUsers: {}, // { channelId: { userId: username } }
   error: null,
 
   // UI State: Sohbet paneli açık/kapalı
@@ -482,6 +484,63 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  editMessage: async (channelId, messageId, newText, userId) => {
+    const cleanedText = newText.trim();
+    if (!cleanedText) return { success: false, error: "Mesaj boş olamaz" };
+    if (cleanedText.length > MESSAGE_MAX_LENGTH) {
+      return { success: false, error: `Mesaj en fazla ${MESSAGE_MAX_LENGTH} karakter olabilir.` };
+    }
+
+    try {
+      const currentMessages = get().messages;
+      const messageIndex = currentMessages.findIndex((m) => m.id === messageId);
+      
+      if (messageIndex === -1) return { success: false, error: "Mesaj bulunamadı." };
+      
+      const targetMessage = currentMessages[messageIndex];
+      
+      // Güvenlik: Sadece kendi mesajını düzenleyebilir
+      if (targetMessage.userId !== userId) {
+        return { success: false, error: "Sadece kendi mesajınızı düzenleyebilirsiniz." };
+      }
+
+      // Zaman kısıtlaması: 5 dakika
+      const msgTs = targetMessage.timestamp?.toDate ? targetMessage.timestamp.toDate().getTime() : targetMessage.timestamp;
+      if (Date.now() - msgTs > MESSAGE_SEQUENCE_THRESHOLD) {
+        return { success: false, error: "Mesajı düzenleme süresi doldu (5 dakika)." };
+      }
+
+      // Local update
+      const updatedMessages = [...currentMessages];
+      updatedMessages[messageIndex] = {
+        ...targetMessage,
+        text: cleanedText,
+        edited: true,
+        editedAt: Date.now()
+      };
+      set({ messages: updatedMessages });
+
+      // Firestore update
+      const currentChannel = get().currentChannel;
+      const serverId = currentChannel?.serverId;
+      const collectionPath = serverId
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+
+      const messageRef = doc(collectionPath, messageId);
+      await updateDoc(messageRef, {
+        text: cleanedText,
+        edited: true,
+        editedAt: serverTimestamp()
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Mesaj düzenlenemedi:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Sequence mesajlarını toplu silme
   deleteMessageSequence: async (channelId, messageId) => {
     try {
@@ -511,20 +570,14 @@ export const useChatStore = create((set, get) => ({
       for (let i = startIndex; i >= 0; i--) {
         const msg = currentMessages[i];
         if (msg.userId === targetMessage.userId) {
-          if (i < startIndex) {
-            // Önceki mesaj - zaman kontrolü yap
-            const timeDiff = targetMessage.timestamp - msg.timestamp;
-            if (timeDiff < MESSAGE_SEQUENCE_THRESHOLD) {
-              sequenceMessages.unshift(msg);
-            } else {
-              break; // Sequence sonu
-            }
+          const timeDiff = Math.abs(targetMessage.timestamp - msg.timestamp);
+          if (timeDiff < MESSAGE_SEQUENCE_THRESHOLD) {
+            sequenceMessages.unshift(msg);
           } else {
-            // Hedef mesaj
-            sequenceMessages.push(msg);
+            break;
           }
         } else {
-          break; // Farklı kullanıcı, sequence sonu
+          break;
         }
       }
 
@@ -532,14 +585,14 @@ export const useChatStore = create((set, get) => ({
       for (let i = startIndex + 1; i < currentMessages.length; i++) {
         const msg = currentMessages[i];
         if (msg.userId === targetMessage.userId) {
-          const timeDiff = msg.timestamp - targetMessage.timestamp;
+          const timeDiff = Math.abs(msg.timestamp - targetMessage.timestamp);
           if (timeDiff < MESSAGE_SEQUENCE_THRESHOLD) {
             sequenceMessages.push(msg);
           } else {
-            break; // Sequence sonu
+            break;
           }
         } else {
-          break; // Farklı kullanıcı, sequence sonu
+          break;
         }
       }
 
@@ -561,15 +614,6 @@ export const useChatStore = create((set, get) => ({
         ? collection(db, "servers", serverId, "channels", channelId, "messages")
         : collection(db, "text_channels", channelId, "messages");
 
-      // Cloudinary'den resimleri sil
-      sequenceMessages.forEach(msg => {
-        if (msg.imageUrl) {
-          deleteImageFromCloudinary(msg.imageUrl).catch(err => 
-            console.error("Sequence resim silme hatası:", err)
-          );
-        }
-      });
-
       const deletePromises = sequenceMessages.map((msg) => {
         const messageRef = doc(collectionPath, msg.id);
         return deleteDoc(messageRef);
@@ -584,11 +628,90 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  toggleReaction: async (channelId, messageId, emoji, userId) => {
+    try {
+      const currentMessages = get().messages;
+      const messageIndex = currentMessages.findIndex((m) => m.id === messageId);
+      if (messageIndex === -1) return { success: false, error: "Mesaj bulunamadı." };
+
+      const targetMessage = currentMessages[messageIndex];
+      const reactions = { ...(targetMessage.reactions || {}) };
+      
+      if (!reactions[emoji]) reactions[emoji] = [];
+      
+      const userIndex = reactions[emoji].indexOf(userId);
+      if (userIndex === -1) {
+        reactions[emoji].push(userId);
+      } else {
+        reactions[emoji].splice(userIndex, 1);
+        if (reactions[emoji].length === 0) delete reactions[emoji];
+      }
+
+      const updatedMessages = [...currentMessages];
+      updatedMessages[messageIndex] = { ...targetMessage, reactions };
+      set({ messages: updatedMessages });
+
+      const currentChannel = get().currentChannel;
+      const serverId = currentChannel?.serverId;
+      const collectionPath = serverId
+        ? collection(db, "servers", serverId, "channels", channelId, "messages")
+        : collection(db, "text_channels", channelId, "messages");
+
+      const messageRef = doc(collectionPath, messageId);
+      await updateDoc(messageRef, { reactions });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Reaksiyon hatası:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
   clearCurrentChannel: () => {
     set({
       currentChannel: null,
       messages: [],
       hasMoreMessages: false,
     });
+  },
+
+  // --- TYPING INDICATORS (LiveKit Data Channel - Zero Cost) ---
+  setTypingStatus: (channelId, userId, username, isTyping) => {
+    set((state) => {
+      const newTypingUsers = { ...state.typingUsers };
+      if (!newTypingUsers[channelId]) newTypingUsers[channelId] = {};
+
+      if (isTyping) {
+        newTypingUsers[channelId][userId] = username;
+      } else {
+        delete newTypingUsers[channelId][userId];
+      }
+
+      return { typingUsers: newTypingUsers };
+    });
+  },
+
+  sendTypingStatus: async (channelId, userId, username, isTyping, room) => {
+    if (!room || !room.localParticipant) return;
+
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(
+        JSON.stringify({
+          type: "typing",
+          channelId,
+          userId,
+          username,
+          isTyping,
+        })
+      );
+
+      await room.localParticipant.publishData(data, {
+        topic: "typing",
+        reliable: false, // Typing is low priority
+      });
+    } catch (error) {
+       // Silent error for typing
+    }
   },
 }));

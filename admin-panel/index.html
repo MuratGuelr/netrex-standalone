@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Netrex Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f1014;
+            --bg-secondary: #1a1b1f;
+            --bg-tertiary: #27282d;
+            --accent-primary: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --text-primary: #fff;
+            --text-secondary: #949ba4;
+            --text-tertiary: #5f646c;
+            --border: rgba(255,255,255,0.08);
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            scrollbar-width: thin;
+            scrollbar-color: var(--bg-tertiary) var(--bg-primary);
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 260px;
+            background: rgba(15, 16, 20, 0.95);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0.5rem;
+            background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(168,85,247,0.1) 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .nav_item {
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid transparent;
+        }
+
+        .nav_item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .nav_item.active {
+            background: linear-gradient(90deg, rgba(99,102,241,0.15) 0%, transparent 100%);
+            color: var(--accent-primary);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-left: 3px solid var(--accent-primary);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            background: radial-gradient(circle at top right, rgba(99,102,241,0.05) 0%, transparent 40%);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(145deg, var(--bg-secondary), rgba(30, 31, 35, 0.6));
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            transition: transform 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(99,102,241,0.3);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        /* Content Cards */
+        .content-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .card-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem 1.5rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            vertical-align: middle;
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            object-fit: cover;
+            border: 1px solid var(--border);
+        }
+
+        .server-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .avatar-placeholder {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            font-size: 14px;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-success { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .badge-primary { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+
+        .search-input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            color: var(--text-primary);
+            outline: none;
+            width: 300px;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+        }
+
+        /* Loading Spinner */
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            width: 500px;
+            max-height: 80vh;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .member-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.8rem;
+            border-radius: 12px;
+            transition: background 0.2s;
+        }
+
+        .member-item:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="modal" id="members-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Sunucu Üyeleri</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-list">
+                <!-- Members will be listed here -->
+            </div>
+        </div>
+    </div>
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">N</div>
+            Netrex Admin
+        </div>
+        <div class="nav_item active" id="nav-dashboard" onclick="switchTab('dashboard')">
+            <span>📊</span> Kontrol Paneli
+        </div>
+        <div class="nav_item" id="nav-users" onclick="switchTab('users')">
+            <span>👥</span> Kullanıcılar
+        </div>
+        <div class="nav_item" id="nav-servers" onclick="switchTab('servers')">
+            <span>🖥️</span> Sunucular
+        </div>
+        <div class="nav_item" id="nav-channels" onclick="switchTab('channels')">
+            <span>💬</span> Kanallar
+        </div>
+        <div class="nav_item" id="nav-messages" onclick="switchTab('messages')">
+            <span>✉️</span> Mesajlar
+        </div>
+        <div class="nav_item" id="nav-invites" onclick="switchTab('invites')">
+            <span>🎟️</span> Davetler
+        </div>
+        <div style="margin-top: auto;">
+            <div class="nav_item" style="color: var(--danger);" onclick="logout()">
+                <span>🚪</span> Çıkış Yap
+            </div>
+        </div>
+    </div>
+
+    <!-- Views -->
+    <div class="main-content" id="dashboard-view">
+        <div class="header">
+            <h1 class="page-title">Genel Bakış</h1>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Toplam Kullanıcı</div>
+                <div class="stat-value" id="stat-users">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Global Sunucular</div>
+                <div class="stat-value" id="stat-servers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Toplam Kanal</div>
+                <div class="stat-value" id="stat-channels">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">LiveKit Havuzu</div>
+                <div class="stat-value" id="stat-lk">6</div>
+            </div>
+        </div>
+        <div class="content-card">
+            <div class="card-header"><h3>Son Aktiviteler</h3></div>
+            <div class="table-container">
+                <table id="recent-activity-table">
+                    <thead>
+                        <tr><th>Tür</th><th>İsim</th><th>Detay</th><th>Tarih</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users View -->
+    <div class="main-content" id="users-view" style="display: none;">
+        <div class="header">
+            <h1 class="page-title">Kullanıcı Yönetimi</h1>
+            <input type="text" class="search-input" placeholder="Kullanıcı ara..." oninput="filterData('users', this.value)">
+        </div>
+        <div class="content-card">
+            <div class="table-container">
+                <table id="users-table">
+                    <thead>
+                        <tr><th>Kullanıcı</th><th>E-posta</th><th>UID</th><th>Katılım</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Servers View -->
+    <div class="main-content" id="servers-view" style="display: none;">
+        <div class="header">
+            <h1 class="page-title">Sunucu Yönetimi</h1>
+            <input type="text" class="search-input" placeholder="Sunucu ara..." oninput="filterData('servers', this.value)">
+        </div>
+        <div class="content-card">
+            <div class="table-container">
+                <table id="servers-table">
+                    <thead>
+                        <tr><th>Sunucu</th><th>Kurucu ID</th><th>Üyeler</th><th>Oluşturulma</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Channels View -->
+    <div class="main-content" id="channels-view" style="display: none;">
+        <div class="header">
+            <h1 class="page-title">Kanal Yönetimi</h1>
+            <input type="text" class="search-input" placeholder="Kanal ara..." oninput="filterData('channels', this.value)">
+        </div>
+        <div class="content-card">
+            <div class="table-container">
+                <table id="channels-table">
+                    <thead>
+                        <tr><th>Kanal İsmi</th><th>Kurucu ID</th><th>Tür</th><th>Oluşturulma</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages View -->
+    <div class="main-content" id="messages-view" style="display: none;">
+        <div class="header">
+            <h1 class="page-title">Son Mesajlar</h1>
+            <p style="color:var(--text-secondary); font-size:0.8rem">Tüm kanallardaki son 50 mesaj gösteriliyor</p>
+        </div>
+        <div class="content-card">
+            <div class="table-container">
+                <table id="messages-table">
+                    <thead>
+                        <tr><th>Kullanıcı</th><th>Mesaj</th><th>Kaynak</th><th>Zaman</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invites View -->
+    <div class="main-content" id="invites-view" style="display: none;">
+        <div class="header">
+            <h1 class="page-title">Davet Kodları</h1>
+        </div>
+        <div class="content-card">
+            <div class="table-container">
+                <table id="invites-table">
+                    <thead>
+                        <tr><th>Kod</th><th>Kullanım</th><th>Limit</th><th>Oluşturan</th><th>Tarih</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy, limit, collectionGroup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+            appId: import.meta.env.VITE_FIREBASE_APP_ID
+        };
+
+        let db;
+        let dataStore = { users: [], servers: [], channels: [], messages: [], invites: [] };
+
+        async function init() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                await loadAllData();
+                document.getElementById('loading').style.display = 'none';
+            } catch (e) {
+                console.error("Init error", e);
+                document.getElementById('loading').innerHTML = `<div style="color:var(--danger); padding: 20px; text-align:center;">
+                    <h2>Firebase Connection Error</h2>
+                    <p>${e.message}</p>
+                    <p style="margin-top:10px; color:var(--text-secondary)">Check your .env variables and Firestore Rules.</p>
+                </div>`;
+            }
+        }
+
+        async function loadAllData() {
+            try {
+                // 1. Fetch Users
+                const uSnap = await getDocs(collection(db, "users"));
+                dataStore.users = uSnap.docs.map(d => ({ 
+                    id: d.id, 
+                    ...d.data(),
+                    name: d.data().username || d.data().displayName || d.data().name || 'Anonymous'
+                }));
+
+                // 2. Fetch Servers
+                const sSnap = await getDocs(collection(db, "servers"));
+                dataStore.servers = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // 3. Fetch Global Text Channels
+                const cSnap = await getDocs(collection(db, "text_channels"));
+                const globalChannels = cSnap.docs.map(d => ({ 
+                    id: d.id, 
+                    ...d.data(), 
+                    locationType: 'Global',
+                    kind: 'text' // Global is always text for now
+                }));
+
+                // 4. Fetch Server-Specific Channels
+                let serverChannels = [];
+                for (const server of dataStore.servers) {
+                    try {
+                        const scSnap = await getDocs(collection(db, "servers", server.id, "channels"));
+                        scSnap.docs.forEach(d => {
+                            const cData = d.data();
+                            serverChannels.push({ 
+                                id: d.id, 
+                                ...cData, 
+                                serverName: server.name,
+                                serverId: server.id,
+                                locationType: 'Server',
+                                kind: cData.type || 'text'
+                            });
+                        });
+                    } catch (e) {
+                        console.warn(`Could not fetch channels for server ${server.id}`);
+                    }
+                }
+                dataStore.channels = [...globalChannels, ...serverChannels];
+
+                // 5. Fetch Invites
+                const iSnap = await getDocs(collection(db, "invites"));
+                dataStore.invites = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // 6. Fetch Voice Channel Presence (Live)
+                try {
+                    const pSnap = await getDocs(collection(db, "room_presence"));
+                    dataStore.voiceStates = {};
+                    pSnap.docs.forEach(d => {
+                        dataStore.voiceStates[d.id] = d.data().users || [];
+                    });
+                } catch (e) {
+                    console.warn("Presence fetch failed", e);
+                }
+
+                // 7. Fetch Recent Messages (Collection Group)
+                try {
+                    const mQuery = query(collectionGroup(db, "messages"), orderBy("timestamp", "desc"), limit(50));
+                    const mSnap = await getDocs(mQuery);
+                    dataStore.messages = mSnap.docs.map(d => {
+                        const data = d.data();
+                        const pathParts = d.ref.path.split('/');
+                        let source = 'Unknown';
+                        if (pathParts[0] === 'text_channels') {
+                            const chan = dataStore.channels.find(c => c.id === pathParts[1]);
+                            source = chan ? `#${chan.name || chan.id}` : 'Global';
+                        } else if (pathParts[0] === 'servers') {
+                            const srv = dataStore.servers.find(s => s.id === pathParts[1]);
+                            source = srv ? `${srv.name}` : 'Server';
+                        }
+                        return { id: d.id, source, ...data, username: data.username || data.displayName || 'Anon' };
+                    });
+                } catch (e) {
+                    console.error("Messages query failed:", e);
+                    dataStore.messagesError = e.message;
+                    // Check if error contains an index creation link (Firestore specific)
+                    if (e.message.includes('https://console.firebase.google.com')) {
+                        const link = e.message.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
+                        if (link) dataStore.indexLink = link[0];
+                    }
+                }
+
+                updateStats();
+                renderAll();
+            } catch (err) {
+                console.error("Data loading failed", err);
+                throw err;
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('stat-users').innerText = dataStore.users.length;
+            document.getElementById('stat-servers').innerText = dataStore.servers.length;
+            document.getElementById('stat-channels').innerText = dataStore.channels.length;
+        }
+
+        function renderAll() {
+            renderTable('users', dataStore.users);
+            renderTable('servers', dataStore.servers);
+            renderTable('channels', dataStore.channels);
+            renderTable('messages', dataStore.messages);
+            renderTable('invites', dataStore.invites);
+            renderRecentActivity();
+        }
+
+        function renderTable(type, data) {
+            const tbody = document.getElementById(`${type}-table`).querySelector('tbody');
+            tbody.innerHTML = '';
+            
+            if (type === 'messages' && data.length === 0) {
+                const errorUI = dataStore.indexLink 
+                    ? `<div style="padding:20px; text-align:center;">
+                        <p style="color:var(--warning); margin-bottom:10px;">⚠️ Mesajları görebilmek için Firestore'da bir indeks oluşturmanız gerekiyor.</p>
+                        <a href="${dataStore.indexLink}" target="_blank" style="color:var(--accent-primary); text-decoration:underline;">Tıklayın ve İndeksi Oluşturun</a>
+                      </div>`
+                    : `<div style="padding:20px; text-align:center; color:var(--text-tertiary);">Henüz mesaj bulunmuyor veya yüklenemedi.</div>`;
+                
+                tbody.innerHTML = `<tr><td colspan="4">${errorUI}</td></tr>`;
+                return;
+            }
+
+            if (type === 'channels') {
+                // Grouping Logic for Channels
+                const groups = {};
+                data.forEach(item => {
+                    const groupKey = item.locationType === 'Global' ? 'Global' : (item.serverName || 'Bilinmeyen Sunucu');
+                    if (!groups[groupKey]) groups[groupKey] = [];
+                    groups[groupKey].push(item);
+                });
+
+                Object.keys(groups).forEach(groupName => {
+                    // Render Server Header Row
+                    tbody.innerHTML += `
+                        <tr style="background: rgba(255,255,255,0.02);">
+                            <td colspan="4" style="padding: 12px 15px; color: var(--accent-primary); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">
+                                📂 ${groupName}
+                            </td>
+                        </tr>
+                    `;
+
+                    groups[groupName].forEach(item => {
+                        const kindIcon = item.kind === 'voice' ? '🔈' : '💬';
+                        const kindLabel = item.kind === 'voice' ? 'Sesli' : 'Metin';
+                        const creator = dataStore.users.find(u => u.id === item.createdBy);
+                        const creatorName = creator ? creator.name : (item.createdBy || 'Sistem');
+
+                        const membersInRoom = dataStore.voiceStates ? (dataStore.voiceStates[item.id] || []) : [];
+                        let membersHtml = '';
+                        if (item.kind === 'voice' && membersInRoom.length > 0) {
+                            membersHtml = `<div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;">`;
+                            membersInRoom.forEach(member => {
+                                const uid = typeof member === 'string' ? member : (member.userId || member.uid);
+                                const uFromStore = dataStore.users.find(user => user.id === uid);
+                                const uName = member.username || (uFromStore ? uFromStore.name : (uid ? uid.substring(0,6) : '...'));
+                                membersHtml += `
+                                    <div title="${uName}" style="display:flex; align-items:center; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); border-radius:12px; padding:2px 8px; font-size:0.7rem;">
+                                        <div class="status-dot status-online" style="width:6px; height:6px; margin-right:5px;"></div>
+                                        ${uName}
+                                    </div>`;
+                            });
+                            membersHtml += `</div>`;
+                        }
+
+                        tbody.innerHTML += `<tr>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:1.1rem">${kindIcon}</span>
+                                    <b>${item.name || item.id}</b>
+                                </div>
+                                ${membersHtml}
+                            </td>
+                            <td>
+                                <div style="font-size:0.85rem">${creatorName}</div>
+                                <div style="font-size:0.7rem; color:var(--text-tertiary)">${item.createdBy || ''}</div>
+                            </td>
+                            <td><span class="badge ${item.kind === 'voice' ? 'badge-success' : 'badge-primary'}">${kindLabel}</span></td>
+                            <td>${formatDate(item.createdAt)}</td>
+                        </tr>`;
+                    });
+                });
+                return;
+            }
+
+            data.forEach(item => {
+                let row = '';
+                if (type === 'users') {
+                    row = `<tr>
+                        <td><div class="user-cell">
+                            ${item.photoURL ? `<img src="${item.photoURL}" class="avatar">` : `<div class="avatar-placeholder">${item.name[0]}</div>`}
+                            <div><b>${item.name}</b></div>
+                        </div></td>
+                        <td>${item.email || 'N/A'}</td>
+                        <td style="font-family:monospace;font-size:0.8rem;color:var(--text-tertiary)">${item.id}</td>
+                        <td>${formatDate(item.createdAt)}</td>
+                    </tr>`;
+                } else if (type === 'servers') {
+                    const ownerId = item.ownerId || item.createdBy;
+                    const owner = dataStore.users.find(u => u.id === ownerId);
+                    const ownerDisplay = owner ? owner.name : (ownerId || 'Bilinmiyor');
+                    
+                    row = `<tr>
+                        <td><div class="user-cell">
+                            ${item.iconUrl ? `<img src="${item.iconUrl}" class="avatar">` : `<div class="server-icon">${item.name ? item.name[0] : 'S'}</div>`}
+                            <div><b>${item.name || 'İsimsiz Sunucu'}</b></div>
+                        </div></td>
+                        <td>
+                            <div style="font-weight:500">${ownerDisplay}</div>
+                            ${owner ? '' : `<div style="font-size:0.7rem; color:var(--text-tertiary)">${ownerId}</div>`}
+                        </td>
+                        <td>
+                            <button onclick="viewMembers('${item.id}')" style="background:rgba(99,102,241,0.1); color:var(--accent-primary); border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:6px 12px; font-size:0.8rem; cursor:pointer;">
+                                ${item.memberIds ? item.memberIds.length : (item.members ? Object.keys(item.members).length : 0)} Üye (Gör)
+                            </button>
+                        </td>
+                        <td>${formatDate(item.createdAt)}</td>
+                    </tr>`;
+                }
+                tbody.innerHTML += row;
+            });
+        }
+
+        window.viewMembers = (serverId) => {
+            const server = dataStore.servers.find(s => s.id === serverId);
+            if(!server) return;
+
+            document.getElementById('modal-title').innerText = `${server.name} - Üyeler`;
+            const list = document.getElementById('modal-list');
+            list.innerHTML = '';
+
+            const mIds = server.memberIds || (server.members ? Object.keys(server.members) : []);
+            
+            if(mIds.length === 0) {
+                list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-tertiary)">Üye bulunamadı.</div>';
+            } else {
+                mIds.forEach(uid => {
+                    const user = dataStore.users.find(u => u.id === uid);
+                    const name = user ? user.name : 'Bilinmeyen Kullanıcı';
+                    const photo = user ? user.photoURL : null;
+                    
+                    list.innerHTML += `
+                        <div class="member-item">
+                             ${photo ? `<img src="${photo}" class="avatar">` : `<div class="avatar-placeholder">${name[0]}</div>`}
+                             <div>
+                                <div style="font-weight:600">${name}</div>
+                                <div style="font-size:0.75rem; color:var(--text-tertiary)">${uid}</div>
+                             </div>
+                        </div>
+                    `;
+                });
+            }
+
+            document.getElementById('members-modal').style.display = 'flex';
+        };
+
+        window.closeModal = () => {
+            document.getElementById('members-modal').style.display = 'none';
+        };
+
+        function renderRecentActivity() {
+            const tbody = document.getElementById('recent-activity-table').querySelector('tbody');
+            const all = [
+                ...dataStore.users.map(u => ({ type: 'Kullanıcı', name: u.name, details: 'Kayıt oldu', date: u.createdAt })),
+                ...dataStore.servers.map(s => ({ type: 'Sunucu', name: s.name, details: 'Kuruldu', date: s.createdAt })),
+                ...dataStore.channels.map(c => ({ type: 'Kanal', name: c.name, details: 'Aktif', date: c.createdAt }))
+            ].sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 10);
+
+            tbody.innerHTML = all.map(a => `
+                <tr>
+                    <td><span class="badge ${a.type === 'User' ? 'badge-success' : (a.type === 'Server' ? 'badge-primary' : 'badge-warning')}">${a.type}</span></td>
+                    <td><b>${a.name || 'Unknown'}</b></td>
+                    <td>${a.details}</td>
+                    <td>${formatDate(a.date)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function formatDate(ts) {
+            if (!ts) return 'N/A';
+            const date = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+            return date.toLocaleDateString();
+        }
+
+        window.switchTab = (tab) => {
+            const views = ['dashboard', 'users', 'servers', 'channels', 'messages', 'invites'];
+            views.forEach(v => {
+                const el = document.getElementById(`${v}-view`);
+                if(el) el.style.display = 'none';
+                const nav = document.getElementById(`nav-${v}`);
+                if(nav) nav.classList.remove('active');
+            });
+
+            const targetView = document.getElementById(`${tab}-view`);
+            if(targetView) targetView.style.display = 'block';
+            const targetNav = document.getElementById(`nav-${tab}`);
+            if(targetNav) targetNav.classList.add('active');
+
+            // Refresh data on tab switch if needed
+            if(tab !== 'dashboard') renderTable(tab, dataStore[tab]);
+        };
+
+        window.filterData = (type, val) => {
+            const filtered = dataStore[type].filter(i => 
+                (i.name && i.name.toLowerCase().includes(val.toLowerCase())) ||
+                (i.username && i.username.toLowerCase().includes(val.toLowerCase())) ||
+                (i.text && i.text.toLowerCase().includes(val.toLowerCase())) ||
+                (i.email && i.email.toLowerCase().includes(val.toLowerCase())) ||
+                (i.id && i.id.toLowerCase().includes(val.toLowerCase()))
+            );
+            renderTable(type, filtered);
+        };
+
+        window.logout = () => { if(confirm("Çıkış?")) window.close(); };
+
+        init();
+    </script>
+</body>
+</html>

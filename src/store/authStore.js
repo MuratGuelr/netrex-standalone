@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { toast } from "sonner";
+import { toast } from "@/src/utils/toast";
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -9,7 +9,7 @@ import {
   deleteUser,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase"; // Added db
 
 import { useServerStore } from "@/src/store/serverStore";
@@ -102,25 +102,51 @@ export const useAuthStore = create((set) => ({
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        // 1. Set offline status on all servers BEFORE signing out
         const { servers } = useServerStore.getState();
-        if (servers && servers.length > 0) {
-            const updatePromises = servers.map(server => 
-                updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
+
+        // 1. Anonim Kullanıcı İse: Tamamen Sil (Auth + Firestore)
+        if (currentUser.isAnonymous) {
+             // A. Sunucu üyeliklerini sil
+             if (servers && servers.length > 0) {
+                 const deletePromises = servers.map(server => 
+                     deleteDoc(doc(db, 'servers', server.id, 'members', currentUser.uid))
+                         .catch((err) => console.warn(`Failed to remove member from server ${server.id}:`, err))
+                 );
+                 await Promise.allSettled(deletePromises);
+             }
+
+             // B. Users koleksiyonundaki dökümanı sil
+             try {
+                await deleteDoc(doc(db, "users", currentUser.uid));
+             } catch (err) {
+                console.error("Failed to delete user doc:", err);
+             }
+
+             // C. Auth kullanıcısını sil
+             await deleteUser(currentUser);
+        } else {
+            // 2. Normal Kullanıcı İse: Sadece Offline Yap ve Çık
+            if (servers && servers.length > 0) {
+                const updatePromises = servers.map(server => 
+                    updateDoc(doc(db, 'servers', server.id, 'members', currentUser.uid), {
+                        presence: 'offline',
+                        lastSeen: serverTimestamp()
+                    }).catch((err) => console.warn(`Failed to set offline on server ${server.id}:`, err))
+                );
+                await Promise.allSettled(updatePromises);
+            }
+            // Offline status update for users collection is handled by usePresence hook mostly, 
+            // but explicitly setting it here too is good practice before signout
+            try {
+                await updateDoc(doc(db, 'users', currentUser.uid), {
                     presence: 'offline',
                     lastSeen: serverTimestamp()
-                }).catch((err) => console.warn(`Failed to set offline on server ${server.id}:`, err))
-            );
-            await Promise.allSettled(updatePromises);
+                });
+            } catch (e) {}
+
+            await signOut(auth);
         }
 
-        if (currentUser.isAnonymous) {
-          // Anonim ise sil
-          await deleteUser(currentUser);
-        } else {
-          // Google ise sadece çık
-          await signOut(auth);
-        }
       } catch (error) {
         console.error("Logout Error:", error);
         // Hata olsa bile çıkışı zorla

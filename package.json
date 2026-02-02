@@ -18,6 +18,8 @@
   "build": {
     "appId": "com.netrex.app",
     "productName": "Netrex",
+    "compression": "maximum",
+    "asar": true,
     "publish": [
       {
         "provider": "github",
@@ -29,22 +31,11 @@
       "output": "dist"
     },
     "extraResources": [
-      {
-        "from": "public/logo.ico",
-        "to": "logo.ico"
-      },
-      {
-        "from": "public/logo.png",
-        "to": "logo.png"
-      },
-      {
-        "from": "public/rnnoise.wasm",
-        "to": "rnnoise.wasm"
-      },
-      {
-        "from": "public/rnnoise.worklet.js",
-        "to": "rnnoise.worklet.js"
-      }
+      { "from": "public/logo.ico", "to": "logo.ico" },
+      { "from": "public/logo.png", "to": "logo.png" },
+      { "from": "public/rnnoise.wasm", "to": "rnnoise.wasm" },
+      { "from": "public/rnnoise.worklet.js", "to": "rnnoise.worklet.js" },
+      { "from": "public/voice-processor.worklet.js", "to": "voice-processor.worklet.js" }
     ],
     "files": [
       "out/**/*",
@@ -63,22 +54,32 @@
     }
   },
   "dependencies": {
-    "@livekit/components-react": "latest",
-    "@livekit/components-styles": "latest",
-    "@livekit/track-processors": "^0.6.1",
-    "browser-image-compression": "^2.0.2",
-    "cloudinary": "^2.8.0",
     "dotenv": "^16.3.1",
     "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
     "electron-updater": "^6.6.2",
+    "livekit-server-sdk": "latest",
+    "uiohook-napi": "^1.1.0"
+  },
+  "devDependencies": {
+    "@livekit/components-react": "latest",
+    "@livekit/components-styles": "latest",
+    "@livekit/track-processors": "^0.6.1",
+    "autoprefixer": "^10.0.1",
+    "baseline-browser-mapping": "^2.9.18",
+    "browser-image-compression": "^2.0.2",
+    "cloudinary": "^2.8.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "latest",
+    "electron-builder": "latest",
     "emoji-picker-react": "^4.16.1",
     "firebase": "^11.0.2",
     "framer-motion": "^12.23.26",
     "livekit-client": "latest",
-    "livekit-server-sdk": "latest",
     "lucide-react": "^0.300.0",
     "next": "^14.2.16",
+    "postcss": "^8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
@@ -88,18 +89,8 @@
     "remark-gfm": "^4.0.1",
     "simple-rnnoise-wasm": "^1.1.0",
     "sonner": "^2.0.7",
-    "uiohook-napi": "^1.1.0",
-    "zustand": "^4.4.7"
-  },
-  "devDependencies": {
-    "autoprefixer": "^10.0.1",
-    "baseline-browser-mapping": "^2.9.18",
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3",
-    "electron": "latest",
-    "electron-builder": "latest",
-    "postcss": "^8",
     "tailwindcss": "^3.3.0",
-    "wait-on": "^7.2.0"
+    "wait-on": "^7.2.0",
+    "zustand": "^4.4.7"
   }
 }
