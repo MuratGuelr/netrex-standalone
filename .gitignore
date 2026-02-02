@@ -32,7 +32,8 @@ local.env
 .env.test.local
 .env.production.local
 electron/.env.local
-
+admin-panel
+.admin-panel
 
 # Electron Store
 config.json
