@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * 🚀 SplashScreen - Production-Ready Animated Splash Screen
+ * 🚀 SplashScreen - Premium Animated Splash Screen
+ * Restored after git conflict. 
+ * Features: Aurora background, floating particles, interactive mouse glow, sequential loading text.
  */
 
 import { useState, useEffect } from "react";
@@ -15,14 +17,20 @@ const CONFIG = {
   exitDuration: 0.4,
   strokeColor: "#a855f7",
   fillColor: "#a855f7",
-  bgGradientFrom: "#0a0a0f",
-  bgGradientTo: "#111118",
+  bgGradientFrom: "#050508",
+  bgGradientTo: "#0a0a0f",
   strokeWidth: 2,
   viewBox: "0 0 2560 2560",
   logoSize: 120,
 };
 
 const LOGO_PATH = "M470 2469 c-126 -21 -259 -116 -318 -227 -63 -119 -62 -98 -62 -952 0 -451 4 -800 10 -835 20 -127 120 -269 232 -330 102 -56 87 -55 954 -55 703 0 807 2 855 16 149 44 264 158 315 314 17 51 19 114 22 825 2 540 0 794 -8 850 -29 204 -181 362 -380 394 -81 13 -1540 13 -1620 0z m816 -1035 l339 -396 3 71 c3 70 2 72 -38 120 l-40 48 2 274 3 274 132 3 c131 3 133 2 137 -20 3 -13 4 -257 3 -543 l-2 -520 -105 -3 -105 -2 -235 276 c-129 153 -281 331 -337 396 l-103 119 0 -75 c0 -73 1 -76 40 -121 l40 -47 -2 -271 -3 -272 -135 0 -135 0 -3 530 c-1 292 0 536 3 543 3 8 33 12 103 12 l98 0 340 -396z";
+
+const LOADING_TEXTS = [
+  "Hazırlanıyor",
+  "Kontrol Ediliyor",
+  "Başlatılıyor"
+];
 
 const containerVariants = {
   visible: { opacity: 1, scale: 1 },
@@ -63,19 +71,6 @@ export default function SplashScreen({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [loadingStep, setLoadingStep] = useState(0);
 
-  const LOADING_TEXTS = [
-    "Hazırlanıyor",
-    "Veriler Kontrol Ediliyor",
-    "Başlatılıyor"
-  ];
-
-  useEffect(() => {
-    const textInterval = setInterval(() => {
-        setLoadingStep(prev => prev < LOADING_TEXTS.length - 1 ? prev + 1 : prev);
-    }, 1200);
-    return () => clearInterval(textInterval);
-  }, []);
-
   useEffect(() => {
     const handleMouseMove = (e) => {
         setMousePos({
@@ -85,6 +80,13 @@ export default function SplashScreen({
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  useEffect(() => {
+    const textInterval = setInterval(() => {
+        setLoadingStep(prev => prev < LOADING_TEXTS.length - 1 ? prev + 1 : prev);
+    }, 1200);
+    return () => clearInterval(textInterval);
   }, []);
 
   useEffect(() => {

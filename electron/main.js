@@ -225,7 +225,7 @@ app.on("before-quit", async (event) => {
           exitSplash.close();
         }
         app.exit(0);
-      }, 1500); // 1.5 second delay to enjoy the exit animation
+      }, 3500); // 3.5 second delay to allow drawing animation to finish
     } else {
       setTimeout(checkAndQuit, 100);
     }

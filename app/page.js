@@ -17,9 +17,8 @@ import { db } from "@/src/lib/firebase";
 import { LoginPage, LoadingScreen } from "@/src/components/pages";
 import { WelcomeScreen } from "@/src/components/layout";
 
-// Splash Screen (direct import for immediate availability)
+// Splash Screen
 import SplashScreen from "@/src/components/SplashScreen";
-import ExitSplashScreen from "@/src/components/ExitSplashScreen";
 import { AppShell } from "@/src/components/layout";
 import ServerRail from "@/src/components/layout/ServerRail";
 import CreateServerModal from "@/src/components/server/CreateServerModal";
@@ -52,7 +51,6 @@ export default function Home() {
     isLoading,
     initializeAuth,
     loginAnonymously,
-    loginWithGoogleToken,
   } = useAuthStore();
   const { currentServer } = useServerStore();
 
@@ -61,14 +59,29 @@ export default function Home() {
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true);
-  const [showExitSplash, setShowExitSplash] = useState(false);
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
 
+  // --- EXIT LOGIC (NATIVE) ---
   useEffect(() => {
     if (window.netrex && window.netrex.onRequestExit) {
-      window.netrex.onRequestExit(() => {
-        setShowExitSplash(true);
+      window.netrex.onRequestExit(async () => {
+        // Hızlıca kullanıcıyı offline yap
+        if (user?.uid) {
+          try {
+            await updateDoc(doc(db, 'users', user.uid), {
+              presence: 'offline',
+              lastSeen: serverTimestamp(),
+              gameActivity: null
+            });
+          } catch (e) {
+            console.error("Exit cleanup failed:", e);
+          }
+        }
+        // Native kapanış ekranını (utils.js'deki getExitSplashHtml) tetikle
+        if (window.netrex && window.netrex.forceQuitApp) {
+          window.netrex.forceQuitApp();
+        }
       });
     }
 
@@ -83,7 +96,7 @@ export default function Home() {
             if (error) toast.info(error);
         });
     }
-  }, []);
+  }, [user?.uid]);
 
   const { showSettingsModal, setSettingsOpen } = useSettingsStore();
 
@@ -109,7 +122,6 @@ export default function Home() {
     }
   }, [isLoading, showSplash]);
 
-  // Reset local state when server changes or is deselected (Home)
   useEffect(() => {
     setCurrentRoom(null);
     setCurrentTextChannel(null);
@@ -118,29 +130,6 @@ export default function Home() {
     useChatStore.getState().clearCurrentChannel();
     useChatStore.getState().setShowChatPanel(false);
   }, [currentServer?.id]);
-
-  if (showExitSplash) {
-    return (
-      <ExitSplashScreen 
-        onComplete={async () => {
-          if (user?.uid) {
-            try {
-              await updateDoc(doc(db, 'users', user.uid), {
-                presence: 'offline',
-                lastSeen: serverTimestamp(),
-                gameActivity: null
-              });
-            } catch (e) {
-              console.error("Failed to set offline:", e);
-            }
-          }
-          if (window.netrex?.forceQuitApp) {
-            window.netrex.forceQuitApp();
-          }
-        }} 
-      />
-    );
-  }
 
   if (showInstallUpdateSplash) {
       return <InstallUpdateSplash />;
@@ -187,7 +176,7 @@ export default function Home() {
       }
       rightSidebar={
         currentServer ? (
-           <ServerMemberList onClose={() => setShowMemberList(false)} />
+            <ServerMemberList onClose={() => setShowMemberList(false)} />
         ) : null
       }
       showRightSidebar={showMemberList}
