@@ -1,6 +1,6 @@
 {
   "name": "netrex",
-  "version": "5.2.0",
+  "version": "6.0.0",
   "description": "Secure Desktop Voice Chat Application",
   "homepage": "./",
   "main": "electron/main.js",
@@ -31,11 +31,26 @@
       "output": "dist"
     },
     "extraResources": [
-      { "from": "public/logo.ico", "to": "logo.ico" },
-      { "from": "public/logo.png", "to": "logo.png" },
-      { "from": "public/rnnoise.wasm", "to": "rnnoise.wasm" },
-      { "from": "public/rnnoise.worklet.js", "to": "rnnoise.worklet.js" },
-      { "from": "public/voice-processor.worklet.js", "to": "voice-processor.worklet.js" }
+      {
+        "from": "public/logo.ico",
+        "to": "logo.ico"
+      },
+      {
+        "from": "public/logo.png",
+        "to": "logo.png"
+      },
+      {
+        "from": "public/rnnoise.wasm",
+        "to": "rnnoise.wasm"
+      },
+      {
+        "from": "public/rnnoise.worklet.js",
+        "to": "rnnoise.worklet.js"
+      },
+      {
+        "from": "public/voice-processor.worklet.js",
+        "to": "voice-processor.worklet.js"
+      }
     ],
     "files": [
       "out/**/*",
