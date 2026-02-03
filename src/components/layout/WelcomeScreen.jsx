@@ -108,19 +108,17 @@ export default function WelcomeScreen({
       {/* --- Ana İçerik --- */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-3xl">
         
-        {/* 1. Hero İkonu (Pulse Efektli) */}
-        <div className="relative mb-12 group">
-          {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı */}
-          <div className="absolute inset-0 bg-indigo-500/10 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-700 will-change-opacity" />
+        {/* 1. Hero İkonu (Statik) */}
+        <div className="relative mb-12">
+          <div className="absolute inset-0 bg-indigo-500/10 rounded-full opacity-20" />
           
           <div className="
             relative w-32 h-32 
             bg-gradient-to-br from-[#1e1f22] to-[#111214]
-            rounded-3xl rotate-3 group-hover:rotate-0
+            rounded-3xl
             flex items-center justify-center 
-            border border-white/10 group-hover:border-indigo-500/30
+            border border-white/10
             shadow-[0_20px_60px_rgba(0,0,0,0.5)]
-            transition-all duration-500 ease-out
           ">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl" />
             
@@ -129,19 +127,17 @@ export default function WelcomeScreen({
               className="
                 text-indigo-400 
                 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]
-                group-hover:scale-110 group-hover:text-indigo-300
-                transition-all duration-300 relative z-10
+                relative z-10
               " 
             />
             
-            {/* 🚀 OPTIMIZED: animate-bounce kaldırıldı */}
             <Sparkles size={20} className="absolute -top-4 -right-4 text-purple-400 opacity-60" />
             <Music size={16} className="absolute -bottom-2 -left-2 text-cyan-400 opacity-60" />
           </div>
         </div>
 
         {/* 2. Karşılama Metni */}
-        <div className="space-y-4 mb-12 animate-in slide-in-from-bottom-4 fade-in duration-700">
+        <div className="space-y-4 mb-12">
           <h2 className="text-5xl font-bold text-white tracking-tight">
             Hoş Geldin, <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">{userName}</span>
           </h2>
@@ -154,7 +150,7 @@ export default function WelcomeScreen({
         {/* 3. Özellik Kartları (Grid) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-12">
           {features.map((feature, index) => (
-            <FeatureCard key={index} feature={feature} delay={index * 100} />
+            <FeatureCard key={index} feature={feature} />
           ))}
         </div>
 
@@ -187,13 +183,13 @@ export default function WelcomeScreen({
 }
 
 /**
- * ✨ FeatureCard - Hover efektli özellik kartı
+ * ✨ FeatureCard - Statik özellik kartı
  */
-function FeatureCard({ feature, delay }) {
+function FeatureCard({ feature }) {
   const colorStyles = {
-    indigo: "group-hover:border-indigo-500/30 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.15)]",
-    purple: "group-hover:border-purple-500/30 group-hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]",
-    orange: "group-hover:border-orange-500/30 group-hover:shadow-[0_0_20px_rgba(249,115,22,0.15)]",
+    indigo: "border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.15)]",
+    purple: "border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.15)]",
+    orange: "border-orange-500/30 shadow-[0_0_20px_rgba(249,115,22,0.15)]",
   };
 
   const iconColors = {
@@ -205,28 +201,21 @@ function FeatureCard({ feature, delay }) {
   return (
     <div 
       className={`
-        group relative overflow-hidden
+        relative overflow-hidden
         bg-[#1e1f22]/60 backdrop-blur-sm
         border border-white/5 rounded-2xl
         p-4 text-left
-        transition-all duration-300 hover:-translate-y-1
-        ${colorStyles[feature.color] || colorStyles.indigo}
-        animate-in fade-in slide-in-from-bottom-4
       `}
-      style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
     >
-      {/* Hover Gradient Background */}
-      <div className={`absolute inset-0 bg-gradient-to-br from-${feature.color}-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-      
       <div className="relative z-10 flex items-start gap-4">
-        <div className={`p-2.5 rounded-xl ${iconColors[feature.color]} group-hover:scale-110 transition-transform duration-300`}>
+        <div className={`p-2.5 rounded-xl ${iconColors[feature.color]}`}>
           {feature.icon}
         </div>
         <div>
-          <h3 className="text-sm font-bold text-white mb-0.5 group-hover:text-white transition-colors">
+          <h3 className="text-sm font-bold text-white mb-0.5">
             {feature.label}
           </h3>
-          <p className="text-xs text-[#949ba4] group-hover:text-[#b5bac1]">
+          <p className="text-xs text-[#949ba4]">
             {feature.desc}
           </p>
         </div>

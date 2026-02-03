@@ -39,6 +39,7 @@ function fixPathsInFile(filePath) {
     content = content.replace(/src="\/logo\.svg"/g, 'src="./logo.svg"');
     content = content.replace(/src="\/logo\.ico"/g, 'src="./logo.ico"');
     content = content.replace(/src="\/favicon\.ico"/g, 'src="./favicon.ico"');
+    content = content.replace(/src="\/grid\.svg"/g, 'src="./grid.svg"');
     // Generic fix for any src starting with / that isn't _next or absolute URL
     content = content.replace(/src="\/([^h_/][^"]*)"/g, 'src="./$1"');
     
@@ -76,6 +77,11 @@ function fixPathsInFile(filePath) {
     function fixUrl(url) {
       if (typeof url !== 'string') return url;
       
+      // Remove double _next if present (anywhere in path)
+      if (url.includes('_next/_next/')) {
+        url = url.replace(/_next\/_next\//g, '_next/');
+      }
+
       // Fix absolute paths starting with /_next/
       if (url.startsWith('/_next/')) {
         return webpackPublicPath + url.substring(7);
@@ -92,14 +98,6 @@ function fixPathsInFile(filePath) {
         return webpackPublicPath + url.substring(nextIndex + 7);
       }
       
-      // Fix paths with double _next
-      if (url.includes('/_next/_next/')) {
-        url = url.replace(/\\/_next\\/_next\\//g, '/_next/');
-        if (url.startsWith('/_next/')) {
-          return webpackPublicPath + url.substring(7);
-        }
-      }
-      
       return url;
     }
     
@@ -114,7 +112,7 @@ function fixPathsInFile(filePath) {
         
         // Fix __webpack_require__.p if it exists
         if (typeof __webpack_require__ !== 'undefined' && __webpack_require__.p) {
-          if (__webpack_require__.p === '/_next/' || __webpack_require__.p.startsWith('/_next/')) {
+          if (__webpack_require__.p === '/_next/' || __webpack_require__.p.startsWith('/_next/') || __webpack_require__.p === './_next/') {
             __webpack_require__.p = webpackPublicPath;
           }
         }

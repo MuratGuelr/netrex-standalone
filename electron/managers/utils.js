@@ -235,7 +235,7 @@ const getExitSplashHtml = () => `
 </html>
 `;
 
-// --- OTHER UTILITIES (RESTORED) ---
+// --- OTHER UTILITIES (IMPROVED - NO DARK OVERLAY) ---
 const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
 <!DOCTYPE html>
 <html>
@@ -244,27 +244,68 @@ const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
     <title>${title}</title>
     <style>
         ${COMMON_CSS}
+        /* Refined aurora effects with lower opacity - no dark overlay */
+        .aurora { position: absolute; filter: blur(120px); opacity: 0.08; z-index: 1; pointer-events: none; border-radius: 50%; }
+        
         .card { 
-            position: relative; z-index: 10; background: rgba(15, 15, 20, 0.6); 
+            position: relative; z-index: 10; 
+            background: rgba(15, 15, 20, 0.95); 
             backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
-            border: 1px solid rgba(255, 255, 255, 0.05); padding: 56px; border-radius: 40px; 
-            text-align: center; width: 420px; animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            padding: 56px; 
+            border-radius: 40px; 
+            text-align: center; 
+            width: 420px; 
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes slideUp { 
+            from { opacity: 0; transform: translateY(30px) scale(0.95); } 
+            to { opacity: 1; transform: translateY(0) scale(1); } 
+        }
         .btn { 
-            width: 100%; padding: 16px 24px; background: linear-gradient(135deg, ${TOKENS.indigo}, ${TOKENS.purple}); 
-            color: white; border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.1); 
-            font-weight: 700; cursor: pointer; transition: all 0.3s; margin-top: 20px;
+            width: 100%; 
+            padding: 16px 24px; 
+            background: linear-gradient(135deg, ${TOKENS.indigo}, ${TOKENS.purple}); 
+            color: white; 
+            border-radius: 18px; 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            font-weight: 700; 
+            font-size: 15px;
+            cursor: pointer; 
+            transition: all 0.3s; 
+            margin-top: 20px;
         }
-        .btn:hover { transform: translateY(-2px); filter: brightness(110%); }
-        h1 { font-size: 28px; font-weight: 900; letter-spacing: 0.2em; text-indent: 0.2em; margin-bottom: 10px; }
+        .btn:hover { 
+            transform: translateY(-2px); 
+            filter: brightness(110%); 
+            box-shadow: 0 8px 24px rgba(168, 85, 247, 0.3);
+        }
+        h1 { 
+            font-size: 28px; 
+            font-weight: 900; 
+            letter-spacing: 0.2em; 
+            text-indent: 0.2em; 
+            margin-bottom: 10px; 
+        }
+        p {
+            color: rgba(255,255,255,0.5);
+            margin: 10px 0 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
     </style>
 </head>
 <body>
-    <div class="aurora" style="width:600px;height:600px;background:${TOKENS.purple}20;top:-10%;left:-10%"></div>
+    <div class="aurora" style="width:600px;height:600px;background:${TOKENS.purple};top:-10%;left:-10%"></div>
+    <div class="aurora" style="width:500px;height:500px;background:${TOKENS.indigo};bottom:-10%;right:-10%"></div>
+    <div class="noise"></div>
+    
     <div class="card">
         <svg width="80" height="80" viewBox="0 0 256 256" style="margin-bottom:20px">
-            <g transform="translate(0,256) scale(0.1,-0.1)"><path d="${LOGO_PATH}" fill="${TOKENS.purple}"/></g>
+            <g transform="translate(0,256) scale(0.1,-0.1)">
+                <path d="${LOGO_PATH}" fill="${TOKENS.purple}"/>
+            </g>
         </svg>
         ${bodyContent}
     </div>
