@@ -143,10 +143,13 @@ export default function KeybindSettings() {
         setRecording(null);
       }
     };
-    window.netrex.onRawKeydown(handleRawKeydown);
+    
+    // ✅ Modern pattern: onRawKeydown returns cleanup function
+    const cleanup = window.netrex.onRawKeydown(handleRawKeydown);
+    
     return () => {
       window.netrex.setRecordingMode(false);
-      window.netrex.removeListener("raw-keydown");
+      if (cleanup) cleanup(); // ✅ Use cleanup function
       
       // 2. Eğer odada DEĞİLSEK dinleyiciyi durdur (CPU tasarrufu)
       // Odadaysak ActiveRoom.js zaten yönetiyor, dokunma.

@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * 🚀 UpdateNotification - NGS v2.0
- * Integrated and Premium Update UI.
+ * 🚀 UpdateNotification - v2.1 - OPTIMIZED
+ * Better user feedback for all update states
  */
 
 import { useState, useEffect } from "react";
@@ -14,7 +14,6 @@ import {
   AlertCircle,
   Sparkles,
   Download,
-  Zap,
   Minimize2
 } from "lucide-react";
 import { useUpdateStore } from "@/src/store/updateStore";
@@ -41,16 +40,24 @@ export default function UpdateNotification() {
     setIsExpanded(!isExpanded);
   };
 
-  // Bildirim bittiğinde toast göster (Eğer kapalıysa bile haberi olsun)
+  // ✅ FIX: Show toast and auto-expand for both available and downloaded
   useEffect(() => {
-    if (status === "downloaded") {
+    if (status === "available") {
+      toast.info("Yeni güncelleme bulundu! İndirme başlatılıyor...", {
+        title: `Netrex v${updateInfo?.version || '...'}`,
+        duration: 6000
+      });
+      setIsExpanded(true);
+      setShow(true);
+    } else if (status === "downloaded") {
       toast.success("Yenilikleri kullanmak için uygulamayı yeniden başlatın.", {
         title: "Netrex Güncellemesi Hazır!",
         duration: 8000
       });
-      setIsExpanded(true); // Otomatik aç
+      setIsExpanded(true);
+      setShow(true);
     }
-  }, [status]);
+  }, [status, updateInfo]);
 
   // Sadece ilgili durumlarda göster
   if (
@@ -89,7 +96,7 @@ export default function UpdateNotification() {
 
             <div className="flex flex-col">
                 <span className="text-white text-xs font-bold leading-none mb-0.5">
-                    {status === 'downloaded' ? 'Hazır' : 'Güncelleniyor'}
+                    {status === 'downloaded' ? 'Hazır' : status === 'available' ? 'Bulundu' : 'Güncelleniyor'}
                 </span>
                 <span className="text-[10px] text-white/50 leading-none font-medium">
                     {status === 'downloading' ? `%${progress}` : 'Tıkla'}
@@ -122,7 +129,7 @@ export default function UpdateNotification() {
               </div>
               <div className="cursor-pointer" onClick={toggleExpand}>
                 <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                  {status === "downloaded" ? "Güncelleme Hazır" : "Güncelleniyor"}
+                  {status === "downloaded" ? "Güncelleme Hazır" : status === "available" ? "Güncelleme Bulundu" : "Güncelleniyor"}
                   <Minimize2 size={12} className="text-white/30" />
                 </h4>
                 <p className="text-[10px] text-[#949ba4] font-medium uppercase tracking-wider mt-0.5">

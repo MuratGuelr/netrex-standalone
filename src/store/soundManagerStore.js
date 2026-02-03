@@ -1,16 +1,23 @@
 import { create } from 'zustand';
 
 /**
- * 🚀 SoundManagerStore - Ses efektlerini RAM'e (AudioBuffer) yükleyip saklar.
- * Disk gecikmesini saniyelerden milisaniyelere indirir.
+ * ✅ OPTIMIZED SoundManagerStore v2.0
+ * - AudioContext leak fix
+ * - Source node cleanup
+ * - Retry logic
+ * - Volume clamping
  */
 export const useSoundManagerStore = create((set, get) => ({
   audioContext: null,
   cachedBuffers: {},
   isLoaded: false,
+  _isInitializing: false,
 
   init: async () => {
-    if (get().isLoaded) return;
+    const state = get();
+    if (state.isLoaded || state.audioContext || state._isInitializing) return;
+    
+    set({ _isInitializing: true });
     
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -21,10 +28,22 @@ export const useSoundManagerStore = create((set, get) => ({
       const isFileProtocol = window.location.protocol === 'file:';
       const baseUrl = isFileProtocol ? '.' : '';
 
+      const fetchWithRetry = async (url, retries = 2) => {
+        for (let i = 0; i <= retries; i++) {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.arrayBuffer();
+          } catch (err) {
+            if (i === retries) throw err;
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      };
+
       const loadPromises = sounds.map(async (name) => {
         try {
-          const response = await fetch(`${baseUrl}/sounds/${name}.mp3`);
-          const arrayBuffer = await response.arrayBuffer();
+          const arrayBuffer = await fetchWithRetry(`${baseUrl}/sounds/${name}.mp3`);
           const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
           cache[name] = audioBuffer;
         } catch (err) {
@@ -33,20 +52,39 @@ export const useSoundManagerStore = create((set, get) => ({
       });
 
       await Promise.all(loadPromises);
-      set({ audioContext: ctx, cachedBuffers: cache, isLoaded: true });
-      console.log("✅ Tüm sistem sesleri RAM'e yüklendi (Low Latency Mode)");
+      
+      const loadedCount = Object.keys(cache).length;
+      if (loadedCount > 0) {
+        set({ audioContext: ctx, cachedBuffers: cache, isLoaded: true, _isInitializing: false });
+        console.log(`✅ ${loadedCount}/${sounds.length} sistem sesi RAM'e yüklendi`);
+      } else {
+        throw new Error('No sounds loaded');
+      }
     } catch (e) {
       console.error("❌ SoundManager başlatılamadı:", e);
+      set({ _isInitializing: false });
     }
   },
 
   play: (name, volume = 0.5) => {
+    const safeVolume = Math.max(0, Math.min(1, volume));
     const { audioContext, cachedBuffers } = get();
+    
     if (!audioContext || !cachedBuffers[name]) {
-      // Fallback: Cache yoksa klasik yöntemle dene (çok düşük ihtimal)
       const audio = new Audio(`./sounds/${name}.mp3`);
-      audio.volume = volume;
-      audio.play().catch(() => {});
+      audio.volume = safeVolume;
+      audio.onended = () => {
+        audio.src = '';
+        audio.remove?.();
+      };
+      audio.onerror = () => {
+        audio.src = '';
+        audio.remove?.();
+      };
+      audio.play().catch(() => {
+        audio.src = '';
+        audio.remove?.();
+      });
       return;
     }
 
@@ -58,11 +96,24 @@ export const useSoundManagerStore = create((set, get) => ({
     source.buffer = cachedBuffers[name];
     
     const gainNode = audioContext.createGain();
-    gainNode.gain.value = volume;
+    gainNode.gain.value = safeVolume;
     
     source.connect(gainNode);
     gainNode.connect(audioContext.destination);
     
+    source.onended = () => {
+      source.disconnect();
+      gainNode.disconnect();
+    };
+    
     source.start(0);
+  },
+  
+  cleanup: () => {
+    const { audioContext } = get();
+    if (audioContext) {
+      audioContext.close();
+      set({ audioContext: null, cachedBuffers: {}, isLoaded: false });
+    }
   }
 }));

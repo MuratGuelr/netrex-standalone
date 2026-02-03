@@ -1,111 +1,149 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("netrex", {
-  // Auth
-  startOAuth: () => ipcRenderer.invoke("start-oauth"),
-  onOAuthSuccess: (callback) => {
-    ipcRenderer.removeAllListeners("oauth-success");
-    ipcRenderer.on("oauth-success", (_, token) => callback(token));
-  },
+// ============================================
+// 🚀 OPTIMIZED PRELOAD v2.0
+// ============================================
+// 
+// Optimizasyonlar:
+// 1. ✅ once() kullanımı (one-time events)
+// 2. ✅ Event handlers cleanup function döndürüyor
+// 3. ✅ removeAllListeners() kaldırıldı
+// 4. ✅ getDisplayMedia kaldırıldı (renderer'da olmalı)
+//
+// ============================================
 
-  // Settings & Hotkeys
+// ============================================
+// ✅ SAFE EVENT HANDLER HELPERS
+// ============================================
+
+/**
+ * Creates a persistent event handler with cleanup
+ * @param {string} channel - IPC channel name
+ * @param {function} transform - Optional transform function for event args
+ * @returns {function} - Handler registration function that returns cleanup
+ */
+const createEventHandler = (channel, transform = (_, ...args) => args) => {
+    return (callback) => {
+        const handler = (event, ...args) => callback(...transform(event, ...args));
+        ipcRenderer.on(channel, handler);
+        
+        // ✅ Return cleanup function
+        return () => ipcRenderer.removeListener(channel, handler);
+    };
+};
+
+/**
+ * Creates a one-time event handler (auto cleanup)
+ * @param {string} channel - IPC channel name
+ * @param {function} transform - Optional transform function for event args
+ * @returns {function} - Handler registration function
+ */
+const createOnceHandler = (channel, transform = (_, ...args) => args) => {
+    return (callback) => {
+        ipcRenderer.once(channel, (event, ...args) => callback(...transform(event, ...args)));
+    };
+};
+
+// ============================================
+// CONTEXT BRIDGE API
+// ============================================
+contextBridge.exposeInMainWorld("netrex", {
+  // ============================================
+  // AUTH
+  // ============================================
+  startOAuth: () => ipcRenderer.invoke("start-oauth"),
+  onOAuthSuccess: createOnceHandler("oauth-success", (_, token) => [token]), // ✅ once()
+
+  // ============================================
+  // SETTINGS & HOTKEYS
+  // ============================================
   updateHotkey: (action, keybinding) =>
     ipcRenderer.invoke("update-hotkey", action, keybinding),
   getHotkey: (action) => ipcRenderer.invoke("get-hotkey", action),
-  onHotkeyTriggered: (callback) =>
-    ipcRenderer.on("hotkey-triggered", (_, action) => callback(action)),
+  onHotkeyTriggered: createEventHandler("hotkey-triggered", (_, action) => [action]),
   setRecordingMode: (enabled) =>
     ipcRenderer.invoke("set-recording-mode", enabled),
-  onRawKeydown: (callback) =>
-    ipcRenderer.on("raw-keydown", (_, event) => callback(event)),
+  onRawKeydown: createEventHandler("raw-keydown", (_, event) => [event]),
 
-  // LiveKit - Quota Efficient Token Generation (v5.2 - Server Pool Support)
-  // identity: Persistent unique ID (userId_deviceShort) - prevents ghost participants
-  // displayName: User-friendly name shown in UI
-  // serverIndex: (Optional) Which server's credentials to use (for server pool)
+  // ============================================
+  // LIVEKIT
+  // ============================================
   getLiveKitToken: (room, identity, displayName, serverIndex = 0) =>
     ipcRenderer.invoke("get-livekit-token", room, identity, displayName, serverIndex),
   
-  // 🚀 v5.2: LiveKit server pool support
   getLiveKitServerInfo: (serverIndex = 0) =>
     ipcRenderer.invoke("get-livekit-server-info", serverIndex),
 
-  // Utils
+  // ============================================
+  // UTILS
+  // ============================================
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),
 
-  // Auto Update
-  onUpdateStatus: (callback) =>
-    ipcRenderer.on("update-status", (_, status, details) =>
-      callback(status, details)
-    ),
-  onUpdateProgress: (callback) =>
-    ipcRenderer.on("update-progress", (_, percent) => callback(percent)),
-  onUpdateRestarting: (callback) =>
-    ipcRenderer.on("update-restarting", () => callback()),
-  onUpdateRestartFailed: (callback) =>
-    ipcRenderer.on("update-restart-failed", (_, error) => callback(error)),
+  // ============================================
+  // AUTO UPDATE
+  // ============================================
+  onUpdateStatus: createEventHandler("update-status", (_, status, details) => [status, details]),
+  onUpdateProgress: createEventHandler("update-progress", (_, percent) => [percent]),
+  onUpdateRestarting: createOnceHandler("update-restarting"), // ✅ once()
+  onUpdateRestartFailed: createEventHandler("update-restart-failed", (_, error) => [error]),
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 
-  // Screen Share
+  // ============================================
+  // SCREEN SHARE
+  // ============================================
   getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
 
-  // Screen Share with audio exclusion
-  getDisplayMedia: async (options) => {
-    // Electron'da getDisplayMedia'yı override et
-    // Netrex seslerini exclude etmek için
-    const stream = await navigator.mediaDevices.getDisplayMedia(options);
-    
-    // Eğer audio track varsa ve sistem sesi paylaşılıyorsa
-    // Netrex/LiveKit seslerini filtrele
-    if (stream.getAudioTracks().length > 0 && options?.audio?.excludeNetrex) {
-      // Audio track'i filtrele (şimdilik direkt kullanıyoruz)
-      // İleride Web Audio API ile filtreleme eklenebilir
-    }
-    
-    return stream;
-  },
+  // ✅ getDisplayMedia kaldırıldı - preload'da çalışmaz, renderer'da olmalı
 
-  // --- YENİ: APP AYARLARI ---
+  // ============================================
+  // SETTINGS
+  // ============================================
   setSetting: (key, value) => ipcRenderer.invoke("set-setting", key, value),
   getSetting: (key) => ipcRenderer.invoke("get-setting", key),
 
-  // Cleanup
-  removeListener: (channel) => ipcRenderer.removeAllListeners(channel),
-
-  // Electron path helpers for WASM files
+  // ============================================
+  // PATHS
+  // ============================================
   getAppPath: () => ipcRenderer.invoke("get-app-path"),
   getResourcesPath: () => ipcRenderer.invoke("get-resources-path"),
 
-  // DevTools (Admin only)
+  // ============================================
+  // DEVTOOLS / ADMIN
+  // ============================================
   openDevTools: (userUid) => ipcRenderer.invoke("open-devtools", userUid),
   isAdmin: (userUid) => ipcRenderer.invoke("is-admin", userUid),
   setCurrentUserUid: (userUid) => ipcRenderer.invoke("set-current-user-uid", userUid),
 
-  // Pencereyi ön plana al (bildirim tıklaması için)
+  // ============================================
+  // WINDOW
+  // ============================================
   focusWindow: () => ipcRenderer.invoke("focus-window"),
 
-  // Splash screen
+  // ============================================
+  // SPLASH
+  // ============================================
   notifySplashComplete: () => ipcRenderer.invoke("splash-complete"),
 
-  // App lifecycle
-  onAppWillQuit: (callback) =>
-    ipcRenderer.on("app-will-quit", () => callback()),
-  
-  // Cleanup tamamlandı mesajı gönder
+  // ============================================
+  // APP LIFECYCLE
+  // ============================================
+  onAppWillQuit: createOnceHandler("app-will-quit"), // ✅ once()
   notifyCleanupComplete: () => ipcRenderer.send("cleanup-complete"),
 
-  // Window state changes (minimize, hide, show, focus)
-  onWindowStateChanged: (callback) =>
-    ipcRenderer.on("window-state-changed", (_, state) => callback(state)),
+  // ============================================
+  // WINDOW STATE
+  // ============================================
+  onWindowStateChanged: createEventHandler("window-state-changed", (_, state) => [state]),
 
-
-
-  // --- GLOBAL INPUT LISTENER (CPU OPTIMIZATION) ---
+  // ============================================
+  // INPUT LISTENER
+  // ============================================
   startInputListener: () => ipcRenderer.invoke("start-input-listener"),
   stopInputListener: () => ipcRenderer.invoke("stop-input-listener"),
 
-  // Exit Handling
-  onRequestExit: (callback) => 
-    ipcRenderer.on("request-exit", (_, event) => callback(event)),
+  // ============================================
+  // EXIT
+  // ============================================
+  onRequestExit: createEventHandler("request-exit", (_, event) => [event]),
   forceQuitApp: () => ipcRenderer.invoke("app-quit-force"),
 });

@@ -1,8 +1,20 @@
 "use client";
 
+/**
+ * ✅ OPTIMIZED ServerMemberList v2.0
+ * 
+ * Optimizasyonlar:
+ * - useMemo ile enrichment, grouping, flattening cache
+ * - useCallback ile stable handlers
+ * - Firestore listener batch size limit (30)
+ * - Virtualization için Virtuoso
+ * - memo() ile MemberItem cache
+ * - Shallow comparison ile gereksiz render engelleme
+ */
+
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, memo, useRef } from "react";
 import { X, Users, Crown, Shield } from "lucide-react";
 import MemberContextMenu from "@/src/components/server/MemberContextMenu";
 import UserProfileModal from "@/src/components/server/UserProfileModal";
@@ -12,6 +24,37 @@ import { db } from "@/src/lib/firebase";
 import { collection, query, where, onSnapshot, documentId } from "firebase/firestore";
 import { Virtuoso } from "react-virtuoso";
 
+// ✅ Memoized Role Icon (pure function)
+const RoleIcon = memo(({ roleId, roleName }) => {
+  const lowerName = roleName?.toLowerCase() || '';
+  if (lowerName.includes('owner') || lowerName.includes('sahip') || lowerName.includes('kurucu') || roleId === 'owner') {
+    return <Crown size={12} className="text-amber-400 fill-amber-400/20" />;
+  }
+  if (lowerName.includes('admin') || lowerName.includes('yönetici') || lowerName.includes('moderator')) {
+    return <Shield size={12} className="text-indigo-400 fill-indigo-400/20" />;
+  }
+  return null;
+});
+RoleIcon.displayName = 'RoleIcon';
+
+// ✅ Memoized Header Row
+const HeaderRow = memo(({ item }) => (
+  <div className="flex items-center px-4 pt-3 pb-1">
+    <div className="flex items-center gap-2 flex-1 group/header cursor-default">
+      <div className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wide flex items-center gap-2 flex-1">
+        <RoleIcon roleId={item.roleId} roleName={item.roleName} />
+        <span 
+          className="transition-colors group-hover/header:text-[#dbdee1]"
+          style={{ color: !item.isOffline && item.roleId !== 'uncategorized' ? item.roleColor : undefined }}
+        >
+          {item.roleName}
+        </span>
+      </div>
+    </div>
+  </div>
+));
+HeaderRow.displayName = 'HeaderRow';
+
 export default function ServerMemberList({ onClose }) {
   const { members, roles, currentServer } = useServerStore();
   const { user: currentUser } = useAuthStore();
@@ -19,15 +62,14 @@ export default function ServerMemberList({ onClose }) {
   const [profileModal, setProfileModal] = useState(null);
   const [userProfiles, setUserProfiles] = useState({});
 
-  // 🎮 Listen to users collection for gameActivity and customStatus (real-time)
+  // ✅ Firebase listener (max 30 items, batching için limit)
   useEffect(() => {
     if (!members || members.length === 0) return;
 
-    // Get member IDs (max 30 for Firestore 'in' query)
     const memberIds = members
       .map(m => m.id || m.userId)
       .filter(Boolean)
-      .slice(0, 30);
+      .slice(0, 30); // Firestore 'in' query limit
 
     if (memberIds.length === 0) return;
 
@@ -56,21 +98,49 @@ export default function ServerMemberList({ onClose }) {
     return () => unsubscribe();
   }, [members]);
 
-  // Handle click to open profile modal
+  // ✅ Debounce refs for modal opening
+  const profileModalTimeoutRef = useRef(null);
+  const contextMenuTimeoutRef = useRef(null);
+
+  // ✅ Debounced modal handlers (prevents rapid mount/unmount)
   const handleMemberClick = useCallback((e, member) => {
     e.stopPropagation();
-    setProfileModal({ 
-      member, 
-      position: { x: e.clientX, y: e.clientY } 
-    });
+    
+    // Clear existing timeout
+    if (profileModalTimeoutRef.current) {
+      clearTimeout(profileModalTimeoutRef.current);
+    }
+    
+    // Debounce 100ms - rapid clicks only open last one
+    profileModalTimeoutRef.current = setTimeout(() => {
+      setProfileModal({ 
+        member, 
+        position: { x: e.clientX, y: e.clientY } 
+      });
+    }, 100);
   }, []);
 
-  // Context menu handler
   const handleMemberContextMenu = useCallback((e, member) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, member });
+    
+    if (contextMenuTimeoutRef.current) {
+      clearTimeout(contextMenuTimeoutRef.current);
+    }
+    
+    contextMenuTimeoutRef.current = setTimeout(() => {
+      setContextMenu({ x: e.clientX, y: e.clientY, member });
+    }, 50); // Context menu faster (50ms)
   }, []);
 
+  // Cleanup timeouts
+  useEffect(() => {
+    return () => {
+      if (profileModalTimeoutRef.current) clearTimeout(profileModalTimeoutRef.current);
+      if (contextMenuTimeoutRef.current) clearTimeout(contextMenuTimeoutRef.current);
+    };
+  }, []);
+
+  // ✅ Cached enrichment
   const enrichedMembers = useMemo(() => {
     return members.map(member => {
       const memberId = member.id || member.userId;
@@ -91,6 +161,7 @@ export default function ServerMemberList({ onClose }) {
     });
   }, [members, currentUser, userProfiles]);
 
+  // ✅ Cached grouping
   const groupedMembers = useMemo(() => {
     if (!enrichedMembers || !roles || !currentServer) return {};
     const sortedRoles = [...roles].sort((a, b) => (b.order || 0) - (a.order || 0));
@@ -121,11 +192,10 @@ export default function ServerMemberList({ onClose }) {
     return groups;
   }, [enrichedMembers, roles, currentServer]);
 
-  // Flatten the Groups for Virtualization
+  // ✅ Cached flattening
   const flatData = useMemo(() => {
     if (!roles) return [];
     
-    // Order: Owner -> Roles -> Uncategorized -> Offline
     const ids = [];
     if (groupedMembers && groupedMembers['owner']) ids.push('owner');
     const roleIds = [...roles].sort((a, b) => (b.order || 0) - (a.order || 0)).map(r => r.id);
@@ -138,7 +208,6 @@ export default function ServerMemberList({ onClose }) {
     const items = [];
     validGroupKeys.forEach(key => {
         const group = groupedMembers[key];
-        // Header Item
         items.push({
             type: 'header',
             roleId: key,
@@ -148,7 +217,6 @@ export default function ServerMemberList({ onClose }) {
             isOffline: key === 'offline'
         });
         
-        // Member Items
         group.members.forEach(member => {
             items.push({
                 type: 'member',
@@ -163,55 +231,29 @@ export default function ServerMemberList({ onClose }) {
     return items;
   }, [groupedMembers, roles]);
 
-  const getRoleIcon = (roleId, roleName) => {
-    const lowerName = roleName?.toLowerCase() || '';
-    if (lowerName.includes('owner') || lowerName.includes('sahip') || lowerName.includes('kurucu') || roleId === 'owner') {
-      return <Crown size={12} className="text-amber-400 fill-amber-400/20" />;
-    }
-    if (lowerName.includes('admin') || lowerName.includes('yönetici') || lowerName.includes('moderator')) {
-      return <Shield size={12} className="text-indigo-400 fill-indigo-400/20" />;
-    }
-    return null;
-  };
-
-  if (!currentServer) return null;
-
-  // Row Renderer
-  const rowContent = (index, item) => {
+  // ✅ Stable row renderer
+  const rowContent = useCallback((index, item) => {
     if (item.type === 'header') {
-        const roleIcon = getRoleIcon(item.roleId, item.roleName);
-        return (
-            <div className="flex items-center px-4 pt-3 pb-1">
-                <div className="flex items-center gap-2 flex-1 group/header cursor-default">
-                    <div className="text-[11px] font-bold text-[#949ba4] uppercase tracking-wide flex items-center gap-2 flex-1">
-                        {roleIcon}
-                        <span 
-                            className="transition-colors group-hover/header:text-[#dbdee1]"
-                            style={{ color: !item.isOffline && item.roleId !== 'uncategorized' ? item.roleColor : undefined }}
-                        >
-                            {item.roleName}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        );
+      return <HeaderRow item={item} />;
     }
 
     return (
-        <div className="px-2 py-[2px]">
-           <div className={item.isOfflineGroup ? 'opacity-60 hover:opacity-100 transition-opacity duration-300' : ''}>
-                <MemberItem
-                    member={item.member}
-                    roleId={item.roleId}
-                    roleColor={item.roleColor}
-                    isOfflineGroup={item.isOfflineGroup}
-                    onClick={handleMemberClick}
-                    onContextMenu={handleMemberContextMenu}
-                />
-            </div>
+      <div className="px-2 py-[2px]">
+        <div className={item.isOfflineGroup ? 'opacity-60 hover:opacity-100 transition-opacity duration-300' : ''}>
+          <MemberItem
+            member={item.member}
+            roleId={item.roleId}
+            roleColor={item.roleColor}
+            isOfflineGroup={item.isOfflineGroup}
+            onClick={handleMemberClick}
+            onContextMenu={handleMemberContextMenu}
+          />
         </div>
+      </div>
     );
-  };
+  }, [handleMemberClick, handleMemberContextMenu]);
+
+  if (!currentServer) return null;
 
   return (
     <div className="w-full h-full bg-[#111214] flex flex-col relative overflow-hidden border-l border-white/[0.06]">

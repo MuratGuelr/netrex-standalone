@@ -5,6 +5,7 @@ import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
+import { useAudioLevelStore } from "@/src/store/audioLevelStore";
 import { doc, updateDoc, arrayRemove } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 
@@ -27,6 +28,15 @@ export default function RoomEventsHandler({
     setInVoiceRoom,
   } = useSettingsStore();
   const { user } = useAuthStore();
+  const { startTracking, stopTracking } = useAudioLevelStore();
+
+  // ✅ Merkezi audio level tracking
+  useEffect(() => {
+    if (room?.state === ConnectionState.Connected) {
+      startTracking(room);
+    }
+    return () => stopTracking();
+  }, [room, room?.state, startTracking, stopTracking]);
 
   // Bildirim izni kontrolü ve isteği
   useEffect(() => {

@@ -1,12 +1,6 @@
 "use client";
 
-/**
- * 🚀 SplashScreen - Premium Animated Splash Screen
- * Restored after git conflict. 
- * Features: Aurora background, floating particles, interactive mouse glow, sequential loading text.
- */
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CONFIG = {
@@ -62,6 +56,16 @@ const dotVariants = {
   },
 };
 
+// ✅ OPTIMIZATION: Pre-generate particle positions (no hydration mismatch)
+const PARTICLE_POSITIONS = Array.from({ length: 20 }, (_, i) => ({
+  id: i,
+  left: (i * 5.26) % 100, // Deterministic positions
+  top: ((i * 7.89) % 100),
+  opacity: ((i * 13) % 30) / 100,
+  duration: 3 + ((i * 7) % 5),
+  delay: ((i * 11) % 50) / 10,
+}));
+
 export default function SplashScreen({ 
   onComplete,
   showLoadingText = true,
@@ -70,8 +74,16 @@ export default function SplashScreen({
   const [isVisible, setIsVisible] = useState(true);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [loadingStep, setLoadingStep] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  // ✅ Client-side only
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     const handleMouseMove = (e) => {
         setMousePos({
             x: (e.clientX / window.innerWidth - 0.5) * 20,
@@ -80,7 +92,7 @@ export default function SplashScreen({
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
     const textInterval = setInterval(() => {
@@ -129,21 +141,23 @@ export default function SplashScreen({
                className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/10 blur-[120px]"
             />
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] contrast-150 brightness-150" />
-            <motion.div 
-               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-indigo-500/5 blur-[100px]"
-               animate={{ x: mousePos.x, y: mousePos.y }}
-            />
+            {mounted && (
+              <motion.div 
+                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-indigo-500/5 blur-[100px]"
+                 animate={{ x: mousePos.x, y: mousePos.y }}
+              />
+            )}
           </div>
 
-          {/* Particles */}
+          {/* Particles - ✅ Deterministic positions */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(20)].map((_, i) => (
+            {PARTICLE_POSITIONS.map((particle) => (
               <motion.div
-                key={i}
+                key={particle.id}
                 className="absolute w-1 h-1 bg-white rounded-full"
-                style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`, opacity: Math.random() * 0.3 }}
+                style={{ left: `${particle.left}%`, top: `${particle.top}%`, opacity: particle.opacity }}
                 animate={{ y: [0, -100], opacity: [0, 0.3, 0], scale: [0, 1.5, 0] }}
-                transition={{ duration: 3 + Math.random() * 5, repeat: Infinity, delay: Math.random() * 5, ease: "easeInOut" }}
+                transition={{ duration: particle.duration, repeat: Infinity, delay: particle.delay, ease: "easeInOut" }}
               />
             ))}
           </div>

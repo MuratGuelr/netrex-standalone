@@ -1,42 +1,62 @@
 import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
 
 /**
- * 🍬 ToastStore - Global Toast Notification System (NDS v5.5)
- * Premium notification management without external libraries.
+ * ✅ OPTIMIZED ToastStore v2.0
+ * - Max toast limit
+ * - Immer for O(1) updates
+ * - Better ID generation
  */
-export const useToastStore = create((set) => ({
-  toasts: [],
-  
-  // Add a new toast and return its ID
-  addToast: (toast) => {
-    const id = toast.id || Math.random().toString(36).substring(2, 9);
-    set((state) => ({
-      toasts: [...state.toasts, {
-        id,
-        type: 'info',
-        duration: 5000,
-        ...toast,
-        createdAt: Date.now(),
-      }]
-    }));
-    return id;
-  },
+export const useToastStore = create(
+  immer((set) => ({
+    toasts: [],
+    _maxToasts: 2, // Max 2 toast visible at once
+    
+    addToast: (toast) => {
+      const id = toast.id || `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      set((state) => {
+        const newToast = {
+          id,
+          type: 'info',
+          duration: 5000,
+          ...toast,
+          createdAt: Date.now(),
+        };
+        
+        state.toasts.push(newToast);
+        
+        if (state.toasts.length > state._maxToasts) {
+          state.toasts.shift();
+        }
+      });
+      
+      return id;
+    },
 
-  // Update an existing toast
-  updateToast: (id, updates) => set((state) => ({
-    toasts: state.toasts.map(t => t.id === id ? { ...t, ...updates } : t)
-  })),
+    updateToast: (id, updates) => set((state) => {
+      const toast = state.toasts.find(t => t.id === id);
+      if (toast) {
+        Object.assign(toast, updates);
+      }
+    }),
 
-  // Remove a specific toast
-  removeToast: (id) => set((state) => ({
-    toasts: state.toasts.filter(t => t.id !== id)
-  })),
+    removeToast: (id) => set((state) => {
+      const index = state.toasts.findIndex(t => t.id === id);
+      if (index !== -1) {
+        state.toasts.splice(index, 1);
+      }
+    }),
 
-  // Alias for removeToast to match sonner/react-hot-toast API
-  dismiss: (id) => set((state) => ({
-    toasts: state.toasts.filter(t => t.id !== id)
-  })),
+    dismiss: (id) => set((state) => {
+      const index = state.toasts.findIndex(t => t.id === id);
+      if (index !== -1) {
+        state.toasts.splice(index, 1);
+      }
+    }),
 
-  // Clear all toasts
-  clearToasts: () => set({ toasts: [] })
-}));
+    clearToasts: () => set((state) => {
+      state.toasts = [];
+    })
+  }))
+);

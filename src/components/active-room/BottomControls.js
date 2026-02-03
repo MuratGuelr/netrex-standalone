@@ -869,9 +869,15 @@ export default function BottomControls({
       if (action === "toggle-deafen") toggleDeaf();
       if (action === "toggle-camera") toggleCamera();
     };
-    if (window.netrex) window.netrex.onHotkeyTriggered(handleHotkey);
+    
+    // ✅ Modern pattern: onHotkeyTriggered returns cleanup function
+    let cleanup;
+    if (window.netrex) {
+      cleanup = window.netrex.onHotkeyTriggered(handleHotkey);
+    }
+    
     return () => {
-      if (window.netrex) window.netrex.removeListener("hotkey-triggered");
+      if (cleanup) cleanup();
     };
   }, [toggleMute, toggleDeaf, toggleCamera]);
 
@@ -938,16 +944,16 @@ export default function BottomControls({
               activeIcon={<Mic size={20} className="sm:w-5 sm:h-5" />}
               inactiveIcon={<MicOff size={20} className="sm:w-5 sm:h-5" />}
               onClick={toggleMute}
-              tooltip={isMuted ? "Susturmayı Kaldır" : "Sustur"}
+              tooltip={serverMuted ? `Sunucu tarafından susturuldu (${mutedBy || "Yetkili"})` : isMuted ? "Susturmayı Kaldır" : "Sustur"}
               danger={isMuted}
-              disabled={isDeafened}
+              disabled={isDeafened || serverMuted}
             />
             <ControlButton
               isActive={!isDeafened}
               activeIcon={<Headphones size={20} className="sm:w-5 sm:h-5" />}
               inactiveIcon={<VolumeX size={20} className="sm:w-5 sm:h-5" />}
               onClick={toggleDeaf}
-              tooltip={isDeafened ? "Sağırlaştırmayı Kaldır" : "Sağırlaştır"}
+              tooltip={serverDeafened ? `Sunucu tarafından sağırlaştırıldı (${deafenedBy || "Yetkili"})` : isDeafened ? "Sağırlaştırmayı Kaldır" : "Sağırlaştır"}
               danger={isDeafened}
             />
           </div>

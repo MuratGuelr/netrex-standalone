@@ -62,29 +62,77 @@ export default function Home() {
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
 
-  // --- EXIT LOGIC (NATIVE) ---
+  // --- GRACEFUL EXIT LOGIC (NATIVE) ---
   useEffect(() => {
-    if (window.netrex && window.netrex.onRequestExit) {
-      window.netrex.onRequestExit(async () => {
-        // Hızlıca kullanıcıyı offline yap
-        if (user?.uid) {
-          try {
+    // ============================================
+    // 🚀 APP-WILL-QUIT HANDLER (Full Cleanup)
+    // ============================================
+    if (window.netrex && window.netrex.onAppWillQuit) {
+      window.netrex.onAppWillQuit(async () => {
+        console.log("🧹 Starting graceful shutdown...");
+        
+        try {
+          // 1. Firebase Cleanup: User offline
+          if (user?.uid) {
+            console.log("🔄 Setting user offline...");
             await updateDoc(doc(db, 'users', user.uid), {
               presence: 'offline',
               lastSeen: serverTimestamp(),
-              gameActivity: null
+              gameActivity: null,
+              currentRoom: null // ✅ Clear current room
             });
-          } catch (e) {
-            console.error("Exit cleanup failed:", e);
+            console.log("✅ User set offline");
           }
+
+          // 2. Server Cleanup: Leave all voice channels (bağlantı kesilmesi için)
+          if (currentRoom) {
+            console.log("🔊 Disconnecting from voice channel...");
+            // ActiveRoom component unmount olacağı için LiveKit disconnect otomatik olacak
+            // Ama yine de temizlik için:
+            setCurrentRoom(null);
+          }
+
+          // 3. Text chat cleanup
+          if (currentTextChannel) {
+            console.log("💬 Clearing text channel...");
+            setCurrentTextChannel(null);
+            useChatStore.getState().clearCurrentChannel();
+          }
+
+          // 4. Server state cleanup
+          if (currentServer) {
+            console.log("🏢 Clearing server state...");
+            useServerStore.getState().clearCurrentServer();
+          }
+
+          console.log("✅ Graceful shutdown completed");
+        } catch (e) {
+          console.error("❌ Cleanup error:", e);
         }
-        // Native kapanış ekranını (utils.js'deki getExitSplashHtml) tetikle
+
+        // ✅ Notify main process that cleanup is done
+        if (window.netrex?.notifyCleanupComplete) {
+          window.netrex.notifyCleanupComplete();
+        }
+      });
+    }
+
+    // ============================================
+    // REQUEST-EXIT HANDLER (Lightweight - UI only)
+    // ============================================
+    if (window.netrex && window.netrex.onRequestExit) {
+      window.netrex.onRequestExit(async () => {
+        // Bu sadece UI görünürlük kontrolü için
+        // Asıl cleanup app-will-quit'te yapılıyor
         if (window.netrex && window.netrex.forceQuitApp) {
           window.netrex.forceQuitApp();
         }
       });
     }
 
+    // ============================================
+    // UPDATE RESTART HANDLERS
+    // ============================================
     if (window.netrex && window.netrex.onUpdateRestarting) {
         window.netrex.onUpdateRestarting(() => {
             setShowInstallUpdateSplash(true);
@@ -96,7 +144,7 @@ export default function Home() {
             if (error) toast.info(error);
         });
     }
-  }, [user?.uid]);
+  }, [user?.uid, currentRoom, currentTextChannel, currentServer]);
 
   const { showSettingsModal, setSettingsOpen } = useSettingsStore();
 
@@ -171,7 +219,8 @@ export default function Home() {
     <AppShell
       serverRail={
         <ServerRail 
-          onOpenCreateModal={() => setShowAddServerSelectionModal(true)} 
+          onOpenCreateModal={() => setShowAddServerSelectionModal(true)}
+          isRoomActive={!!currentRoom}
         />
       }
       rightSidebar={
@@ -189,11 +238,13 @@ export default function Home() {
             activeTextChannelId={currentTextChannel}
             onJoinChannel={(channel) => {
                if (channel.type === 'voice') {
-                 if (currentRoom?.id !== channel.id) {
-                   setCurrentRoom(channel);
-                   setCurrentTextChannel(null);
-                   setViewMode("voice");
-                 }
+                 // Force refresh even if clicking same channel (re-join)
+                 // Timestamp ekleyerek her katılışta unique olmasını sağla
+                 const roomWithSession = { ...channel, _sessionStart: Date.now() };
+                 
+                 setCurrentRoom(roomWithSession);
+                 setCurrentTextChannel(null);
+                 setViewMode("voice");
                } else {
                  if (currentTextChannel === channel.id && showChatPanel) {
                    setShowChatPanel(false);

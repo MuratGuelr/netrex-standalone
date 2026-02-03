@@ -220,6 +220,15 @@ export default function ActiveRoom({
     serverIndexRef.current = serverIndex;
   }, [serverIndex]);
 
+  // RESET STATE ON MOUNT/UPDATE
+  // Odadan çıkıp tekrar girildiğinde veya key değiştiğinde state'in temiz olduğundan emin ol
+  useEffect(() => {
+    setConnectionError(null);
+    setHasConnectedOnce(false);
+    hasConnectedOnceRef.current = false;
+    // Token'ı burda sıfırlama, alttaki useEffect token alacak
+  }, [roomName]); // Oda ismi değiştiğinde (zaten key değişiyor ama yine de)
+
   // 🚀 v5.2: Firebase'den aktif sunucu indeksini dinle (tüm kullanıcılar senkronize olsun)
   useEffect(() => {
     if (!serverPoolMode) return;
@@ -671,6 +680,80 @@ export default function ActiveRoom({
     });
   };
 
+  // 🔴 ÖNCELİKLİ HATA KONTROLÜ
+  // Eğer connectionError varsa, Token olmasa bile hatayı göster!
+  if (connectionError && !hasConnectedOnce) {
+    return (
+      <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4 animate-nds-fade-in">
+        {/* Animated background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-red-500/10 rounded-full blur-[120px] animate-pulse" />
+        </div>
+        
+        {/* Error Card */}
+        <div className="relative z-10 w-full max-w-md">
+          {/* Card glow */}
+          <div className="absolute -inset-1 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-3xl blur-xl opacity-60" />
+          
+          {/* Card */}
+          <div className="relative bg-gradient-to-br from-[#1a1b1e]/95 to-[#111214]/95 backdrop-blur-xl rounded-2xl border border-red-500/20 p-6 sm:p-8 text-center">
+            {/* Icon */}
+            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center border border-red-500/20">
+              <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            
+            <h2 className="text-xl font-bold mb-2 text-white">Bağlantı Hatası</h2>
+            <p className="text-[#949ba4] mb-6 text-sm">{connectionError}</p>
+            
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button
+                onClick={() => {
+                  setConnectionError(null);
+                  setHasConnectedOnce(false);
+                  hasConnectedOnceRef.current = false;
+                  setToken(""); // Token'ı sıfırla ki yeniden fetch etsin
+                  
+                  if (window.netrex) {
+                    const identity = userId;
+                    // Token alma işlemini yeniden başlat
+                    window.netrex
+                      .getLiveKitToken(roomName, identity, username, serverIndex)
+                      .then((t) => {
+                        setToken(t);
+                        if (connectionTimeoutRef.current) {
+                          clearTimeout(connectionTimeoutRef.current);
+                        }
+                        connectionTimeoutRef.current = setTimeout(() => {
+                          if (!hasConnectedOnceRef.current) {
+                            setConnectionError("Odaya bağlanılamadı. Lütfen tekrar deneyin.");
+                          }
+                        }, 20000);
+                      })
+                      .catch((e) => {
+                        console.error("Token hatası:", e);
+                        setConnectionError("Token alınamadı. Lütfen tekrar deneyin.");
+                      });
+                  }
+                }}
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-medium text-white text-sm hover:shadow-[0_0_30px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              >
+                Tekrar Dene
+              </button>
+              <button
+                onClick={handleManualLeave}
+                className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-[#949ba4] text-sm hover:bg-white/10 hover:text-white transition-all duration-200"
+              >
+                Çık
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Token yoksa Skeleton Loading göster
   if (!token) {
     return (
@@ -748,7 +831,12 @@ export default function ActiveRoom({
         setShowChatPanel={setShowChatPanel}
       />
       <VoiceProcessorHandler />
-      <SettingsUpdater />
+      <SettingsUpdater 
+        isMuted={isMuted}
+        serverMuted={serverMuted}
+        isDeafened={isDeafened}
+        serverDeafened={serverDeafened}
+      />
       <RoomEventsHandler
         onConnected={handleConnected}
         onDisconnected={handleDisconnect}
@@ -797,73 +885,10 @@ export default function ActiveRoom({
         </div>
       )}
 
-      {/* İlk bağlantı hatası (sadece timeout veya token hatası varsa) */}
-      {connectionError && !hasConnectedOnce && (
-        <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4">
-          {/* Animated background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-red-500/10 rounded-full blur-[120px] animate-pulse" />
-          </div>
-          
-          {/* Error Card */}
-          <div className="relative z-10 w-full max-w-md">
-            {/* Card glow */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-3xl blur-xl opacity-60" />
-            
-            {/* Card */}
-            <div className="relative bg-gradient-to-br from-[#1a1b1e]/95 to-[#111214]/95 backdrop-blur-xl rounded-2xl border border-red-500/20 p-6 sm:p-8 text-center">
-              {/* Icon */}
-              <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center border border-red-500/20">
-                <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              
-              <h2 className="text-xl font-bold mb-2 text-white">Bağlantı Hatası</h2>
-              <p className="text-[#949ba4] mb-6 text-sm">{connectionError}</p>
-              
-              <div className="flex gap-3 justify-center flex-wrap">
-                <button
-                  onClick={() => {
-                    setConnectionError(null);
-                    setHasConnectedOnce(false);
-                    hasConnectedOnceRef.current = false;
-                    if (window.netrex) {
-                      const identity = userId;
-                      window.netrex
-                        .getLiveKitToken(roomName, identity, username)
-                        .then((t) => {
-                          setToken(t);
-                          if (connectionTimeoutRef.current) {
-                            clearTimeout(connectionTimeoutRef.current);
-                          }
-                          connectionTimeoutRef.current = setTimeout(() => {
-                            if (!hasConnectedOnceRef.current) {
-                              setConnectionError("Odaya bağlanılamadı. Lütfen tekrar deneyin.");
-                            }
-                          }, 20000);
-                        })
-                        .catch((e) => {
-                          console.error("Token hatası:", e);
-                          setConnectionError("Token alınamadı. Lütfen tekrar deneyin.");
-                        });
-                    }
-                  }}
-                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-medium text-white text-sm hover:shadow-[0_0_30px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-                >
-                  Tekrar Dene
-                </button>
-                <button
-                  onClick={handleManualLeave}
-                  className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-[#949ba4] text-sm hover:bg-white/10 hover:text-white transition-all duration-200"
-                >
-                  Çık
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* İlk bağlantı hatası (Artık yukarıda handle ediliyor, burası LiveKitRoom error'ları için) */}
+       {connectionError && !hasConnectedOnce && (
+         <div className="absolute inset-0 z-50 bg-transparent" />
+       )}
 
       {/* Bağlantı koptu (başarılı bağlantıdan sonra) */}
       {isReconnecting && hasConnectedOnce && (

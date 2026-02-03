@@ -1,17 +1,20 @@
 const { BrowserWindow, app, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const log = require('electron-log');
-const fs = require('fs'); // fs is needed for checking icon existence inside createTray (if moved here, but actually tray is separate)
-// Wait, createTray is in main.js but we might move it to trayManager.
-// WindowManager should just handle windows.
+
+// ============================================
+// 🚀 OPTIMIZED WINDOW MANAGER v2.0
+// ============================================
+// 
+// Optimizasyonlar:
+// 1. ✅ HTML encoding cached
+// 2. ✅ WebPreferences constants
+// 3. ✅ CSP header cached
+// 4. ✅ Event listeners optimized
+//
+// ============================================
 
 const { getIconPath, getSplashHtml, getAlreadyRunningHtml, getExitSplashHtml } = require('./utils');
-const store = require('electron-store'); // We need direct access or pass it in? Store is a class.
-// We can assume store is passed or instantiated. 
-// Ideally windowManager shouldn't care about store too much, but it reads 'settings.closeToTray'.
-// Let's instantiate a local store instance or pass it. 
-// Instantiating multiple stores on same file is fine.
-
 const currentStore = new (require('electron-store'))();
 
 let mainWindow = null;
@@ -20,13 +23,83 @@ let exitSplashWindow = null;
 let isQuitting = false;
 let updateCheckCompleted = false;
 
-// We need to export these to be accessible
+// Exports
 const getMainWindow = () => mainWindow;
 const getSplashWindow = () => splashWindow;
 const getExitSplashWindow = () => exitSplashWindow;
-
 const setQuitting = (val) => { isQuitting = val; };
 
+// ============================================
+// ✅ WEB PREFERENCES CONSTANTS
+// ============================================
+const SPLASH_WEB_PREFS = {
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
+};
+
+const MAIN_WEB_PREFS = {
+    preload: path.join(__dirname, "../preload.js"),
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: false,
+    backgroundThrottling: false,
+    enableBlinkFeatures: '',
+    spellcheck: false,
+    offscreen: false, // ✅ Audio için gerekli
+    enableWebSQL: false, // ✅ Gereksiz feature disable
+};
+
+// ============================================
+// ✅ HTML ENCODING CACHE
+// ============================================
+let cachedSplashHtml = null;
+let cachedExitSplashHtml = null;
+
+function getCachedSplashHtml() {
+    if (!cachedSplashHtml) {
+        const logoPath = app.isPackaged
+            ? `file://${path.join(process.resourcesPath, "logo.png").replace(/\\/g, "/")}`
+            : `file://${path.join(__dirname, "../../public/logo.png").replace(/\\/g, "/")}`;
+        
+        cachedSplashHtml = `data:text/html;charset=utf-8,${encodeURIComponent(getSplashHtml(logoPath))}`;
+    }
+    return cachedSplashHtml;
+}
+
+function getCachedExitSplashHtml() {
+    if (!cachedExitSplashHtml) {
+        cachedExitSplashHtml = `data:text/html;charset=utf-8,${encodeURIComponent(getExitSplashHtml())}`;
+    }
+    return cachedExitSplashHtml;
+}
+
+// ============================================
+// ✅ CSP HEADER CACHE
+// ============================================
+const CSP_HEADER_DEV = [
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: wss: http: ws:",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: http:",
+    "img-src 'self' data: blob: https: http:",
+    "media-src 'self' data: blob: https: http:",
+    "font-src 'self' data: https: http:",
+    "style-src 'self' 'unsafe-inline' https: http:"
+].join('; ');
+
+const CSP_HEADER_PROD = [
+    "default-src 'self' 'unsafe-inline' file: data: blob: https: wss: http: ws:",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: https: http:",
+    "img-src 'self' data: blob: https: http:",
+    "media-src 'self' data: blob: https: http:",
+    "font-src 'self' data: https: http:",
+    "style-src 'self' 'unsafe-inline' https: http:"
+].join('; ');
+
+const CSP_HEADER = app.isPackaged ? CSP_HEADER_PROD : CSP_HEADER_DEV;
+
+// ============================================
+// CREATE SPLASH WINDOW
+// ============================================
 function createSplashWindow() {
   log.info("Splash penceresi oluşturuluyor...");
 
@@ -41,21 +114,12 @@ function createSplashWindow() {
     skipTaskbar: false,
     center: true,
     show: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-    },
+    webPreferences: SPLASH_WEB_PREFS, // ✅ Constant
     icon: getIconPath(),
   });
 
-  const logoPath = app.isPackaged
-    ? `file://${path.join(process.resourcesPath, "logo.png").replace(/\\/g, "/")}`
-    : `file://${path.join(__dirname, "../../public/logo.png").replace(/\\/g, "/")}`;
-
-  splashWindow.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(getSplashHtml(logoPath))}`
-  );
+  // ✅ Cached HTML
+  splashWindow.loadURL(getCachedSplashHtml());
 
   splashWindow.webContents.once("did-finish-load", () => {
     if (splashWindow && !splashWindow.isDestroyed()) {
@@ -65,16 +129,13 @@ function createSplashWindow() {
     }
   });
 
-  splashWindow.webContents.once(
-    "did-fail-load",
-    (event, errorCode, errorDescription) => {
-      log.error("Splash penceresi yüklenemedi:", errorCode, errorDescription);
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.show();
-        splashWindow.focus();
-      }
+  splashWindow.webContents.once("did-fail-load", (event, errorCode, errorDescription) => {
+    log.error("Splash penceresi yüklenemedi:", errorCode, errorDescription);
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+      splashWindow.focus();
     }
-  );
+  });
 
   splashWindow.on("closed", () => {
     log.info("Splash penceresi kapatıldı");
@@ -93,6 +154,9 @@ function createSplashWindow() {
   return splashWindow;
 }
 
+// ============================================
+// CREATE EXIT SPLASH WINDOW
+// ============================================
 function createExitSplashWindow() {
   if (exitSplashWindow && !exitSplashWindow.isDestroyed()) {
     return exitSplashWindow;
@@ -109,17 +173,12 @@ function createExitSplashWindow() {
     skipTaskbar: true,
     center: true,
     show: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-    },
+    webPreferences: SPLASH_WEB_PREFS, // ✅ Constant
     icon: getIconPath(),
   });
 
-  exitSplashWindow.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(getExitSplashHtml())}`
-  );
+  // ✅ Cached HTML
+  exitSplashWindow.loadURL(getCachedExitSplashHtml());
 
   exitSplashWindow.webContents.once("did-finish-load", () => {
     if (exitSplashWindow && !exitSplashWindow.isDestroyed()) {
@@ -135,56 +194,38 @@ function createExitSplashWindow() {
   return exitSplashWindow;
 }
 
+// ============================================
+// CREATE MAIN WINDOW
+// ============================================
 function createWindow(isAdminUserFn, currentUserUidFn) {
-  const checkUpdatesOnStartup = currentStore.get(
-    "settings.checkUpdatesOnStartup",
-    true
-  );
-
-  // Ana pencereyi başlangıçta gizli oluştur
-  // __dirname is electron/managers
-  const preloadPath = path.join(__dirname, "../preload.js");
+  const checkUpdatesOnStartup = currentStore.get("settings.checkUpdatesOnStartup", true);
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     backgroundColor: "#1e1e1e",
     show: false,
-    webPreferences: {
-      preload: preloadPath,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-      backgroundThrottling: false,
-      // 🚀 v5.3 CPU OPTİMİZASYONU:
-      enableBlinkFeatures: '', // Gereksiz Blink özelliklerini kapat
-      spellcheck: false, // Yazım denetimi CPU kullanır
-    },
+    webPreferences: MAIN_WEB_PREFS, // ✅ Constant
     icon: getIconPath(),
   });
 
   if (app.isPackaged) mainWindow.setMenu(null);
   
-  // CSP
-  // CSP
+  // ============================================
+  // ✅ CSP HEADER - Cached String
+  // ============================================
   session.defaultSession.webRequest.onHeadersReceived((d, c) => {
-    const isDev = !app.isPackaged;
-    // 🛡️ v5.3: Production'da da 'unsafe-eval' ekledik çünkü bazı Next.js chunk'ları buna ihtiyaç duyabiliyor
-    const scriptSrc = "'self' 'unsafe-inline' 'unsafe-eval'";
-    
     c({
       responseHeaders: {
         ...d.responseHeaders,
-        "Content-Security-Policy": [
-          `default-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} file: data: blob: https: wss: http: ws:; script-src ${scriptSrc} file: data: blob: https: http:; img-src 'self' data: blob: https: http:; media-src 'self' data: blob: https: http:; font-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https: http:;`,
-        ],
+        "Content-Security-Policy": [CSP_HEADER],
       },
     });
   });
 
-  // Context menu
+  // Context menu (Admin only)
   mainWindow.webContents.on("context-menu", (event, params) => {
-    const uid = currentUserUidFn(); // Get dynamic UID
+    const uid = currentUserUidFn();
     if (uid && isAdminUserFn(uid)) {
       const contextMenuTemplate = [
         { role: "copy", label: "Kopyala" },
@@ -202,6 +243,7 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
     }
   });
 
+  // Load app
   if (!app.isPackaged) {
     const port = process.env.PORT || 3000;
     mainWindow.loadURL(`http://localhost:${port}`);
@@ -210,7 +252,9 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
     mainWindow.loadFile(indexPath);
   }
 
-  // --- KAPATMA DAVRANIŞI (TRAY) ---
+  // ============================================
+  // CLOSE BEHAVIOR (TRAY)
+  // ============================================
   mainWindow.on("close", (event) => {
     const closeToTray = currentStore.get("settings.closeToTray", true);
     if (!isQuitting) {
@@ -221,10 +265,8 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
             mainWindow.webContents.send("window-state-changed", "hidden");
         } else {
             // Graceful Exit Flow
-            // Send request to renderer to show exit splash and cleanup
             mainWindow.webContents.send("request-exit");
             
-            // Show window if hidden so splash is visible
             if (!mainWindow.isVisible()) {
                 mainWindow.show();
             }
@@ -234,15 +276,22 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
     }
   });
 
-  // --- PENCERE DURUMU DEĞİŞİKLİKLERİ ---
+  // ============================================
+  // ✅ EVENT LISTENERS - Optimized
+  // ============================================
   const sendState = (s) => mainWindow?.webContents.send("window-state-changed", s);
   
-  mainWindow.on("minimize", () => sendState("minimized"));
-  mainWindow.on("restore", () => sendState("restored"));
-  mainWindow.on("focus", () => sendState("focused"));
-  mainWindow.on("show", () => sendState("shown"));
+  const WINDOW_EVENTS = ['minimize', 'restore', 'focus', 'show'];
+  const EVENT_STATE_MAP = {
+    minimize: 'minimized',
+    restore: 'restored',
+    focus: 'focused',
+    show: 'shown'
+  };
 
-  // Refocused tracking handled by main.js logic if needed, but 'focus' event covers it.
+  WINDOW_EVENTS.forEach(event => {
+    mainWindow.on(event, () => sendState(EVENT_STATE_MAP[event]));
+  });
 
   // Splash logic
   if (!checkUpdatesOnStartup) {
@@ -265,6 +314,9 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   return mainWindow;
 }
 
+// ============================================
+// SHOW MAIN WINDOW
+// ============================================
 function showMainWindow() {
   if (mainWindow && !mainWindow.isVisible()) {
     updateCheckCompleted = true;
@@ -280,6 +332,9 @@ function setUpdateCheckCompleted(val) {
     updateCheckCompleted = val;
 }
 
+// ============================================
+// EXPORTS
+// ============================================
 module.exports = {
     createWindow,
     createSplashWindow,

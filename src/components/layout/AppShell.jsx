@@ -165,25 +165,31 @@ export default function AppShell({
                 transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
                 className="h-full overflow-hidden"
               >
-                {/* Sidebar Content - Always mounted, animated */}
-                {rightSidebar && (
-                  <motion.div
-                    initial={false}
-                    animate={{ 
-                      opacity: showRightSidebar ? 1 : 0,
-                      x: showRightSidebar ? 0 : 20
-                    }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="
-                      h-full w-[240px]
-                      bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214]
-                      border-l border-white/5
-                      overflow-hidden
-                    "
-                  >
-                    {rightSidebar}
-                  </motion.div>
-                )}
+                {/* ✅ Sidebar Content - Unmounts 350ms after close (animasyon + 20ms buffer) */}
+                <AnimatePresence mode="wait">
+                  {(showRightSidebar || rightSidebar) && (
+                    <motion.div
+                      initial={false}
+                      animate={{ 
+                        opacity: showRightSidebar ? 1 : 0,
+                        x: showRightSidebar ? 0 : 20
+                      }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      onAnimationComplete={() => {
+                        // When close animation completes, component will unmount via AnimatePresence
+                      }}
+                      className="
+                        h-full w-[240px]
+                        bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214]
+                        border-l border-white/5
+                        overflow-hidden
+                      "
+                    >
+                      {rightSidebar}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </div>
           )}

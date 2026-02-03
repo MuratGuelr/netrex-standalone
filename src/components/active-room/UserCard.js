@@ -9,6 +9,7 @@ import {
 import { Track } from "livekit-client";
 import { Tv, Maximize, VolumeX, MicOff } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useAudioLevelStore } from "@/src/store/audioLevelStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 
 const UserCard = ({
@@ -80,17 +81,23 @@ const UserCard = ({
   // 🚀 v5.5: Debounced Speaking State - Mikro-dalgalanmaları filtrele
   const [debouncedIsSpeaking, setDebouncedIsSpeaking] = React.useState(false);
   
+  // ✅ Merkezi store'dan audio level al (tek global interval)
+  const remoteAudioLevel = useAudioLevelStore(s => s.audioLevels[participant.sid] ?? 0);
+  
   useEffect(() => {
-    const rawIsSpeaking = participant.isLocal ? localIsSpeaking : livekitIsSpeaking;
+    // Local: store'dan, Remote: audioLevel > 0.01 VEYA livekitIsSpeaking
+    const rawIsSpeaking = participant.isLocal 
+      ? localIsSpeaking 
+      : (livekitIsSpeaking || remoteAudioLevel > 0.01);
     const isSpeakingNow = rawIsSpeaking && !isMuted && !isDeafened;
     
     if (isSpeakingNow) {
         setDebouncedIsSpeaking(true);
     } else {
-        const timer = setTimeout(() => setDebouncedIsSpeaking(false), 150);
+        const timer = setTimeout(() => setDebouncedIsSpeaking(false), 50);
         return () => clearTimeout(timer);
     }
-  }, [livekitIsSpeaking, localIsSpeaking, isMuted, isDeafened, participant.isLocal]);
+  }, [livekitIsSpeaking, localIsSpeaking, remoteAudioLevel, isMuted, isDeafened, participant.isLocal]);
 
   const isSpeaking = debouncedIsSpeaking;
 
@@ -121,17 +128,26 @@ const UserCard = ({
     <div className="w-full h-full p-1 will-change-transform">
       <div
         onContextMenu={onContextMenu}
-        className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center group cursor-context-menu overflow-hidden transition-all duration-200 will-change-[border-color,box-shadow,background-color]`}
+        className="relative w-full h-full rounded-xl flex flex-col items-center justify-center group cursor-context-menu overflow-hidden bg-[#141418]/85"
         style={{
-          background: "rgba(20, 20, 24, 0.85)",
-          border: isSpeaking 
-            ? shouldDisableAnimations ? `2px solid ${getBorderColor(userColor)}60` : `2px solid ${userColor}80`
-            : isMuted || isDeafened 
+          border: isMuted || isDeafened 
               ? '2px solid rgba(239, 68, 68, 0.4)' 
               : '2px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: isSpeaking ? `0 0 15px ${getBorderColor(userColor)}20` : "none",
+          transform: 'translateZ(0)' // Force GPU layer
         }}
       >
+        {/* 🚀 CPU Optimized Speaking Indicator Layer */}
+        {/* Instead of transitioning box-shadow (expensive), we transition opacity (cheap) */}
+        <div 
+          className="absolute inset-0 rounded-xl pointer-events-none transition-opacity duration-200 z-20 will-change-opacity"
+          style={{
+            opacity: isSpeaking ? 1 : 0,
+            border: `2px solid ${getBorderColor(userColor)}${shouldDisableAnimations ? '80' : 'cc'}`,
+            boxShadow: !shouldDisableAnimations 
+              ? `0 0 20px ${getBorderColor(userColor)}40, 0 0 10px ${getBorderColor(userColor)}20`
+              : "none",
+          }}
+        />
         {/* 🔮 Background Glow */}
         <div
           className="absolute inset-0 pointer-events-none will-change-opacity z-0 transition-opacity duration-300"
@@ -187,11 +203,14 @@ const UserCard = ({
             </div>
           ) : (
             <div
-              className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold z-10 relative transition-transform duration-300 group/avatar ${isSpeaking ? "scale-[1.02]" : ""}`}
-              style={{ background: userColor, transform: 'translateZ(0)' }}
+              className={`${avatarSize} rounded-2xl flex items-center justify-center text-white font-bold z-10 relative group/avatar ${isSpeaking ? "scale-[1.02]" : ""}`}
+              style={{ background: userColor, transform: 'translateZ(0)', transition: 'transform 300ms ease-out' }}
             >
               {isSpeaking && !shouldDisableAnimations && (
-                <div className="absolute inset-0 rounded-2xl ring-4 ring-emerald-500/40 animate-pulse border-2 border-emerald-400/50 z-20" />
+                <>
+                  <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400 z-20 animate-nds-speaking-ring" style={{ '--speaking-color': '#34d399' }} />
+                  <div className="absolute inset-0 rounded-2xl ring-2 ring-emerald-500/60 z-20" style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+                </>
               )}
               <span className="relative z-10 drop-shadow-md">{userInitials}</span>
 
@@ -259,10 +278,23 @@ const UserCard = ({
                </div>
                
                {!(shouldShowVideo && videoTrack) && (
-                 <div className={`bg-black/60 rounded-full border border-white/5 ${compact ? 'px-2 py-0.5' : 'px-3 py-1'}`}>
+                 <div className={`bg-black/60 rounded-xl border border-white/5 flex flex-col items-center justify-center ${compact ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
                    <span className={`font-bold text-white/90 tracking-wide uppercase block ${compact ? 'text-[9px]' : 'text-xs'}`}>
-                     {isDeafened ? "SAĞIRLAŞTIRDI" : "SUSTURDU"}
+                     {remoteState.serverDeafened 
+                        ? "SUNUCU SAĞIRLAŞTIRMASI" 
+                        : remoteState.serverMuted 
+                          ? "SUNUCU SUSTURMASI" 
+                          : isDeafened 
+                            ? "SAĞIRLAŞTIRDI" 
+                            : "SUSTURDU"}
                    </span>
+                   {(remoteState.serverDeafened || remoteState.serverMuted) && (remoteState.deafenedBy || remoteState.mutedBy) && (
+                     <span className={`font-medium text-red-400 mt-0.5 ${compact ? 'text-[8px]' : 'text-[10px]'}`}>
+                        {remoteState.serverDeafened 
+                          ? `Tarafından: ${typeof remoteState.deafenedBy === 'object' ? remoteState.deafenedBy.displayName : remoteState.deafenedBy}` 
+                          : `Tarafından: ${typeof remoteState.mutedBy === 'object' ? remoteState.mutedBy.displayName : remoteState.mutedBy}`}
+                     </span>
+                   )}
                  </div>
                )}
              </div>

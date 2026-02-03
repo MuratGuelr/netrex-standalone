@@ -3,16 +3,16 @@
 import { useEffect } from "react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
-/**
- * Ayarları uygulayan global component
- * UI ölçeklendirme, font, tema gibi ayarları uygular
- */
 export function SettingsApplier() {
-  const { uiScale, fontSize, fontFamily } = useSettingsStore();
+  const uiScale = useSettingsStore(state => state.uiScale);
+  const fontSize = useSettingsStore(state => state.fontSize);
+  const fontFamily = useSettingsStore(state => state.fontFamily);
 
+  // UI Scale + Font settings
   useEffect(() => {
-    // UI ölçeklendirme
     const root = document.documentElement;
+    
+    // UI ölçeklendirme
     root.style.setProperty("--ui-scale", `${uiScale / 100}`);
     root.style.fontSize = `${uiScale / 100}rem`;
 
@@ -24,7 +24,6 @@ export function SettingsApplier() {
     };
     const baseFontSize = fontSizeMap[fontSize] || "16px";
     root.style.setProperty("--base-font-size", baseFontSize);
-    // Tüm body'ye font boyutunu uygula
     document.body.style.fontSize = baseFontSize;
 
     // Font ailesi
@@ -40,12 +39,12 @@ export function SettingsApplier() {
       fontFamilyValue = `"${fontName}", -apple-system, BlinkMacSystemFont, sans-serif`;
     }
     root.style.setProperty("--font-family", fontFamilyValue);
-    // Tüm body'ye font ailesini uygula
     document.body.style.fontFamily = fontFamilyValue;
   }, [uiScale, fontSize, fontFamily]);
 
-  // Performans ayarları
-  const { hardwareAcceleration, graphicsQuality } = useSettingsStore();
+  // ✅ OPTIMIZATION: Separate effect for performance settings
+  const hardwareAcceleration = useSettingsStore(state => state.hardwareAcceleration);
+  const graphicsQuality = useSettingsStore(state => state.graphicsQuality);
 
   useEffect(() => {
     // GPU Hızlandırma
@@ -65,4 +64,3 @@ export function SettingsApplier() {
 
   return null;
 }
-

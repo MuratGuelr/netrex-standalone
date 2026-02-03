@@ -5,7 +5,7 @@ import { ConnectionState, Track } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
 // Mikrofon ve kamera ayarları değiştiğinde track'leri yeniden oluştur
-export default function SettingsUpdater() {
+export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serverDeafened }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
   const {
@@ -226,8 +226,19 @@ export default function SettingsUpdater() {
                   newPublication.track.mediaStreamTrack.enabled = true;
                 }
               }
-              if (newPublication.isMuted) {
-                await newPublication.setMuted(false);
+
+              // Mute durumunu kontrol et - Eğer susturulmuşsa mute et, değilse unmute et
+              const shouldBeMuted = isMuted || serverMuted || isDeafened || serverDeafened;
+              
+              if (shouldBeMuted) {
+                if (!newPublication.isMuted) {
+                  await newPublication.setMuted(true);
+                  if (newPublication.track) newPublication.track.enabled = false;
+                }
+              } else {
+                if (newPublication.isMuted) {
+                  await newPublication.setMuted(false);
+                }
               }
 
               // Stream'deki diğer track'leri durdur

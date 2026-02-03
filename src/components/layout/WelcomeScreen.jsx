@@ -168,7 +168,7 @@ export default function WelcomeScreen({
       {/* --- Versiyon Footer --- */}
       <div className="absolute bottom-6 flex items-center gap-3 z-10 opacity-60 hover:opacity-100 transition-opacity">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-black/20 backdrop-blur-sm rounded-lg border border-white/5">
-          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.6)]" />
+          <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.6)]" />
           <span className="text-[11px] text-[#949ba4] font-medium tracking-wide">NETREX CLIENT</span>
           <span className="w-px h-3 bg-white/10 mx-1" />
           <span className="text-[11px] text-[#dbdee1] font-mono">v{version}</span>

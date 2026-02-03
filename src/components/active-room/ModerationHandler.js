@@ -26,11 +26,46 @@ export default function ModerationHandler({
 
   // Mikrofon ve Hoparlör durumunu hem manuel hem de sunucu kısıtlamalarına göre senkronize et
   useEffect(() => {
-    if (localParticipant) {
+    if (!localParticipant) return;
+
+    const syncMicState = async () => {
       // Mikrofon açık olmalı mı? (Manuel mute kapalı VE sunucu susturması kapalı VE sağırlaştırma kapalı)
       const shouldEnableMic = !(isMuted || serverMuted || isDeafened || serverDeafened);
-      localParticipant.setMicrophoneEnabled(shouldEnableMic);
-    }
+      
+      // Döngü koruması: Mevcut durum zaten istenen gibiyse işlem yapma
+      if (localParticipant.isMicrophoneEnabled === shouldEnableMic) {
+        return;
+      }
+
+      try {
+        await localParticipant.setMicrophoneEnabled(shouldEnableMic);
+        
+        // Eğer kapalı olması gerekiyorsa, ekstra güvenlik kontrolü yap
+        // setMicrophoneEnabled bazen track'i unpublish eder, bazen mute eder.
+        // Eğer track hala varsa ve unmuted ise, zorla mute et.
+        if (!shouldEnableMic) {
+          const micPub = localParticipant.getTrackPublication("microphone"); // Source 'microphone' string is not standard, use Track.Source.Microphone is better but imports needed.
+          // Or iterate
+          const publications = localParticipant.getTrackPublications();
+          for (const pub of publications) {
+             if (pub.source === "microphone" || pub.source === "screen_share_audio") { // Ensure generic audio is checked if needed, but mainly mic
+                if (!pub.isMuted) {
+                   console.log(`Force muting track ${pub.trackSid} due to restriction`);
+                   await pub.setMuted(true);
+                }
+                if (pub.track) {
+                   pub.track.enabled = false;
+                   if (pub.track.mediaStreamTrack) pub.track.mediaStreamTrack.enabled = false;
+                }
+             }
+          }
+        }
+      } catch (error) {
+        console.error("Microphone state sync error:", error);
+      }
+    };
+
+    syncMicState();
   }, [isMuted, serverMuted, isDeafened, serverDeafened, localParticipant]);
 
   // İlk bağlantıda metadata'dan durumu oku

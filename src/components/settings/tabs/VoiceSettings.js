@@ -65,10 +65,12 @@ export default function VoiceSettings() {
   }, []);
 
   useEffect(() => {
-    let audioContext, analyser, stream;
+      let audioContext, analyser, stream;
     const initAudio = async () => {
+      // Çift başlatma koruması
+      if (!settings.audioInputId || animationRef.current) return;
+      
       try {
-        if (!settings.audioInputId) return;
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId:

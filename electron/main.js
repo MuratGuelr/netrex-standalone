@@ -1,10 +1,22 @@
-const { app, Notification } = require("electron");
+const { app, Notification, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
 
-// MANAGERS
+// ============================================
+// 🚀 OPTIMIZED MAIN.JS v2.0
+// ============================================
+// 
+// Optimizasyonlar:
+// 1. ✅ Command line switches array-based
+// 2. ✅ Env loading find() ile optimize
+// 3. ✅ Process priority kaldırıldı (minimal etki)
+// 4. ✅ Cleanup logic Promise-based (polling yerine)
+//
+// ============================================
+
+// MANAGERS (Early - no env required)
 const { 
     createWindow, 
     createSplashWindow, 
@@ -16,7 +28,45 @@ const {
 } = require("./managers/windowManager");
 
 const { createTray } = require("./managers/trayManager");
+const { setupInputListeners } = require("./managers/inputManager");
+const { setupUpdateManager, checkForUpdates, quitAndInstall: updateQuitAndInstall } = require("./managers/updateManager");
 
+// ⚠️ ipcHandlers will be required AFTER env loading (line ~70)
+// Because it needs LIVEKIT_SERVERS_* env variables during initialization
+
+// --- LOGLAMA AYARLARI ---
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = "info";
+log.info("App starting...");
+
+// ============================================
+// ✅ ENV LOADING - find() ile optimize
+// ============================================
+const possibleEnvPaths = [
+  path.join(__dirname, ".env.local"),
+  path.join(__dirname, "local.env"),
+  path.join(__dirname, "../.env.local"),
+  path.join(process.cwd(), ".env.local"),
+];
+
+if (app.isPackaged) {
+  possibleEnvPaths.push(
+    path.join(path.dirname(app.getPath("exe")), "resources", ".env.local")
+  );
+}
+
+const envPath = possibleEnvPaths.find(p => fs.existsSync(p));
+if (envPath) {
+    require("dotenv").config({ path: envPath, override: false });
+    console.log("✅ .env.local yüklendi:", envPath);
+}
+require("dotenv").config({ override: false });
+
+// ============================================
+// ✅ IPC HANDLERS - Loaded AFTER env
+// ============================================
+// Must be loaded here because initLiveKitServers() runs on module load
+// and needs LIVEKIT_SERVERS_* env variables to be available
 const { 
     registerIpcHandlers, 
     getHotkeysCache, 
@@ -25,36 +75,9 @@ const {
     getCurrentUserUid
 } = require("./managers/ipcHandlers");
 
-const { setupInputListeners } = require("./managers/inputManager");
-const { setupUpdateManager, checkForUpdates, quitAndInstall: updateQuitAndInstall } = require("./managers/updateManager");
-
-// --- LOGLAMA AYARLARI ---
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = "info";
-log.info("App starting...");
-
-// Ortam Değişkenleri
-const possibleEnvPaths = [
-  path.join(__dirname, ".env.local"),
-  path.join(__dirname, "local.env"),
-  path.join(__dirname, "../.env.local"),
-  path.join(process.cwd(), ".env.local"),
-];
-if (app.isPackaged) {
-  possibleEnvPaths.push(
-    path.join(path.dirname(app.getPath("exe")), "resources", ".env.local")
-  );
-}
-for (const envPath of possibleEnvPaths) {
-  if (fs.existsSync(envPath)) {
-    require("dotenv").config({ path: envPath, override: false });
-    console.log("✅ .env.local yüklendi:", envPath);
-    break;
-  }
-}
-require("dotenv").config({ override: false });
-
-// SSL Bypass
+// ============================================
+// SSL BYPASS
+// ============================================
 const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 if (livekitUrl) {
   const httpUrl = livekitUrl.replace('wss://', 'https://').replace('ws://', 'http://');
@@ -63,26 +86,45 @@ if (livekitUrl) {
 }
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
-// 🚀 v5.3 CPU & SES OPTİMİZASYONU:
-app.commandLine.appendSwitch('disable-renderer-backgrounding'); // Arka planda CPU kullanımını engelleme
-app.commandLine.appendSwitch('disable-background-timer-throttling'); // Timer throttling'i kapat (ses için gerekli)
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows'); // Gizli pencere throttle'ı kapat
-app.commandLine.appendSwitch('enable-features', 'HardwareMediaKeyHandling,WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'); // Audio priority aktif
-app.commandLine.appendSwitch('audio-renderer-threads', '2'); // Ses render'ı için ek thread
-app.commandLine.appendSwitch('force-fieldtrials', 'WebRTC-Audio-Priority/Enabled/');
+// ============================================
+// ✅ PERFORMANCE FLAGS - Array-based
+// ============================================
+const PERFORMANCE_FLAGS = [
+    // Background throttling disable
+    'disable-renderer-backgrounding',
+    'disable-background-timer-throttling',
+    'disable-backgrounding-occluded-windows',
+    
+    // Audio optimization
+    ['enable-features', 'HardwareMediaKeyHandling,WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'],
+    ['disable-features', 'AudioServiceOutOfProcess'], // ✅ Audio in-process (daha hızlı)
+    ['audio-renderer-threads', '2'],
+    ['audio-buffer-size', '512'], // ✅ 128 → 512 (daha stabil)
+    ['force-fieldtrials', 'WebRTC-Audio-Priority/Enabled/'],
+    ['autoplay-policy', 'no-user-gesture-required'], // ✅ Autoplay enable
+];
 
-// GPU Optimizasyonları
+// GPU flags (production only)
 if (app.isPackaged) {
-  app.commandLine.appendSwitch('enable-gpu-rasterization'); // GPU rasterization (CPU yükünü GPU'ya aktar)
-  app.commandLine.appendSwitch('enable-zero-copy'); // Zero-copy GPU memory
+    PERFORMANCE_FLAGS.push('enable-gpu-rasterization', 'enable-zero-copy');
 }
 
-// --- SINGLE INSTANCE LOCK ---
+// Apply all flags
+PERFORMANCE_FLAGS.forEach(flag => {
+    if (Array.isArray(flag)) {
+        app.commandLine.appendSwitch(flag[0], flag[1]);
+    } else {
+        app.commandLine.appendSwitch(flag);
+    }
+});
+
+// ============================================
+// SINGLE INSTANCE LOCK
+// ============================================
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   const { getAlreadyRunningHtml } = require('./managers/utils');
   app.whenReady().then(() => {
-    // Show warning
     const { BrowserWindow } = require('electron');
     const warningWindow = new BrowserWindow({
       width: 400, height: 320, frame: false, transparent: false,
@@ -99,21 +141,16 @@ if (!gotTheLock) {
   });
 } else {
   
-  // --- APP READY ---
+  // ============================================
+  // APP READY
+  // ============================================
   app.on("ready", async () => {
     // Platform Specifics
     if (process.platform === "win32") {
         app.setAppUserModelId("Netrex Client");
-        // 🚀 v5.3: Set process priority to 'Above Normal' safely
-        try {
-            const os = require('os');
-            // process.pid is correct, but the function is in 'os' module
-            os.setPriority(process.pid, -5); // Windows 'Above Normal'
-            console.log("✅ Process priority set to Above Normal");
-        } catch (e) {
-            console.warn("Could not set process priority:", e);
-        }
+        // ✅ Process priority kaldırıldı - minimal etki, hata riski yüksek
     }
+    
     if (process.platform === "darwin") {
       const { systemPreferences } = require('electron');
       systemPreferences.askForMediaAccess("microphone");
@@ -121,13 +158,9 @@ if (!gotTheLock) {
     }
 
     // Input Listeners
-    // Setup INPUT LISTENER FIRST, so we can pass it to IPC handlers
     const inputManager = setupInputListeners(getMainWindow, getHotkeysCache, getIsRecordingMode);
 
     // Initialize Managers
-    // PASS inputManager to registerIpcHandlers
-    // Initialize Managers
-    // PASS inputManager and setQuitting to registerIpcHandlers
     registerIpcHandlers(getMainWindow, showMainWindow, inputManager, setQuitting);
     
     // Setup Updates
@@ -167,71 +200,61 @@ if (!gotTheLock) {
       splashWindow.focus();
     }
   });
-
-  // --- AUTO UPDATER EVENTS MOVED TO UpdateManager.js ---
 }
 
-// --- GRACEFUL EXIT HANDLING ---
+// ============================================
+// ✅ GRACEFUL EXIT - Promise-based (polling yerine)
+// ============================================
 let isExitInProgress = false;
 let cleanupCompleted = false;
 
 app.on("before-quit", async (event) => {
-  // If cleanup already done or splash already shown, let it quit
   if (cleanupCompleted) return;
   
-  // Prevent immediate quit
   event.preventDefault();
   
-  // Prevent multiple exit attempts
   if (isExitInProgress) return;
   isExitInProgress = true;
   
   const mainWindow = getMainWindow();
   
-  // Show exit splash
-  const { ipcMain } = require('electron');
-  const exitSplash = createExitSplashWindow();
-  
-  // Hide main window
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.hide();
-  }
-  
-  // Setup cleanup completion listener
-  const cleanupListener = () => {
-    log.info("✅ Cleanup completed signal received");
-    cleanupCompleted = true;
-  };
-  ipcMain.once("cleanup-complete", cleanupListener);
+  // ✅ ÖNCE cleanup başlat (mainWindow hala görünür)
+  const cleanupPromise = new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      log.warn("⚠️ Cleanup timeout (3s)");
+      resolve('timeout');
+    }, 3000); // 5s → 3s (daha hızlı)
+    
+    ipcMain.once("cleanup-complete", () => {
+      clearTimeout(timeout);
+      log.info("✅ Cleanup completed");
+      resolve('complete');
+    });
+  });
   
   // Request cleanup from renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("app-will-quit");
   }
   
-  // Wait for cleanup with timeout (max 5 seconds)
-  const startTime = Date.now();
-  const maxWait = 5000;
+  // ✅ Await cleanup BEFORE hiding window
+  await cleanupPromise;
+  cleanupCompleted = true;
   
-  const checkAndQuit = () => {
-    if (cleanupCompleted || Date.now() - startTime > maxWait) {
-      // Cleanup done or timeout
-      ipcMain.removeListener("cleanup-complete", cleanupListener);
-      cleanupCompleted = true;
-      
-      // Close exit splash and quit (longer delay to show the animation)
-      setTimeout(() => {
-        if (exitSplash && !exitSplash.isDestroyed()) {
-          exitSplash.close();
-        }
-        app.exit(0);
-      }, 3500); // 3.5 second delay to allow drawing animation to finish
-    } else {
-      setTimeout(checkAndQuit, 100);
+  // ✅ SONRA exit splash göster ve mainWindow gizle
+  const exitSplash = createExitSplashWindow();
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+  
+  // Close exit splash and quit (animation delay)
+  setTimeout(() => {
+    if (exitSplash && !exitSplash.isDestroyed()) {
+      exitSplash.close();
     }
-  };
-  
-  checkAndQuit();
+    app.exit(0);
+  }, 2500); // 3.5s → 2.5s (cleanup zaten bitti)
 });
 
 app.on("will-quit", () => {
