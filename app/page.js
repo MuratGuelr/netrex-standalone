@@ -40,6 +40,7 @@ const StandaloneChatView = dynamic(() => import("@/src/components/StandaloneChat
 import SettingsModal from "@/src/components/SettingsModal";
 import UpdateNotification from "@/src/components/UpdateNotification";
 import InfoModal from "@/src/components/InfoModal";
+import VoiceChannelSwitchModal from "@/src/components/VoiceChannelSwitchModal";
 const InstallUpdateSplash = dynamic(() => import("@/src/components/InstallUpdateSplash"));
 
 import ServerMemberList from "@/src/components/server/ServerMemberList";
@@ -52,15 +53,38 @@ export default function Home() {
     initializeAuth,
     loginAnonymously,
   } = useAuthStore();
-  const { currentServer } = useServerStore();
+  const { currentServer, servers } = useServerStore();
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
-  const [showChatPanel, setShowChatPanel] = useState(false);
+  
+  // ✅ Global Chat State (Local state replaced with Store)
+  const showChatPanel = useChatStore(state => state.showChatPanel);
+  const setShowChatPanel = useChatStore(state => state.setShowChatPanel);
+  
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true);
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
+  
+  // ✅ Voice channel switch confirmation modal
+  const [voiceChannelSwitch, setVoiceChannelSwitch] = useState({
+    isOpen: false,
+    currentChannel: null,
+    targetChannel: null,
+  });
+
+  // ✅ currentRoom null olduğunda modal'ı kapat (disconnect sonrası)
+  useEffect(() => {
+    if (!currentRoom) {
+      setVoiceChannelSwitch(prev => {
+        if (prev.isOpen) {
+          return { isOpen: false, currentChannel: null, targetChannel: null };
+        }
+        return prev;
+      });
+    }
+  }, [currentRoom]);
 
   // --- GRACEFUL EXIT LOGIC (NATIVE) ---
   useEffect(() => {
@@ -146,7 +170,8 @@ export default function Home() {
     }
   }, [user?.uid, currentRoom, currentTextChannel, currentServer]);
 
-  const { showSettingsModal, setSettingsOpen } = useSettingsStore();
+  const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
+  const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
 
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -170,13 +195,13 @@ export default function Home() {
     }
   }, [isLoading, showSplash]);
 
+  // ✅ Server değiştiğinde sadece text channel temizle, voice room'u KORU!
   useEffect(() => {
-    setCurrentRoom(null);
+    // setCurrentRoom(null); // ❌ KALDIRILDI - Voice bağlantısı korunuyor!
     setCurrentTextChannel(null);
     setShowChatPanel(false);
     setViewMode("voice");
     useChatStore.getState().clearCurrentChannel();
-    useChatStore.getState().setShowChatPanel(false);
   }, [currentServer?.id]);
 
   if (showInstallUpdateSplash) {
@@ -236,24 +261,73 @@ export default function Home() {
           <ServerSidebar 
             key={currentServer.id}
             activeTextChannelId={currentTextChannel}
-            onJoinChannel={(channel) => {
+             onJoinChannel={(channel) => {
+               console.log("🎤 onJoinChannel called:", channel.name);
+               
                if (channel.type === 'voice') {
-                 // Force refresh even if clicking same channel (re-join)
-                 // Timestamp ekleyerek her katılışta unique olmasını sağla
-                 const roomWithSession = { ...channel, _sessionStart: Date.now() };
-                 
+                 // Voice logic remains the same
+                 if (currentRoom && currentRoom.id !== channel.id) {
+                   const currentRoomServer = servers.find(s => s.id === currentRoom._serverId);
+                                       setVoiceChannelSwitch({
+                      isOpen: true,
+                      currentChannel: {
+                        name: currentRoom.name,
+                        serverName: currentRoomServer?.name || "Bilinmeyen Sunucu",
+                        serverIcon: currentRoomServer?.iconUrl || null,
+                      },
+                      targetChannel: {
+                        name: channel.name,
+                        serverName: currentServer?.name || "Bilinmeyen Sunucu",
+                        serverIcon: currentServer?.iconUrl || null,
+                      },
+                      onConfirm: () => {
+                        const roomWithSession = { 
+                          ...channel, 
+                          _sessionStart: Date.now(),
+                          _serverId: currentServer?.id,
+                          _serverName: currentServer?.name,
+                          _serverIcon: currentServer?.iconUrl,
+                        };
+                        setCurrentRoom(roomWithSession);
+                        setCurrentTextChannel(null);
+                        useChatStore.getState().clearCurrentChannel();
+                        setViewMode("voice");
+                        setVoiceChannelSwitch({ isOpen: false, currentChannel: null, targetChannel: null });
+                      },
+                    });
+                   return;
+                 }
+                
+                 const roomWithSession = { 
+                   ...channel, 
+                   _sessionStart: Date.now(),
+                   _serverId: currentServer?.id,
+                   _serverName: currentServer?.name,
+                   _serverIcon: currentServer?.iconUrl,
+                 };
                  setCurrentRoom(roomWithSession);
                  setCurrentTextChannel(null);
+                 useChatStore.getState().clearCurrentChannel();
                  setViewMode("voice");
                } else {
-                 if (currentTextChannel === channel.id && showChatPanel) {
-                   setShowChatPanel(false);
-                   setTimeout(() => {
+                 // ✅ Text Channel Toggle Logic (Synchronous & Robust)
+                 if (currentTextChannel === channel.id) {
+                   if (showChatPanel) {
+                     // Open -> Close
+                     console.log("🔽 Closing active channel");
+                     setShowChatPanel(false);
                      setCurrentTextChannel(null);
-                     setViewMode("voice");
                      useChatStore.getState().clearCurrentChannel();
-                   }, 320);
+                     setViewMode("voice");
+                   } else {
+                     // Closed -> Open (Recovery or intentionally opening hidden channel)
+                     console.log("🔼 Opening hidden active channel");
+                     setShowChatPanel(true);
+                     setViewMode("chat");
+                   }
                  } else {
+                   // Switch to new channel
+                   console.log("➡️ Switching text channel");
                    setCurrentTextChannel(channel.id);
                    setShowChatPanel(true);
                    setViewMode("chat");
@@ -278,6 +352,14 @@ export default function Home() {
         title={infoModal.title}
         message={infoModal.message}
         onClose={() => setInfoModal({ isOpen: false, title: "", message: "" })}
+      />
+
+      <VoiceChannelSwitchModal
+        isOpen={voiceChannelSwitch.isOpen}
+        currentChannel={voiceChannelSwitch.currentChannel}
+        targetChannel={voiceChannelSwitch.targetChannel}
+        onClose={() => setVoiceChannelSwitch({ isOpen: false, currentChannel: null, targetChannel: null })}
+        onConfirm={voiceChannelSwitch.onConfirm}
       />
 
       <AddServerSelectionModal 
@@ -312,64 +394,74 @@ export default function Home() {
       />
 
       <div className="flex-1 flex flex-col relative overflow-hidden h-full">
-        {currentRoom ? (
-          <ActiveRoom
-            roomName={currentRoom.id}
-            displayName={currentRoom.name}
-            username={user.displayName || user.email || "Misafir"}
-            onLeave={() => {
-              setCurrentRoom(null);
-              setCurrentTextChannel(null);
-              setViewMode("voice");
-              setShowChatPanel(false);
-              useChatStore.getState().clearCurrentChannel();
-              useChatStore.getState().setShowChatPanel(false);
-            }}
-            currentTextChannel={currentTextChannel}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            userId={user.uid}
-          />
-        ) : (
-          <div className="h-full w-full relative">
-            <AnimatePresence mode="wait">
-              {!showChatPanel ? (
-                <motion.div
-                  key="welcome"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0"
-                >
-                  <WelcomeScreen
-                    userName={user?.displayName || "Misafir"}
-                    version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="chat"
-                  initial={{ x: '-20%', opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: '-20%', opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="absolute inset-0"
-                >
-                  {currentTextChannel && (
-                    <div className="h-full w-full">
-                      <StandaloneChatView
-                        channelId={currentTextChannel}
-                        username={user.displayName || user.email || "Misafir"}
-                        userId={user.uid}
-                      />
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
+        {/* ✅ ActiveRoom her zaman mount, sadece visibility değişiyor */}
+        {/* Bu sayede anasayfaya dönünce LiveKit disconnect olmuyor */}
+        <div 
+          className={`absolute inset-0 ${currentRoom ? 'z-10 opacity-100' : 'z-0 opacity-0 pointer-events-none'}`}
+          style={{ transition: 'opacity 0.2s' }}
+        >
+          {currentRoom && (
+            <ActiveRoom
+              roomName={currentRoom.id}
+              displayName={currentRoom.name}
+              username={user?.displayName || user?.email || "Misafir"}
+              onLeave={() => {
+                setCurrentRoom(null);
+                setCurrentTextChannel(null);
+                setViewMode("voice");
+                setShowChatPanel(false);
+                useChatStore.getState().clearCurrentChannel();
+              }}
+              currentTextChannel={currentTextChannel}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              userId={user?.uid}
+            />
+          )}
+        </div>
+
+        {/* ✅ Welcome/Chat screen - ActiveRoom olmadığında göster */}
+        <div 
+          className={`absolute inset-0 ${!currentRoom ? 'z-10 opacity-100' : 'z-0 opacity-0 pointer-events-none'}`}
+          style={{ transition: 'opacity 0.2s' }}
+        >
+          <AnimatePresence mode="wait">
+            {!showChatPanel ? (
+              <motion.div
+                key="welcome"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0"
+              >
+                <WelcomeScreen
+                  userName={user?.displayName || "Misafir"}
+                  version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="chat"
+                initial={{ x: '-20%', opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: '-20%', opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="absolute inset-0"
+              >
+                {currentTextChannel && (
+                  <div className="h-full w-full">
+                    <StandaloneChatView
+                      channelId={currentTextChannel}
+                      username={user?.displayName || user?.email || "Misafir"}
+                      userId={user?.uid}
+                    />
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </AppShell>
   );

@@ -3,12 +3,10 @@ import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
 export default function ApplicationSettings() {
-  const {
-    closeToTray,
-    setCloseToTray,
-    checkUpdatesOnStartup,
-    setCheckUpdatesOnStartup,
-  } = useSettingsStore();
+  const closeToTray = useSettingsStore(state => state.closeToTray);
+  const setCloseToTray = useSettingsStore(state => state.setCloseToTray);
+  const checkUpdatesOnStartup = useSettingsStore(state => state.checkUpdatesOnStartup);
+  const setCheckUpdatesOnStartup = useSettingsStore(state => state.setCheckUpdatesOnStartup);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">

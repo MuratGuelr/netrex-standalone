@@ -161,7 +161,8 @@ function StageManager({
   }, [activeStreamId, screenTracks, cameraTracks]);
   const { localParticipant } = useLocalParticipant();
   const amISharing = localParticipant.isScreenShareEnabled;
-  const { desktopNotifications, notifyOnJoin } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
 
   // 🌈 v5.4 Adaptive Background Logic
   const participants = useParticipants();
@@ -614,7 +615,8 @@ function ScreenShareStage({
   activeStreamId,
 }) {
   const [showPip, setShowPip] = useState(false);
-  const { disableBackgroundEffects, cameraMirrorEffect } = useSettingsStore();
+  const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
+  const cameraMirrorEffect = useSettingsStore(state => state.cameraMirrorEffect);
   const pipGridRef = useRef(null);
   
   const [volume, setVolume] = useState(50);

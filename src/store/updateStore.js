@@ -1,12 +1,6 @@
 import { createWithEqualityFn } from "zustand/traditional";
 import { shallow } from "zustand/shallow";
 
-/**
- * ✅ OPTIMIZED UpdateStore v2.0
- * - Event listener cleanup
- * - Validation
- * - Initialization guard
- */
 export const useUpdateStore = createWithEqualityFn(
   (set, get) => ({
     status: "idle",

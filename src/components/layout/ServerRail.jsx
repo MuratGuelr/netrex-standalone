@@ -38,22 +38,15 @@ export default function ServerRail({ onOpenCreateModal, isRoomActive }) {
     }
   }, [user?.uid, fetchUserServers]);
 
-  // ✅ Memoized handlers
+  // ✅ Ana sayfaya git - artık room active iken de izin veriyoruz (background connection)
   const handleHomeClick = useCallback(() => {
-    if (isRoomActive) {
-      toast.error("Sesli sohbetten ayrılmadan ana sayfaya dönemezsin.");
-      return;
-    }
     selectServer(null);
-  }, [selectServer, isRoomActive]);
+  }, [selectServer]);
 
+  // ✅ Server değiştir - artık room active iken de izin veriyoruz (background connection)
   const handleServerClick = useCallback((serverId) => {
-    if (isRoomActive) {
-      toast.error("Sesli sohbetten ayrılmadan sunucu değiştiremezsin.");
-      return;
-    }
     selectServer(serverId);
-  }, [selectServer, isRoomActive]);
+  }, [selectServer]);
   
   const handleOpenSettings = useCallback((serverId, tab = 'overview') => {
     setServerSettings({ isOpen: true, initialTab: tab, serverId });

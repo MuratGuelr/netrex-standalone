@@ -1,17 +1,12 @@
 "use client";
 
-/**
- * 🚀 ExitSplashScreen - Premium Animated Exit Screen
- * Matches SplashScreen aesthetics with red exit theme and drawing animation.
- */
-
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CONFIG = {
   drawDuration: 1.2,
   fillDelay: 0.1,
-  fillDuration: 0.4,
+  fillDuration: 0.1,
   holdDuration: 0.2,
   exitDuration: 0.4,
   strokeColor: "#ef4444",

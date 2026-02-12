@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { ConnectionQuality, RoomEvent } from "livekit-client";
 
@@ -11,6 +11,9 @@ export default function ConnectionStatusIndicator() {
     localParticipant?.connectionQuality || ConnectionQuality.Unknown
   );
 
+  // ✅ FIX: useRef guard to prevent duplicate event listener registration
+  const hasRegisteredQualityRef = useRef(false);
+  
   // Connection quality güncellemeleri
   useEffect(() => {
     if (!room || !localParticipant) return;
@@ -23,6 +26,14 @@ export default function ConnectionStatusIndicator() {
     
     setConnectionQuality(initialQuality);
 
+    // ✅ CRITICAL FIX: Only register events ONCE per room instance
+    if (hasRegisteredQualityRef.current) {
+      return;
+    }
+    
+    hasRegisteredQualityRef.current = true;
+    console.log("✅ Registering connection quality listener (ONCE)");
+
     // Connection quality değişikliklerini dinle
     const handleConnectionQualityChanged = (quality, participant) => {
       if (participant.isLocal) {
@@ -33,6 +44,8 @@ export default function ConnectionStatusIndicator() {
     room.on(RoomEvent.ConnectionQualityChanged, handleConnectionQualityChanged);
 
     return () => {
+      console.log("🧹 Cleaning up connection quality listener");
+      hasRegisteredQualityRef.current = false;
       room.off(
         RoomEvent.ConnectionQualityChanged,
         handleConnectionQualityChanged

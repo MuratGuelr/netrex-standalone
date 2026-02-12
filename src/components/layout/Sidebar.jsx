@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * 📚 Sidebar - Main Navigation Sidebar
- * NDS v2.0 - Netrex Design System
- * 
- * The left sidebar containing:
- * - Header with logo
- * - Voice/Text channel lists
- * - User panel at bottom
- */
-
 import { forwardRef } from "react";
 
 const Sidebar = forwardRef(function Sidebar({ 

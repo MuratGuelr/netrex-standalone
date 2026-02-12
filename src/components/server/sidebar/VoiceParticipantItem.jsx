@@ -38,10 +38,18 @@ const VoiceParticipantItem = memo(function VoiceParticipantItem({ participant })
         )}
       </div>
       
-      {/* Username */}
-      <span className="text-xs text-[#949ba4] font-medium truncate flex-1">
-        {participant.username || "Kullanıcı"}
-      </span>
+      {/* Username & Status */}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <span className="text-xs text-[#949ba4] font-medium truncate">
+          {participant.username || "Kullanıcı"}
+        </span>
+        {participant.quickStatus && (
+          <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-indigo-500/15 text-indigo-400 font-bold text-[8px] uppercase tracking-tighter border border-indigo-500/20" title={participant.quickStatus.label}>
+            <span>{participant.quickStatus.icon}</span>
+            <span className="hidden sm:inline truncate max-w-[40px]">{participant.quickStatus.label}</span>
+          </span>
+        )}
+      </div>
       
       {/* Speaking Indicator */}
       {!participant.isMuted && !participant.isDeafened && (
@@ -55,7 +63,8 @@ const VoiceParticipantItem = memo(function VoiceParticipantItem({ participant })
     prevProps.participant.userId === nextProps.participant.userId &&
     prevProps.participant.isMuted === nextProps.participant.isMuted &&
     prevProps.participant.isDeafened === nextProps.participant.isDeafened &&
-    prevProps.participant.username === nextProps.participant.username
+    prevProps.participant.username === nextProps.participant.username &&
+    prevProps.participant.quickStatus === nextProps.participant.quickStatus
   );
 });
 

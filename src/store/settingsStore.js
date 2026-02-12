@@ -77,6 +77,16 @@ export const useSettingsStore = create(
       // Kontrol Çubuğu Ayarları
       controlBarHidden: false, // Kontrol çubuğu gizli mi?
 
+      // Hızlı Durum (Quick Status)
+      quickStatus: null, // { icon: string, label: string } | null
+      quickStatusPresets: [
+        { id: "p1", icon: "🚽", label: "Lavabodayım!" },
+        { id: "p2", icon: "⏰", label: "5dk'ya geliyorum!" },
+        { id: "p3", icon: "🚨", label: "Baskındayım!" },
+        { id: "p4", icon: "💬", label: "Durumum..." }
+      ], // Hazır mesajlar (3 sabit + 1 özelleştirilebilir)
+      lastQuickStatus: null, // Hotkey ile tetiklenecek son mesaj objesi
+
       // Online/Offline durumu
       userStatus: "online", // "online" | "idle" | "offline" | "invisible"
       isAutoIdle: false, // Otomatik idle modu mu (pencere arka planda veya inaktivite)?
@@ -93,6 +103,31 @@ export const useSettingsStore = create(
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
       setVideoInput: (deviceId) => set({ videoId: deviceId }),
+
+      // Quick Status Actions
+      setQuickStatus: (status) => set({ quickStatus: status }),
+      setLastQuickStatus: (status) => set({ lastQuickStatus: status }),
+      addQuickStatusPreset: () => set((state) => {
+        if (state.quickStatusPresets.length >= 6) return {}; // Max 6 limit
+        return { 
+            quickStatusPresets: [...state.quickStatusPresets, { id: Date.now().toString(), icon: "💬", label: "" }] 
+        };
+      }),
+      updateQuickStatusPreset: (id, updates) => set((state) => ({
+        quickStatusPresets: state.quickStatusPresets.map(p => p.id === id ? { ...p, ...updates } : p)
+      })),
+      removeQuickStatusPreset: (id) => set((state) => ({ 
+        quickStatusPresets: state.quickStatusPresets.filter(p => p.id !== id) 
+      })),
+      toggleLastQuickStatus: () => set((state) => {
+        // Eğer zaten bir quick status varsa, kapat. Yoksa son kullanılanı (veya varsayılanı) aç.
+        if (state.quickStatus) {
+            return { quickStatus: null };
+        }
+        // Son kullanılan yoksa ilk preseti al
+        const target = state.lastQuickStatus || state.quickStatusPresets[0];
+        return target ? { quickStatus: target, lastQuickStatus: target } : {};
+      }),
 
       // Voice State Toggles
       toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
@@ -209,21 +244,31 @@ export const useSettingsStore = create(
         const newState = { graphicsQuality: quality };
         
         switch (quality) {
-          case "potato":
-             newState.disableAnimations = true;
-             newState.disableBackgroundEffects = true;
-             newState.hardwareAcceleration = false;
-             break;
-          case "low":
-             newState.disableAnimations = false;
-             newState.disableBackgroundEffects = true;
-             newState.hardwareAcceleration = true;
-             break;
+          case "ultra":  // ✅ YENİ MOD
+            newState.disableAnimations = false;
+            newState.disableBackgroundEffects = false;
+            newState.hardwareAcceleration = true;
+            break;
           case "high":
-             newState.disableAnimations = false;
-             newState.disableBackgroundEffects = false;
-             newState.hardwareAcceleration = true;
-             break;
+            newState.disableAnimations = false;
+            newState.disableBackgroundEffects = false;
+            newState.hardwareAcceleration = true;
+            break;
+          case "medium":  // ✅ YENİ MOD
+            newState.disableAnimations = false;
+            newState.disableBackgroundEffects = true;
+            newState.hardwareAcceleration = true;
+            break;
+          case "low":
+            newState.disableAnimations = false;  // ✅ Animasyon AÇIK
+            newState.disableBackgroundEffects = true;
+            newState.hardwareAcceleration = true;
+            break;
+          case "potato":
+            newState.disableAnimations = true;
+            newState.disableBackgroundEffects = true;
+            newState.hardwareAcceleration = false;
+            break;
         }
         return newState;
       }),
@@ -282,7 +327,25 @@ export const useSettingsStore = create(
     }),
     {
       name: "netrex-user-settings",
+      version: 2, // Upgraded for Quick Status v2 (4 slots fixed)
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState, version) => {
+        if (version === 0 || version === 1) {
+          // Reset Quick Status to healthy defaults
+          return {
+            ...persistedState,
+            quickStatus: null,
+            quickStatusPresets: [
+                { id: "p1", icon: "🚽", label: "Lavabodayım!" },
+                { id: "p2", icon: "⏰", label: "5dk'ya geliyorum!" },
+                { id: "p3", icon: "🚨", label: "Baskındayım!" },
+                { id: "p4", icon: "💬", label: "Durumum..." }
+            ],
+            lastQuickStatus: null
+          };
+        }
+        return persistedState;
+      },
       onRehydrateStorage: () => (state) => {
         state?.syncWithElectron();
       },

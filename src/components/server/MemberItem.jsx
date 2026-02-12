@@ -92,6 +92,11 @@ const MemberItem = memo(function MemberItem({
               <span className="truncate max-w-[120px]">{member.gameActivity.name}</span>
               <GameDuration startTime={member.gameActivity.startedAt} />
             </span>
+          ) : member.quickStatus ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold text-[9px] uppercase tracking-wider border border-indigo-500/30">
+              <span className="text-[11px]">{member.quickStatus.icon}</span>
+              {member.quickStatus.label}
+            </span>
           ) : member.customStatus ? (
             <span style={{ color: member.customStatusColor || "inherit" }}>{member.customStatus}</span>
           ) : member.presence === 'idle' ? (

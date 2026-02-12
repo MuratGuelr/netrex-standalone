@@ -1,8 +1,8 @@
-import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from "react";
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useCallback } from "react";
 import { Track } from "livekit-client";
 
 // Helper to play individual track
-function HiddenSourceVideo({ trackRef, onReady }) {
+function HiddenSourceVideo({ trackRef, onReady, onCleanup }) {
   const videoRef = useRef(null);
   const track = trackRef?.publication?.track;
   const sid = trackRef?.participant?.sid;
@@ -19,8 +19,9 @@ function HiddenSourceVideo({ trackRef, onReady }) {
       if (el && track) {
         track.detach(el);
       }
+      if (sid && onCleanup) onCleanup(sid);
     };
-  }, [track, sid, onReady]);
+  }, [track, sid, onReady, onCleanup]);
 
   return <video ref={videoRef} muted autoPlay playsInline style={{ display: 'none' }} />;
 }
@@ -40,9 +41,15 @@ const PipGrid = forwardRef(({ tracks, isSelfSharing }, ref) => {
   }, [tracks]);
 
   // Update source refs map
-  const handleSourceReady = (sid, el) => {
+  const handleSourceReady = useCallback((sid, el) => {
     sourceVideosRef.current.set(sid, el);
-  };
+  }, []);
+
+  const handleSourceCleanup = useCallback((sid) => {
+    if (sourceVideosRef.current.has(sid)) {
+      sourceVideosRef.current.delete(sid);
+    }
+  }, []);
 
   // Canvas Loop with Double Buffering
   useEffect(() => {
@@ -249,6 +256,7 @@ const PipGrid = forwardRef(({ tracks, isSelfSharing }, ref) => {
             key={t.participant.sid} 
             trackRef={t} 
             onReady={handleSourceReady} 
+            onCleanup={handleSourceCleanup}
         />
       ))}
     </div>

@@ -1,20 +1,81 @@
-import { Cpu, Palette, Zap } from "lucide-react";
+import { Cpu, Palette, Zap, Sparkles, Layers, BarChart2, Trash2, Cpu as CpuIcon } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
 export default function PerformanceSettings() {
-  const {
-    hardwareAcceleration,
-    setHardwareAcceleration,
-    graphicsQuality,
-    setGraphicsQuality,
-    disableAnimations,
-    toggleDisableAnimations,
-    disableBackgroundEffects,
-    toggleDisableBackgroundEffects,
-    videoCodec,
-    setVideoCodec
-  } = useSettingsStore();
+  const hardwareAcceleration = useSettingsStore(state => state.hardwareAcceleration);
+  const setHardwareAcceleration = useSettingsStore(state => state.setHardwareAcceleration);
+  const graphicsQuality = useSettingsStore(state => state.graphicsQuality);
+  const setGraphicsQuality = useSettingsStore(state => state.setGraphicsQuality);
+  const disableAnimations = useSettingsStore(state => state.disableAnimations);
+  const toggleDisableAnimations = useSettingsStore(state => state.toggleDisableAnimations);
+  const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
+  const toggleDisableBackgroundEffects = useSettingsStore(state => state.toggleDisableBackgroundEffects);
+  const videoCodec = useSettingsStore(state => state.videoCodec);
+  const setVideoCodec = useSettingsStore(state => state.setVideoCodec);
+
+  const QUALITY_MODES = [
+    { 
+      id: "ultra", 
+      label: "Ultra", 
+      desc: "Maksimum", 
+      icon: Sparkles,
+      color: "purple",
+      activeBorder: "border-purple-500",
+      activeBg: "bg-purple-500/10",
+      activeText: "text-purple-400",
+      activeShadow: "shadow-[0_0_15px_rgba(168,85,247,0.15)]",
+      dotColor: "bg-purple-500"
+    },
+    { 
+      id: "high", 
+      label: "Yüksek", 
+      desc: "Tam", 
+      icon: Zap,
+      color: "green",
+      activeBorder: "border-green-500",
+      activeBg: "bg-green-500/10",
+      activeText: "text-green-400",
+      activeShadow: "shadow-[0_0_15px_rgba(34,197,94,0.15)]",
+      dotColor: "bg-green-500"
+    },
+    { 
+      id: "medium", 
+      label: "Orta", 
+      desc: "Dengeli", 
+      icon: Layers,
+      color: "blue",
+      activeBorder: "border-blue-500",
+      activeBg: "bg-blue-500/10",
+      activeText: "text-blue-400",
+      activeShadow: "shadow-[0_0_15px_rgba(59,130,246,0.15)]",
+      dotColor: "bg-blue-500"
+    },
+    { 
+      id: "low", 
+      label: "Düşük", 
+      desc: "Performans", 
+      icon: BarChart2,
+      color: "yellow",
+      activeBorder: "border-yellow-500",
+      activeBg: "bg-yellow-500/10",
+      activeText: "text-yellow-400",
+      activeShadow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
+      dotColor: "bg-yellow-500"
+    },
+    { 
+      id: "potato", 
+      label: "Patates", 
+      desc: "Statik", 
+      icon: Trash2,
+      color: "red",
+      activeBorder: "border-red-500",
+      activeBg: "bg-red-500/10",
+      activeText: "text-red-400",
+      activeShadow: "shadow-[0_0_15px_rgba(239,68,68,0.15)]",
+      dotColor: "bg-red-500"
+    },
+  ];
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
@@ -36,7 +97,7 @@ export default function PerformanceSettings() {
           <div className="absolute inset-0 flex items-center px-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg">
-                <Cpu size={24} className="text-white" />
+                <CpuIcon size={24} className="text-white" />
               </div>
               <div>
                 <h4 className="text-white font-bold text-lg">Performans ve Kalite</h4>
@@ -59,65 +120,48 @@ export default function PerformanceSettings() {
           </div>
           Görsel Kalite Modu
         </h4>
-        <div className="relative z-10 space-y-3">
-          <p className="text-sm text-[#949ba4] leading-relaxed mb-4">
-            Bilgisayarınızın performansına göre bir mod seçin veya ayarları aşağıdan manuel olarak özelleştirin.
+        
+        <div className="relative z-10">
+          <p className="text-xs text-[#949ba4] mb-4">
+            Bilgisayarınızın performansına göre bir mod seçin.
           </p>
           
-          <div className="grid grid-cols-3 gap-2">
-            {/* Yüksek */}
-            <button
-              onClick={() => setGraphicsQuality("high")}
-              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
-                graphicsQuality === "high"
-                  ? "bg-green-500/10 border-green-500/50"
-                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className={`font-bold text-sm ${graphicsQuality === "high" ? "text-green-400" : "text-white"}`}>Yüksek</span>
-                {graphicsQuality === "high" && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
-              </div>
-              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
-                Her şey açık. Tam görsel deneyim.
-              </div>
-            </button>
+          <div className="grid grid-cols-5 gap-2">
+            {QUALITY_MODES.map((mode) => {
+              const Icon = mode.icon;
+              const isActive = graphicsQuality === mode.id;
+              
+              return (
+                <button
+                  key={mode.id}
+                  onClick={() => setGraphicsQuality(mode.id)}
+                  className={`p-3 rounded-xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-2 focus:outline-none relative group/opt h-full ${
+                    isActive
+                      ? `${mode.activeBorder} ${mode.activeBg} ${mode.activeShadow} text-white`
+                      : "border-white/5 bg-[#1e1f22] text-[#949ba4] hover:border-white/20 hover:bg-[#2b2d31]"
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-lg transition-all duration-300 ${isActive ? mode.activeText : 'text-[#80848e] group-hover/opt:text-white'}`}>
+                    <Icon size={18} />
+                  </div>
+                  
+                  <div className="text-center">
+                    <span className={`block font-bold text-xs mb-0.5 transition-colors duration-300 ${isActive ? mode.activeText : "text-white"}`}>
+                      {mode.label}
+                    </span>
+                    <p className="text-[9px] opacity-70 leading-tight">
+                      {mode.desc}
+                    </p>
+                  </div>
 
-            {/* Performans (Düşük) */}
-            <button
-              onClick={() => setGraphicsQuality("low")}
-              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
-                graphicsQuality === "low"
-                  ? "bg-yellow-500/10 border-yellow-500/50"
-                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
-              }`}
-            >
-               <div className="flex items-center justify-between mb-1">
-                <span className={`font-bold text-sm ${graphicsQuality === "low" ? "text-yellow-400" : "text-white"}`}>Performans</span>
-                {graphicsQuality === "low" && <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)] animate-pulse"></div>}
-              </div>
-              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
-                Blur efektleri kapalı. Denge modu.
-              </div>
-            </button>
-
-            {/* Patates */}
-            <button
-              onClick={() => setGraphicsQuality("potato")}
-              className={`relative overflow-hidden rounded-xl p-3 border transition-all duration-300 text-left group/opt focus:outline-none flex flex-col justify-between ${
-                graphicsQuality === "potato"
-                  ? "bg-red-500/10 border-red-500/50"
-                  : "bg-[#1e1f22] border-white/5 hover:border-white/20 hover:bg-[#2b2d31]"
-              }`}
-            >
-               <div className="flex items-center justify-between mb-1">
-                <span className={`font-bold text-sm ${graphicsQuality === "potato" ? "text-red-400" : "text-white"}`}>Patates</span>
-                {graphicsQuality === "potato" && <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse"></div>}
-              </div>
-              <div className="text-[10px] text-[#949ba4] group-hover/opt:text-[#b5bac1] leading-tight">
-                Minimum kaynak. Animasyonlar kapalı.
-              </div>
-            </button>
+                  {isActive && (
+                    <div className="absolute top-1.5 right-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${mode.dotColor} animate-pulse shadow-[0_0_5px_rgba(255,255,255,0.5)]`}></div>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

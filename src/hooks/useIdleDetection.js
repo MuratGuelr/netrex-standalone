@@ -1,43 +1,25 @@
 import { useEffect, useRef, } from 'react';
 import { useSettingsStore } from '@/src/store/settingsStore';
 
-/**
- * Idle Detection Hook (ULTRA-OPTIMIZED v6.0)
- * 
- * Sets user as "idle" under these conditions:
- * 1. Window is minimized for more than MINIMIZED_IDLE_DELAY
- * 2. Window is hidden (sent to tray) - immediately idle
- * 3. No user activity (mouse/keyboard) for idleTimeout duration
- * 
- * 🚀 IMPORTANT: User is NEVER set to idle if they are in a voice room!
- * This is because users often have Netrex on a second monitor while gaming,
- * and they shouldn't appear "idle" just because they're not moving the mouse in the Netrex window.
- * 
- * User returns to "online" when:
- * 1. Any activity is detected (mouse move, keypress, etc.)
- * 2. Window is restored/focused/shown
- * 
- * OPTIMIZATIONS v6.0:
- * - ✅ RequestAnimationFrame throttling (16ms, 60fps)
- * - ✅ Separated useEffect dependencies (minimal re-renders)
- * - ✅ Ref-based voice room check (no store access in hot path)
- * - ✅ Lookup table for state handling (faster than switch)
- * - ✅ Passive event listeners (all events)
- * - ✅ Development-only console logs
- * - ✅ Single activity handler for all events
- */
-
-// Delay before setting idle when minimized (30 seconds)
 const MINIMIZED_IDLE_DELAY = 30 * 1000;
 
 export function useIdleDetection() {
-  const { setIsAutoIdle, idleTimeout, isInVoiceRoom } = useSettingsStore();
+  const setIsAutoIdle = useSettingsStore(state => state.setIsAutoIdle);
+  const idleTimeout = useSettingsStore(state => state.idleTimeout);
+  const isInVoiceRoom = useSettingsStore(state => state.isInVoiceRoom);
   
   // ✅ OPTIMIZATION #2: Ref-based voice room check (no store access in timeout)
   const isInVoiceRoomRef = useRef(isInVoiceRoom);
   
+  // ✅ OPTIMIZATION #3: Cache idleTimeout to avoid getState() calls
+  const idleTimeoutCacheRef = useRef(idleTimeout);
+  
   // RAF throttling
   const rafRef = useRef(null);
+  
+  // ✅ OPTIMIZATION #4: Mouse event throttling
+  const lastMouseMoveRef = useRef(0);
+  const MOUSE_THROTTLE_MS = 250; // 250ms throttle for mousemove
   
   // Timeout references
   const inactivityTimeoutRef = useRef(null);
@@ -45,19 +27,33 @@ export function useIdleDetection() {
   const isMinimizedRef = useRef(false);
   const isHiddenRef = useRef(false);
   
-  // ✅ OPTIMIZATION #2: Update voice room ref when it changes
+  // ✅ Update voice room ref when it changes
   useEffect(() => {
     isInVoiceRoomRef.current = isInVoiceRoom;
   }, [isInVoiceRoom]);
   
+  // ✅ Update idleTimeout cache
+  useEffect(() => {
+    idleTimeoutCacheRef.current = idleTimeout;
+  }, [idleTimeout]);
+  
   // ✅ OPTIMIZATION #1: Listener setup - ONLY on mount (no dependencies)
   useEffect(() => {
-    // Activity handler with RAF throttling
-    const handleActivity = () => {
+    // Activity handler with throttling and cache
+    const handleActivity = (event) => {
       // Skip if window is hidden or minimized
       if (isHiddenRef.current || isMinimizedRef.current) return;
       
-      // ✅ OPTIMIZATION #3: Cancel any pending RAF
+      // ✅ THROTTLE: Special handling for mousemove
+      if (event?.type === 'mousemove') {
+        const now = Date.now();
+        if (now - lastMouseMoveRef.current < MOUSE_THROTTLE_MS) {
+          return; // Skip - too soon
+        }
+        lastMouseMoveRef.current = now;
+      }
+      
+      // ✅ OPTIMIZATION: Cancel any pending RAF
       if (rafRef.current) return;
       
       rafRef.current = requestAnimationFrame(() => {
@@ -69,10 +65,10 @@ export function useIdleDetection() {
         // Set user as active
         setIsAutoIdle(false);
 
-        // Start new inactivity timeout (will be replaced if idleTimeout changes)
-        const currentIdleTimeout = useSettingsStore.getState().idleTimeout || 300000;
+        // ✅ Use cached idleTimeout (no getState() call!)
+        const currentIdleTimeout = idleTimeoutCacheRef.current || 300000;
         inactivityTimeoutRef.current = setTimeout(() => {
-          // ✅ OPTIMIZATION #2: Use ref instead of getState() call
+          // ✅ Use ref instead of getState() call
           if (isInVoiceRoomRef.current) {
             if (process.env.NODE_ENV === 'development') {
               console.log('🎤 User is in voice room, skipping auto-idle');

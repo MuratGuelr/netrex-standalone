@@ -38,7 +38,8 @@ export default function AppShell({
   const router = useRouter();
   const { user } = useAuthStore();
   const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
-  const { showSettingsModal, setSettingsOpen } = useSettingsStore();
+  const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
+  const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
   
   // 🚀 OPTIMIZATION: useGameActivity hook kaldırıldı
   // Oyun algılama electron/main.js tarafından otomatik yapılıyor
@@ -69,6 +70,35 @@ export default function AppShell({
     setIsElectron(typeof window !== "undefined" && !!window.netrex);
     // 🚀 v5.3: Sistem seslerini RAM'e ön-yükle (Zero Latency)
     useSoundManagerStore.getState().init();
+
+    // 🎹 Hotkey Listener
+    if (window.netrex) {
+        // Farklı API isimlendirmeleri ihtimaline karşı her ikisini de deneyelim
+        const handler = (action) => {
+            console.log("🎹 Hotkey Triggered:", action);
+            // Electron InputManager sends "toggle-{actionName}"
+            if (action === "toggle-quick-status") {
+                const store = useSettingsStore.getState();
+                console.log("Store Toggle Called. Last Status:", store.lastQuickStatus);
+                store.toggleLastQuickStatus();
+            }
+        };
+
+        let cleanupTriggered, cleanupPressed;
+        
+        if (window.netrex.onHotkeyTriggered) {
+            cleanupTriggered = window.netrex.onHotkeyTriggered(handler);
+        }
+        
+        if (window.netrex.onHotkeyPressed) {
+            cleanupPressed = window.netrex.onHotkeyPressed(handler);
+        }
+
+        return () => {
+            if (cleanupTriggered) cleanupTriggered();
+            if (cleanupPressed) cleanupPressed();
+        };
+    }
   }, []);
 
   return (

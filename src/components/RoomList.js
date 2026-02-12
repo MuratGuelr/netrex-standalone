@@ -68,7 +68,9 @@ export default function RoomList({
     loadChannelMessages,
   } = useChatStore();
 
-  const { profileColor, userStatus, setUserStatus } = useSettingsStore();
+  const profileColor = useSettingsStore(state => state.profileColor);
+  const userStatus = useSettingsStore(state => state.userStatus);
+  const setUserStatus = useSettingsStore(state => state.setUserStatus);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const [isCreatingTextChannel, setIsCreatingTextChannel] = useState(false);
@@ -190,7 +192,8 @@ export default function RoomList({
   }, []);
 
   // Room presence'leri dinle ve yeni kullanıcı girişlerinde bildirim göster
-  const { desktopNotifications, notifyOnJoin } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
   const prevPresenceRef = useRef({});
   
   useEffect(() => {

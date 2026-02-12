@@ -4,11 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CONFIG = {
-  drawDuration: 1.2,
-  fillDelay: 0.1,
-  fillDuration: 0.4,
-  holdDuration: 0.2,
-  exitDuration: 0.4,
+  drawDuration: 0.3,
+  fillDelay: 0.02,
+  fillDuration: 0.1,
+  holdDuration: 0.05,
+  exitDuration: 0.1,
   strokeColor: "#a855f7",
   fillColor: "#a855f7",
   bgGradientFrom: "#050508",
@@ -97,7 +97,7 @@ export default function SplashScreen({
   useEffect(() => {
     const textInterval = setInterval(() => {
         setLoadingStep(prev => prev < LOADING_TEXTS.length - 1 ? prev + 1 : prev);
-    }, 1200);
+    }, 150);
     return () => clearInterval(textInterval);
   }, []);
 

@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * 📱 MainContent - Main Content Area Wrapper
- * NDS v2.0 - Netrex Design System
- * 
- * The main content area with:
- * - Optional header
- * - Content area
- * - Optional bottom controls
- */
-
 import { forwardRef } from "react";
 
 const MainContent = forwardRef(function MainContent({ 

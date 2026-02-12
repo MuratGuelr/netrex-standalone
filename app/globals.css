@@ -1,18 +1,8 @@
-/**
- * 🎨 Netrex Design System (NDS) v2.0 - Global Styles
- * 
- * Premium Dark-Only UI System for Voice Chat Applications
- * Ultra-Premium Glassmorphism | Deep Space Theme | Neon Accents
- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   📦 IMPORTS - Google Fonts
-   ═══════════════════════════════════════════════════════════════════════════ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 /* ═══════════════════════════════════════════════════════════════════════════
    🎨 CSS CUSTOM PROPERTIES - Design Tokens
@@ -215,43 +205,35 @@
    🪟 GLASSMORPHISM UTILITIES
    ═══════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
-  /* Glass Strong - Main panels, modals */
+  /* Glass Strong - Main panels, modals (Optimized) */
   .glass-strong {
-    background: var(--nds-glass-strong);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(30, 31, 34, 0.98);
+    border: 1px solid var(--nds-border-light);
   }
 
-  /* Glass Medium - Secondary panels */
+  /* Glass Medium - Secondary panels (Optimized) */
   .glass-medium {
-    background: var(--nds-glass-medium);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(30, 31, 34, 0.95);
+    border: 1px solid var(--nds-border-subtle);
   }
 
-  /* Glass Light - Hover states, buttons */
+  /* Glass Light - Hover states, buttons (Optimized) */
   .glass-light {
-    background: var(--nds-glass-light);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.08);
   }
 
-  /* Glass Ultra Light - Subtle overlays */
+  /* Glass Ultra Light - Subtle overlays (Optimized) */
   .glass-ultra-light {
-    background: var(--nds-glass-ultra-light);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.05);
   }
 
-  /* Glass Card - Premium card effect */
+  /* Glass Card - Premium card effect (Optimized) */
   .glass-card {
     background: linear-gradient(
       135deg,
-      rgba(37, 39, 42, 0.95) 0%,
-      rgba(43, 45, 49, 0.9) 100%
+      rgba(37, 39, 42, 0.98) 0%,
+      rgba(43, 45, 49, 0.95) 100%
     );
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--nds-border-light);
   }
 
@@ -462,10 +444,10 @@
     animation: ndsBounceSubtle 2s ease-in-out infinite;
   }
 
-  /* Speaking Animations */
+  /* Speaking Animations (Optimized) */
   .animate-speaking {
     animation: ndsSpeakingGlow 2s ease-in-out infinite;
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+    border: 2px solid rgba(34, 197, 94, 0.6);
   }
 
   .animate-speaking-ring {
@@ -492,22 +474,14 @@
 }
 
 /* 🚀 PERFORMANCE OPTIMIZATIONS v5.3 */
-.will-change-opacity {
-  will-change: opacity;
-}
-
-.will-change-transform {
-  will-change: transform;
-}
-
-.will-change-filter {
-  will-change: filter;
-}
+/* Removed will-change utilities to prevent memory abuse */
 
 /* Optimize backdrop-blur performance */
 .backdrop-blur-md, 
 .backdrop-blur-xl, 
-.backdrop-blur-2xl {
+.backdrop-blur-2xl,
+.glass-modal,
+.nds-modal {
   transform: translateZ(0); /* Force GPU acceleration */
   backface-visibility: hidden;
 }
@@ -539,8 +513,8 @@
 }
 
 @keyframes ndsPulse {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.05); }
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
 }
 
 @keyframes ndsPulseBorder {
@@ -549,8 +523,9 @@
 }
 
 @keyframes ndsBounceSubtle {
+  /* Simplified to simple fade/translate */
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  50% { transform: translateY(-2px); }
 }
 
 @keyframes ndsSpeakingGlow {
@@ -578,9 +553,8 @@
 }
 
 @keyframes ndsFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(10px, -10px) scale(1.02); }
-  66% { transform: translate(-5px, 5px) scale(0.98); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(0, -5px); }
 }
 
 /* Smooth pulsing glow for speaking users */
@@ -691,11 +665,13 @@
   }
 
   .hover-glow:hover {
-    box-shadow: var(--nds-shadow-glow);
+    border-color: var(--nds-border-glow);
+    filter: brightness(1.05);
   }
 
   .hover-glow-green:hover {
-    box-shadow: var(--nds-shadow-glow-green);
+    border-color: rgba(35, 165, 89, 0.6);
+    filter: brightness(1.05);
   }
 
   /* Brighten on hover */
@@ -1045,13 +1021,11 @@
 @keyframes toastSlideIn {
   0% {
     opacity: 0;
-    transform: translateX(100px) scale(0.9);
-    filter: blur(4px);
+    transform: translateX(100px);
   }
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
-    filter: blur(0);
+    transform: translateX(0);
   }
 }
 
@@ -1316,10 +1290,11 @@ body.graphics-quality-low .glass-modal {
 /* GPU Hızlandırma - Performans Yaması */
 .backdrop-blur-xl, 
 .backdrop-blur-md, 
-.animate-pulse {
+.animate-pulse,
+.glass-modal,
+.nds-modal {
   /* Bu komut tarayıcıyı render işlemini GPU'ya vermeye zorlar */
   transform: translateZ(0);
-  will-change: transform, opacity;
   backface-visibility: hidden;
 }
 

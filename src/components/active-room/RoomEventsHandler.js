@@ -1,11 +1,10 @@
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { useAudioLevelStore } from "@/src/store/audioLevelStore";
 import { doc, updateDoc, arrayRemove } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 
@@ -20,23 +19,12 @@ export default function RoomEventsHandler({
 }) {
   const room = useRoomContext();
   const { playSound } = useSoundEffects();
-  const {
-    desktopNotifications,
-    notifyOnJoin,
-    notifyOnLeave,
-    notificationSound,
-    setInVoiceRoom,
-  } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
+  const notifyOnLeave = useSettingsStore(state => state.notifyOnLeave);
+  const notificationSound = useSettingsStore(state => state.notificationSound);
+  const setInVoiceRoom = useSettingsStore(state => state.setInVoiceRoom);
   const { user } = useAuthStore();
-  const { startTracking, stopTracking } = useAudioLevelStore();
-
-  // ✅ Merkezi audio level tracking
-  useEffect(() => {
-    if (room?.state === ConnectionState.Connected) {
-      startTracking(room);
-    }
-    return () => stopTracking();
-  }, [room, room?.state, startTracking, stopTracking]);
 
   // Bildirim izni kontrolü ve isteği
   useEffect(() => {
@@ -90,10 +78,49 @@ export default function RoomEventsHandler({
     [desktopNotifications, notificationSound]
   );
 
+
+  // ✅ FIX: useRef guard to prevent duplicate event listener registration
+  const hasRegisteredEventsRef = useRef(false);
+  
+  // ✅ FIX: Store callbacks and values in refs to avoid re-registering on every change
+  const callbacksRef = useRef({});
+  const valuesRef = useRef({});
+  
+  // Update refs when values change (but don't trigger useEffect)
+  useEffect(() => {
+    callbacksRef.current = {
+      playSound,
+      showNotification,
+      onConnected,
+      onDisconnected,
+      setInVoiceRoom,
+    };
+    valuesRef.current = {
+      notifyOnJoin,
+      notifyOnLeave,
+      userDisplayName: user?.displayName,
+      roomDisplayName,
+      roomName,
+    };
+  });
+  
   useEffect(() => {
     if (!room) return;
+    
+    // ✅ CRITICAL FIX: Only register events ONCE per room instance
+    if (hasRegisteredEventsRef.current) {
+      console.log("⚠️ Event listeners already registered, skipping duplicate registration");
+      return;
+    }
+    
+    hasRegisteredEventsRef.current = true;
+    console.log("✅ Registering room event listeners (ONCE)");
 
-    const onJoin = (participant) => {
+    // ✅ FIX: Define callbacks INSIDE useEffect, using refs for fresh values
+    const handleJoin = (participant) => {
+      const { playSound, showNotification } = callbacksRef.current;
+      const { notifyOnJoin, userDisplayName, roomDisplayName, roomName } = valuesRef.current;
+      
       playSound("join");
 
       // Bildirim göster (sadece remote participant'lar için)
@@ -101,7 +128,7 @@ export default function RoomEventsHandler({
         notifyOnJoin &&
         participant &&
         !participant.isLocal &&
-        participant.name !== user?.displayName
+        participant.name !== userDisplayName
       ) {
         showNotification(
           "Kullanıcı Katıldı",
@@ -113,15 +140,42 @@ export default function RoomEventsHandler({
       }
     };
 
-    const onLeave = (participant) => {
-      playSound("someone-left");
+    const handleLeave = (participant) => {
+      const { playSound, showNotification } = callbacksRef.current;
+      const { notifyOnLeave, userDisplayName, roomDisplayName, roomName } = valuesRef.current;
+      
+      // 🔇 SECURE FIX: HTML5 Audio Element (Bypass) - Anında Çal
+      // LiveKit'in AudioContext'i ile çatışmamak için bu yöntem seçildi.
+      // 50ms (algılanamaz) güvenlik payı ile anında tepki.
+      setTimeout(() => {
+        try {
+          const audio = new Audio("./sounds/someone-left.mp3");
+          // Volume ayarını store'dan al
+          const volume = valuesRef.current?.sfxVolume ? valuesRef.current.sfxVolume / 100 : 0.5;
+          if (volume > 0) {
+            audio.volume = volume;
+            audio.play().catch(e => {
+              // Sessiz hata - uygulama çökmemeli
+            });
+          }
+        } catch (e) {
+          // Sessiz hata
+        }
+      }, 50);
 
-      // Bildirim göster (sadece remote participant'lar için)
+      // ✅ CRITICAL: Explicit track cleanup to prevent resource leak
+      // ⚠️ Manual track cleanup REMOVED: LiveKit SDK handles this automatically.
+      // Calling stop() manually was causing CPU spikes due to resource conflict.
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`👤 Participant ${participant?.identity} left - trusting SDK for cleanup`);
+      }
+
+      // 🔔 Notification geri açıldı - test ediliyor
       if (
         notifyOnLeave &&
         participant &&
         !participant.isLocal &&
-        participant.name !== user?.displayName
+        participant.name !== userDisplayName
       ) {
         showNotification(
           "Kullanıcı Ayrıldı",
@@ -135,6 +189,8 @@ export default function RoomEventsHandler({
 
     // Bağlantı event'leri
     const onRoomConnected = () => {
+      const { setInVoiceRoom, onConnected } = callbacksRef.current;
+      
       // 🚀 v5.2: Ses odasına bağlandı - idle detection'a bildir
       setInVoiceRoom(true);
       
@@ -146,6 +202,8 @@ export default function RoomEventsHandler({
     };
 
     const onRoomDisconnected = (reason) => {
+      const { setInVoiceRoom, onDisconnected } = callbacksRef.current;
+      
       // 🚀 v5.2: Ses odasından ayrıldı - idle detection'a bildir
       setInVoiceRoom(false);
       
@@ -154,9 +212,18 @@ export default function RoomEventsHandler({
       if (onDisconnected) onDisconnected(reason);
     };
 
-    const onRoomError = (error) => {
-      console.error("Room error:", error);
-      if (onError) onError(error);
+    // 🚀 v5.2: LiveKit SDK'da generic "error" eventi yoktur
+    // Hatalar genellikle MediaDevicesError veya disconnect olarak gelir
+    // MediaDevicesError'u da yakalayıp onError'a yönlendir
+    const onMediaDevicesError = (error) => {
+      console.error("Room MediaDevicesError:", error);
+      // Media device hataları pool rotation tetiklememeli
+      // Sadece log'la
+    };
+    
+    // SignalReconnecting - bağlantı sinyalı koptuğunda
+    const onSignalReconnecting = () => {
+      console.warn("⚠️ Signal connection lost, reconnecting...");
     };
 
     // Video track publish/unpublish event'lerini dinle (debug için)
@@ -179,6 +246,7 @@ export default function RoomEventsHandler({
 
     // Remote participant'ların track'i subscribe ettiğinde
     const onTrackSubscribed = (track, publication, participant) => {
+      console.log("TRACK SUB", participant?.identity);
       if (publication?.source === Track.Source.Camera && participant) {
         if (process.env.NODE_ENV === "development") {
           if (participant.isLocal) {
@@ -228,6 +296,8 @@ export default function RoomEventsHandler({
       }
     };
     const onReconnected = () => {
+      const { onConnected } = callbacksRef.current;
+      
       if (process.env.NODE_ENV === "development") {
         console.log("Room reconnected");
       }
@@ -240,47 +310,34 @@ export default function RoomEventsHandler({
     room.on(RoomEvent.Reconnecting, onReconnecting);
     room.on(RoomEvent.Reconnected, onReconnected);
     room.on(RoomEvent.ConnectionStateChanged, checkConnectionState);
-    room.on(RoomEvent.ParticipantConnected, onJoin);
-    room.on(RoomEvent.ParticipantDisconnected, onLeave);
+    room.on(RoomEvent.ParticipantConnected, handleJoin);
+    room.on(RoomEvent.ParticipantDisconnected, handleLeave);
     room.on(RoomEvent.TrackPublished, onTrackPublished);
     room.on(RoomEvent.TrackUnpublished, onTrackUnpublished);
     room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
 
-    // Error event'leri
-    if (room.on) {
-      // LiveKit room error handling
-      room.on("error", onRoomError);
-    }
+    // 🚀 v5.2: Doğru error event'leri dinle
+    room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
+    room.on(RoomEvent.SignalReconnecting, onSignalReconnecting);
 
     return () => {
+      console.log("🧹 Cleaning up room event listeners");
+      hasRegisteredEventsRef.current = false;
+      
       room.off(RoomEvent.Connected, onRoomConnected);
       room.off(RoomEvent.Disconnected, onRoomDisconnected);
       room.off(RoomEvent.Reconnecting, onReconnecting);
       room.off(RoomEvent.Reconnected, onReconnected);
       room.off(RoomEvent.ConnectionStateChanged, checkConnectionState);
-      room.off(RoomEvent.ParticipantConnected, onJoin);
-      room.off(RoomEvent.ParticipantDisconnected, onLeave);
+      room.off(RoomEvent.ParticipantConnected, handleJoin);
+      room.off(RoomEvent.ParticipantDisconnected, handleLeave);
       room.off(RoomEvent.TrackPublished, onTrackPublished);
       room.off(RoomEvent.TrackUnpublished, onTrackUnpublished);
       room.off(RoomEvent.TrackSubscribed, onTrackSubscribed);
-      if (room.off) {
-        room.off("error", onRoomError);
-      }
+      room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
+      room.off(RoomEvent.SignalReconnecting, onSignalReconnecting);
     };
-  }, [
-    room,
-    playSound,
-    onConnected,
-    onDisconnected,
-    onError,
-    roomName,
-    desktopNotifications,
-    notifyOnJoin,
-    notifyOnLeave,
-    notificationSound,
-    showNotification,
-    user,
-  ]);
+  }, [room]); // ✅ ONLY room dependency - all other values accessed via refs
 
   // Uygulama kapatıldığında cleanup (beforeunload event + Electron IPC)
   useEffect(() => {

@@ -114,7 +114,7 @@ const RailItem = memo(function RailItem({
 
       {/* Main Icon Container */}
       <Tooltip 
-        content={isRoomActive && !active ? "Önce sesli sohbetten ayrılmalısın" : label} 
+        content={isRoomActive && !active ? label : label} 
         position="right" 
         delay={0}
       >

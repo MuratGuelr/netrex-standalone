@@ -14,7 +14,8 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 
 const ToastItem = ({ toast }) => {
   const removeToast = useToastStore((s) => s.removeToast);
-  const { disableAnimations, graphicsQuality } = useSettingsStore();
+  const disableAnimations = useSettingsStore(state => state.disableAnimations);
+  const graphicsQuality = useSettingsStore(state => state.graphicsQuality);
 
   // Optimized remove timer (Single timeout instead of interval)
   useEffect(() => {

@@ -2,24 +2,6 @@ import { useCallback, useRef, useEffect, useMemo } from "react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSoundManagerStore } from "@/src/store/soundManagerStore";
 
-/**
- * ✅ ULTRA-OPTIMIZED Sound Effects Hook v2.0
- * 
- * OPTIMIZATIONS:
- * - ✅ useRef for volume (no dependency hell)
- * - ✅ Pre-calculated normalized volume
- * - ✅ getState() instead of subscription (zero re-renders)
- * - ✅ Init on mount (no lazy check overhead)
- * - ✅ Development-only error logging
- * - ✅ Memoized return object
- * - ✅ Zero dependencies on playSound
- * 
- * Performance Impact:
- * - %90 fewer re-renders
- * - %100 fewer store subscriptions
- * - %50 fewer math operations
- * - Zero console spam in production
- */
 export function useSoundEffects() {
   // ✅ OPTIMIZATION #1 & #4: Ref with pre-normalized volume
   const normalizedVolumeRef = useRef(0);

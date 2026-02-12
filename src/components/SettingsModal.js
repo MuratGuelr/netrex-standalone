@@ -18,7 +18,8 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("account");
   const contentRef = useRef(null);
   const accountSettingsRef = useRef(null);
-  const { settingsScrollToSection, setSettingsScrollToSection } = useSettingsStore();
+  const settingsScrollToSection = useSettingsStore(state => state.settingsScrollToSection);
+  const setSettingsScrollToSection = useSettingsStore(state => state.setSettingsScrollToSection);
 
   useEffect(() => {
     setMounted(true);
@@ -232,7 +233,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 {activeTab === "application" && <ApplicationSettings />}
                 {activeTab === "appearance" && <AppearanceSettings />}
                 {activeTab === "performance" && <PerformanceSettings />}
-                {activeTab === "voice" && <VoiceSettings />}
+                {activeTab === "voice" && <VoiceSettings isSettingsModalOpen={isOpen} />}
                 {activeTab === "keybinds" && <KeybindSettings />}
                 {activeTab === "notifications" && <NotificationSettings />}
                 {activeTab === "about" && <AboutSettings />}

@@ -103,20 +103,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   }, [deleteModal, deleteServer, currentServer?.id]);
 
   const handleTextChannelClick = useCallback((channel) => {
-    const isUserInVoice = Object.values(voiceStates || {}).some(cp => cp?.some(p => p.userId === user?.uid));
-    if (!isUserInVoice) { 
-      onJoinChannel(channel); 
-      return; 
-    }
-    const { loadChannelMessages, setShowChatPanel, showChatPanel, currentChannel } = useChatStore.getState();
-    if (currentChannel?.id === channel.id && showChatPanel) { 
-      setShowChatPanel(false); 
-    } else { 
-      loadChannelMessages(channel.id, currentServer.id); 
-      setShowChatPanel(true); 
-      onJoinChannel(channel); 
-    }
-  }, [voiceStates, user?.uid, currentServer?.id, onJoinChannel]);
+    onJoinChannel(channel);
+  }, [onJoinChannel]);
 
   if (!currentServer) return null;
 
@@ -128,7 +116,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
       <div className="absolute top-1/2 -right-20 w-40 h-40 bg-purple-600/10 blur-[80px] pointer-events-none" />
 
       {/* 1. DASHBOARD HEADER */}
-      <div className="relative z-30 p-4 pb-2" ref={menuRef}>
+      <div className="relative z-10 p-4 pb-2" ref={menuRef}>
         <ServerHeader
           server={currentServer}
           showMenu={showMenu}

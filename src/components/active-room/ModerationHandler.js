@@ -85,8 +85,19 @@ export default function ModerationHandler({
     }
   }, [localParticipant, setServerMuted, setServerDeafened, setMutedBy, setDeafenedBy, setMutedAt, setDeafenedAt]);
 
+  // ✅ FIX: useRef guard to prevent duplicate event listener registration
+  const hasRegisteredModerationRef = useRef(false);
+  
   useEffect(() => {
     if (!room || !localParticipant) return;
+    
+    // ✅ CRITICAL FIX: Only register events ONCE per room instance
+    if (hasRegisteredModerationRef.current) {
+      return;
+    }
+    
+    hasRegisteredModerationRef.current = true;
+    console.log("✅ Registering moderation event listener (ONCE)");
 
     const handleDataReceived = (payload, participant) => {
       // Sadece debugging için log ekleyelim
@@ -157,8 +168,12 @@ export default function ModerationHandler({
     };
 
     room.on(RoomEvent.DataReceived, handleDataReceived);
-    return () => room.off(RoomEvent.DataReceived, handleDataReceived);
-  }, [room, localParticipant, setServerMuted, setServerDeafened, isDeafened, setIsDeafened, setIsMuted, playSound, setMutedBy, setDeafenedBy, setMutedAt, setDeafenedAt]);
+    return () => {
+      console.log("🧹 Cleaning up moderation event listener");
+      hasRegisteredModerationRef.current = false;
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [room, localParticipant]); // ✅ Minimal dependencies - callbacks are stable via closure
 
   return null;
 }

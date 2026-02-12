@@ -1,5 +1,5 @@
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { useChatStore } from "@/src/store/chatStore";
@@ -15,10 +15,23 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
     useChatStore();
   const { user } = useAuthStore();
   const { playSound } = useSoundEffects();
-  const { desktopNotifications, notifyOnMessage } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notifyOnMessage = useSettingsStore(state => state.notifyOnMessage);
 
+  // ✅ FIX: useRef guard to prevent duplicate event listener registration
+  const hasRegisteredChatRef = useRef(false);
+  
   useEffect(() => {
     if (!room) return;
+    
+    // ✅ CRITICAL FIX: Only register events ONCE per room instance
+    if (hasRegisteredChatRef.current) {
+      return;
+    }
+    
+    hasRegisteredChatRef.current = true;
+    console.log("✅ Registering chat event listener (ONCE)");
+    
     const handleData = (payload, participant, kind, topic) => {
       if (topic !== "chat" && topic !== "typing") return;
       try {
@@ -132,19 +145,11 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
       }
     };
     room.on(RoomEvent.DataReceived, handleData);
-    return () => room.off(RoomEvent.DataReceived, handleData);
-  }, [
-    room,
-    currentChannel,
-    incrementUnread,
-    user,
-    showChatPanel,
-    setShowChatPanel,
-    playSound,
-    desktopNotifications,
-    notifyOnMessage,
-    textChannels,
-    loadChannelMessages,
-  ]);
+    return () => {
+      console.log("🧹 Cleaning up chat event listener");
+      hasRegisteredChatRef.current = false;
+      room.off(RoomEvent.DataReceived, handleData);
+    };
+  }, [room]); // ✅ Minimal dependencies - callbacks are stable via closure
   return null;
 }

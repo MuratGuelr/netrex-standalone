@@ -84,7 +84,8 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
     prevProps.isActive === nextProps.isActive &&
     prevProps.hasRestrictions === nextProps.hasRestrictions &&
     prevProps.participants.length === nextProps.participants.length &&
-    JSON.stringify(prevProps.participants) === JSON.stringify(nextProps.participants)
+    JSON.stringify(prevProps.participants) === JSON.stringify(nextProps.participants) &&
+    prevProps.onClick === nextProps.onClick // ✅ onClick değişimini kontrol et!
   );
 });
 

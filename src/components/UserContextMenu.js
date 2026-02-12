@@ -4,19 +4,16 @@ import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { useServerStore } from "@/src/store/serverStore";
 import VolumeSlider from "@/src/components/VolumeSlider";
 import ModerationPanel from "@/src/components/ModerationPanel";
+import QuickStatusManager from "@/src/components/settings/QuickStatusManager";
 
 /**
- * ✅ ULTRA-OPTIMIZED UserContextMenu v3.0
+ * ✅ ULTRA-OPTIMIZED UserContextMenu v3.1
  * 
  * Component structure:
  * - VolumeSlider: Isolated (volume slider hareket ettiğinde sadece o re-render)
  * - ModerationPanel: Isolated (status değiştiğinde sadece o re-render)
+ * - QuickStatusManager: Local user status management
  * - Main: Minimal state (sadece positioning)
- * 
- * Benefits:
- * - %80 daha az re-render
- * - Slider smooth (debounced, isolated)
- * - Custom comparison ile unnecessary render blocked
  */
 export default function UserContextMenu({
   x,
@@ -60,16 +57,21 @@ export default function UserContextMenu({
     let newLeft = x;
     let newTop = y;
 
-    if (x + 260 > window.innerWidth) {
-      newLeft = x - 260;
+    // Menu size estimate: w:288, h: depends on content
+    // For local user h is approx 300, for remote approx 400
+    const mWidth = 288;
+    const mHeight = isLocal ? 350 : 450;
+
+    if (x + mWidth > window.innerWidth) {
+      newLeft = x - mWidth;
     }
 
-    if (y + 150 > window.innerHeight) {
-      newTop = y - 150;
+    if (y + mHeight > window.innerHeight) {
+      newTop = y - mHeight;
     }
 
     setCoords({ top: newTop, left: newLeft });
-  }, [x, y]);
+  }, [x, y, isLocal]);
 
   // Outside click handler
   useEffect(() => {
@@ -109,28 +111,28 @@ export default function UserContextMenu({
       </div>
 
       {/* Content */}
-      {!isLocal ? (
-        <div className="px-1 py-2 space-y-4">
-          {/* ✅ Isolated VolumeSlider */}
-          <VolumeSlider participantIdentity={participant.identity} />
+      <div className="px-1 py-1">
+        {!isLocal ? (
+          <div className="space-y-4 py-2">
+            {/* ✅ Isolated VolumeSlider */}
+            <VolumeSlider participantIdentity={participant.identity} />
 
-          {/* ✅ Isolated ModerationPanel */}
-          {(canMute || canDeafen) && (
-            <ModerationPanel
-              participant={participant}
-              localParticipant={localParticipant}
-              statusFlags={statusFlags}
-              currentServerId={currentServer?.id}
-              canMute={canMute}
-              canDeafen={canDeafen}
-            />
-          )}
-        </div>
-      ) : (
-        <div className="px-2 py-3 text-xs text-[#5c5e66] italic text-center bg-white/[0.02] border border-white/[0.04] rounded-xl">
-          Kendi sesini buradan ayarlayamazsın.
-        </div>
-      )}
+            {/* ✅ Isolated ModerationPanel */}
+            {(canMute || canDeafen) && (
+              <ModerationPanel
+                participant={participant}
+                localParticipant={localParticipant}
+                statusFlags={statusFlags}
+                currentServerId={currentServer?.id}
+                canMute={canMute}
+                canDeafen={canDeafen}
+              />
+            )}
+          </div>
+        ) : (
+          <QuickStatusManager />
+        )}
+      </div>
     </div>
   );
 }

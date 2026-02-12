@@ -1,18 +1,21 @@
 import { memo, useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Volume2, Volume1, VolumeX } from "lucide-react";
-import { useSettingsStore } from "@/src/store/settingsStore";
+import { useParticipantVolumeStore } from "@/src/store/participantVolumeStore";
 
 /**
- * ✅ OPTIMIZED VolumeSlider
+ * ✅ OPTIMIZED VolumeSlider - LiveKit Integration
  * - Isolated state - parent re-render'dan etkilenmez
  * - Debounced store update
  * - Memoized calculations
+ * - LiveKit native volume range: 0.0-1.0 (UI: 0-200%)
  */
 const VolumeSlider = memo(({ participantIdentity }) => {
-  const { userVolumes, setUserVolume } = useSettingsStore();
+  const { volumes, setVolume: setStoreVolume } = useParticipantVolumeStore();
   
-  const currentVol = (userVolumes && userVolumes[participantIdentity]) ?? 100;
-  const [volume, setVolume] = useState(Math.min(currentVol, 200));
+  // LiveKit uses 0.0-1.0 range, but UI shows 0-200%
+  // currentVol is in LiveKit range (0.0-1.0), we convert to % for UI
+  const currentVol = volumes[participantIdentity] ?? 1.0;  // Default 100% (1.0)
+  const [volume, setVolume] = useState(Math.round(currentVol * 100));  // Convert to 0-100% for UI
   
   const volumeTimeoutRef = useRef(null);
   const latestVolumeRef = useRef(volume);
@@ -24,26 +27,29 @@ const VolumeSlider = memo(({ participantIdentity }) => {
 
   // Debounced volume change
   const handleVolumeChange = useCallback((e) => {
-    const newVol = parseInt(e.target.value);
-    setVolume(newVol);
+    const newVolPercent = parseInt(e.target.value);
+    setVolume(newVolPercent);
     
     if (volumeTimeoutRef.current) {
       clearTimeout(volumeTimeoutRef.current);
     }
     volumeTimeoutRef.current = setTimeout(() => {
-      setUserVolume(participantIdentity, newVol);
+      // Convert percentage to LiveKit range (0.0-2.0, allowing boost up to 200%)
+      const livekitVolume = newVolPercent / 100;
+      setStoreVolume(participantIdentity, livekitVolume);
     }, 150);
-  }, [participantIdentity, setUserVolume]);
+  }, [participantIdentity, setStoreVolume]);
 
   // Cleanup
   useEffect(() => {
     return () => {
       if (volumeTimeoutRef.current) {
         clearTimeout(volumeTimeoutRef.current);
-        setUserVolume(participantIdentity, latestVolumeRef.current);
+        const livekitVolume = latestVolumeRef.current / 100;
+        setStoreVolume(participantIdentity, livekitVolume);
       }
     };
-  }, [participantIdentity, setUserVolume]);
+  }, [participantIdentity, setStoreVolume]);
 
   // Memoized icon
   const VolumeIcon = useMemo(() => {

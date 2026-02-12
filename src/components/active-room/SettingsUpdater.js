@@ -8,17 +8,15 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serverDeafened }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const {
-    audioInputId,
-    videoId,
-    noiseSuppression,
-    echoCancellation,
-    autoGainControl,
-    noiseSuppressionMode,
-    videoResolution, // Kamera çözünürlüğü
-    videoFrameRate, // Kamera FPS
-    videoCodec, // Video codec
-  } = useSettingsStore();
+  const audioInputId = useSettingsStore(state => state.audioInputId);
+  const videoId = useSettingsStore(state => state.videoId);
+  const noiseSuppression = useSettingsStore(state => state.noiseSuppression);
+  const echoCancellation = useSettingsStore(state => state.echoCancellation);
+  const autoGainControl = useSettingsStore(state => state.autoGainControl);
+  const noiseSuppressionMode = useSettingsStore(state => state.noiseSuppressionMode);
+  const videoResolution = useSettingsStore(state => state.videoResolution);
+  const videoFrameRate = useSettingsStore(state => state.videoFrameRate);
+  const videoCodec = useSettingsStore(state => state.videoCodec);
 
   const prevSettingsRef = useRef({
     audioInputId,
@@ -287,6 +285,44 @@ export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serv
     videoFrameRate,
     videoCodec,
   ]);
+
+  // ✅ YENİ: Quick Status Sync (Metadata)
+  // Store'daki quickStatus değiştiğinde LiveKit metadata'sını güncelle
+  const quickStatus = useSettingsStore(state => state.quickStatus);
+  
+  useEffect(() => {
+    if (!localParticipant || !room || room.state !== ConnectionState.Connected) return;
+
+    const updateMetadata = async () => {
+      try {
+        const currentMeta = localParticipant.metadata ? JSON.parse(localParticipant.metadata) : {};
+        
+        // Değişiklik kontrolü (gereksiz update'i önle)
+        // Eğer quickStatus null ise ve metadata'da da yoksa güncelleme yapma
+        // Eğer quickStatus varsa ve metadata ile aynıysa güncelleme yapma
+        const currentQuickStatus = currentMeta.quickStatus;
+        
+        const isDifferent = JSON.stringify(currentQuickStatus) !== JSON.stringify(quickStatus);
+        
+        if (!isDifferent) return;
+        
+        const newMeta = {
+          ...currentMeta,
+          quickStatus: quickStatus
+        };
+        
+        await localParticipant.setMetadata(JSON.stringify(newMeta));
+        
+        if (process.env.NODE_ENV === "development") {
+            console.log("✅ Quick Status synced to metadata:", quickStatus);
+        }
+      } catch (error) {
+        console.error("❌ Quick Status sync error:", error);
+      }
+    };
+
+    updateMetadata();
+  }, [quickStatus, localParticipant, room]);
 
   return null;
 }

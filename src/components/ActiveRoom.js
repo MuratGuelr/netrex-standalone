@@ -7,6 +7,7 @@ import {
 } from "@livekit/components-react";
 import {
   Track,
+  DisconnectReason,
 } from "livekit-client";
 import "@livekit/components-styles";
 import {
@@ -25,6 +26,7 @@ import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useAuthStore } from "@/src/store/authStore";
 import { useChatStore } from "@/src/store/chatStore";
 import { useServerStore } from "@/src/store/serverStore";
+import { useApplyParticipantVolumes } from "@/src/hooks/useApplyParticipantVolumes";
 import { db } from "@/src/lib/firebase";
 import {
   doc,
@@ -100,6 +102,9 @@ const MemoizedMicrophoneManager = React.memo(() => {
 function VoiceProcessorHandler() {
   const { rawAudioMode } = useSettingsStore();
   
+  // ✅ Volume applicator - Store'daki volume değerlerini track'lere uygula
+  useApplyParticipantVolumes();
+  
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.log("🎤 VoiceProcessorHandler mounted, rawAudioMode:", rawAudioMode);
@@ -169,7 +174,12 @@ export default function ActiveRoom({
   const [showSettingsLocal, setShowSettingsLocal] = useState(false);
   
   // Voice State and Settings Modal - Global Store'dan al
-  const { isMuted, isDeafened, toggleMute, toggleDeaf, showSettingsModal, setSettingsOpen } = useSettingsStore();
+  const isMuted = useSettingsStore(state => state.isMuted);
+  const isDeafened = useSettingsStore(state => state.isDeafened);
+  const toggleMute = useSettingsStore(state => state.toggleMute);
+  const toggleDeaf = useSettingsStore(state => state.toggleDeaf);
+  const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
+  const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
   
   // Settings modal: hem lokal state hem de store'dan açılabilir
   const showSettings = showSettingsLocal || showSettingsModal;
@@ -228,6 +238,7 @@ export default function ActiveRoom({
     hasConnectedOnceRef.current = false;
     // Token'ı burda sıfırlama, alttaki useEffect token alacak
   }, [roomName]); // Oda ismi değiştiğinde (zaten key değişiyor ama yine de)
+
 
   // 🚀 v5.2: Firebase'den aktif sunucu indeksini dinle (tüm kullanıcılar senkronize olsun)
   useEffect(() => {
@@ -292,18 +303,16 @@ export default function ActiveRoom({
   }, [serverPoolMode, serverCount]);
 
 
-  const { 
-    noiseSuppression, 
-    echoCancellation, 
-    autoGainControl, 
-    disableAnimations,
-    disableBackgroundEffects,
-    videoCodec,
-    videoResolution,
-    videoFrameRate,
-    enableCamera,
-    videoId
-  } = useSettingsStore();
+  const noiseSuppression = useSettingsStore(state => state.noiseSuppression);
+  const echoCancellation = useSettingsStore(state => state.echoCancellation);
+  const autoGainControl = useSettingsStore(state => state.autoGainControl);
+  const disableAnimations = useSettingsStore(state => state.disableAnimations);
+  const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
+  const videoCodec = useSettingsStore(state => state.videoCodec);
+  const videoResolution = useSettingsStore(state => state.videoResolution);
+  const videoFrameRate = useSettingsStore(state => state.videoFrameRate);
+  const enableCamera = useSettingsStore(state => state.enableCamera);
+  const videoId = useSettingsStore(state => state.videoId);
 
   // Inject Global Animation Disable Config
   useEffect(() => {
@@ -388,7 +397,15 @@ export default function ActiveRoom({
       clearTimeout(connectionTimeoutRef.current);
       connectionTimeoutRef.current = null;
     }
+  }, [roomName, username, userId]);
 
+  // Token fetch useEffect - SADECE ilk bağlantıda çalışmalı
+  useEffect(() => {
+    // ✅ FIX: Eğer zaten bağlandıysa token'ı yeniden alma
+    if (hasConnectedOnce) {
+      return;
+    }
+    
     (async () => {
       try {
         if (window.netrex) {
@@ -466,7 +483,7 @@ export default function ActiveRoom({
         connectionTimeoutRef.current = null;
       }
     };
-  }, [roomName, username, userId, serverIndex]);
+  }, [roomName, username, userId, hasConnectedOnce]); // ✅ Removed serverIndex/serverUrl - they're set INSIDE this effect
 
   // Component unmount veya room değiştiğinde cleanup
   useEffect(() => {
@@ -554,11 +571,68 @@ export default function ActiveRoom({
   // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
   const handleDisconnect = async (reason) => {
     console.log("LiveKit bağlantısı koptu:", reason);
+    
+    // 🚀 v5.2: Disconnect reason'ı kontrol et - quota/limit hatası olabilir
+    // LiveKit quota aşıldığında doğrudan disconnect eder, "error" event'i fırlatmaz
+    
+    // Enum kontrolü (daha güvenli)
+    const reasonNum = Number(reason);
+    
+    // KESİNLİKLE ROTATION YAPILMAMASI GEREKEN DURUMLAR
+    // 1: CLIENT_INITIATED (Kullanıcı kendi çıktı)
+    // 2: DUPLICATE_IDENTITY (Başka yerden girdi)
+    // 10: ROOM_CLOSED (Oda kapandı - normal kapanış)
+    if (
+      reasonNum === DisconnectReason.CLIENT_INITIATED || 
+      reasonNum === DisconnectReason.DUPLICATE_IDENTITY ||
+      reasonNum === DisconnectReason.ROOM_CLOSED
+    ) {
+      console.log(`ℹ️ Normal disconnect (${reason}), rotation yapılmayacak.`);
+      return;
+    }
+
+    // ROTATION YAPILMASI GEREKEN KRİTİK DURUMLAR
+    // 3: SERVER_SHUTDOWN (Sunucu kapandıysa/restart atıldıysa kesin değişim gerekir)
+    // NOT: JOIN_FAILURE (7) tek başına yeterli değil, internet kopukluğu da olabilir.
+    // O yüzden sadece SERVER_SHUTDOWN'u enum olarak kabul ediyoruz.
+    const isCriticalDisconnect = reasonNum === DisconnectReason.SERVER_SHUTDOWN;
+
+    // String kontrolü (EN ÖNEMLİ KISIM)
+    // Kullanıcının belirttiği kesin "kota/limit" hataları buraya eklenmeli
+    const reasonStr = String(reason || '').toLowerCase();
+    const quotaDisconnectReasons = [
+      'quota', 
+      'rate limit', 
+      'limit exceeded', 
+      'limit reached',
+      'resource exhausted', 
+      'too many requests', 
+      '429',
+      'connection limit', 
+      'participant limit', 
+      'free tier',
+      'server_shutdown'
+    ];
+    
+    // Sadece tam eşleşme varsa (veya server shutdown ise)
+    const isQuotaTextMatch = quotaDisconnectReasons.some(q => reasonStr.includes(q));
+    
+    if ((isCriticalDisconnect || isQuotaTextMatch) && serverPoolMode) {
+      console.warn(`⚠️ Critical Disconnect (${reason}) indicates STRICT quota error, triggering pool rotation...`);
+      
+      let errorDesc = `Disconnect: ${reason}`;
+      if (reasonNum === DisconnectReason.SERVER_SHUTDOWN) errorDesc += " (server_shutdown)";
+      if (isQuotaTextMatch) errorDesc += " (quota_limit_detected)";
+
+      // handleError quota kontrolünü ve rotation'ı yapacak
+      await handleError(new Error(errorDesc));
+      return; 
+    }
+    
     // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
     if (hasConnectedOnce) {
       setIsReconnecting(true);
     }
-
 
     // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
     if (userId && roomName) {
@@ -590,15 +664,19 @@ export default function ActiveRoom({
     
     // Quota/limit hataları - server pool ile çözülebilir
     const quotaErrors = [
-      'quota exceeded',
+      'quota',
       'rate limit',
+      'limit exceeded',
       'limit reached',
+      'resource exhausted',
+      'too many requests',
       'connection limit',
       'participant limit',
       'minutes exceeded',
       'free tier',
       '429',
       '503',
+      'server_shutdown',
     ];
     
     const isQuotaError = quotaErrors.some(q => 
@@ -606,7 +684,13 @@ export default function ActiveRoom({
     );
     
     // Server pool modunda ve quota hatası aldıysak
-    if (serverPoolMode && isQuotaError) {
+    // NOT: isQuotaError false olsa bile, bağlantı hatası da rotation tetikleyebilir
+    const isConnectionFailure = !isQuotaError && [
+      'connection failed', 'could not connect', 'websocket error',
+      'timeout', 'network error', 'disconnect:',
+    ].some(c => errorMessage.toLowerCase().includes(c.toLowerCase()));
+    
+    if (serverPoolMode && (isQuotaError || isConnectionFailure)) {
       // Sonsuz döngü koruması
       if (rotationCountRef.current >= MAX_ROTATIONS) {
         console.error(`❌ Maksimum rotation sayısına ulaşıldı (${MAX_ROTATIONS}). Tüm sunucular dolu olabilir.`);
@@ -783,10 +867,11 @@ export default function ActiveRoom({
     );
   }
 
+
   return (
     <LiveKitRoom
-      // KEY: roomName + serverIndex değiştiğinde component'i tamamen yeniden mount et
-      key={`${roomName}-${serverIndex}`}
+      // KEY: ONLY roomName changes should remount - serverIndex changes are handled by serverUrl prop
+      key={roomName}
       // DÜZELTME: video={false} yapıyoruz ki otomatik yönetim manuel fonksiyonumuzla çakışmasın.
       video={false}
       audio={true}
@@ -823,6 +908,12 @@ export default function ActiveRoom({
       // Handle disconnect event immediately
       onDisconnected={(reason) => {
         console.log("🔌 LiveKitRoom disconnected:", reason);
+      }}
+      // 🚀 v5.2: LiveKitRoom built-in onError - bağlantı hataları için
+      // Bu, LiveKit SDK'nın kendi error handling mekanizması
+      onError={(error) => {
+        console.error("🔌 LiveKitRoom onError:", error);
+        handleError(error);
       }}
     >
       <MemoizedBackground disableEffects={disableBackgroundEffects} />
@@ -1003,38 +1094,6 @@ export default function ActiveRoom({
           >
             <Users size={16} />
           </button>
-
-          {/* Chat butonu */}
-          {currentTextChannel && (
-            <button
-              onClick={() => setShowChatPanel(!showChatPanel)}
-              title="Sohbet"
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 ${
-                showChatPanel
-                  ? "bg-gradient-to-br from-indigo-500/20 to-purple-500/10 text-white border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.2)]"
-                  : "text-white/60 hover:text-white hover:bg-white/[0.05]"
-              }`}
-            >
-              <MessageSquare size={16} />
-            </button>
-          )}
-
-          {/* Chat pozisyon değiştirme */}
-          {showVoicePanel && showChatPanel && currentTextChannel && (
-            <button
-              onClick={() =>
-                setChatPosition(chatPosition === "right" ? "left" : "right")
-              }
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-white/50 hover:text-white/90 hover:bg-white/[0.05] transition-all duration-200 hover:scale-110 active:scale-95"
-              title="Chat pozisyonunu değiştir"
-            >
-              {chatPosition === "right" ? (
-                <ChevronLeft size={16} />
-              ) : (
-                <ChevronRight size={16} />
-              )}
-            </button>
-          )}
         </div>
       </div>
 

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Keyboard, Info, Mic, Volume2, Camera } from "lucide-react";
+import { Keyboard, Info, Mic, Volume2, Camera, Clock } from "lucide-react";
 import { useRoomContext } from "@livekit/components-react";
-import { useSettingsStore } from "@/src/store/settingsStore";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { toastOnce } from "@/src/utils/toast";
 import KeybindRow from "../KeybindRow";
@@ -36,16 +35,33 @@ export default function KeybindSettings() {
   const [cameraKeybinding, setCameraKeybinding] = useState(null);
   const [error, setError] = useState(null);
   const [recordedKeybinding, setRecordedKeybinding] = useState(null);
+  const [quickStatusKeybinding, setQuickStatusKeybinding] = useState(null);
   useEffect(() => {
-    if (window.netrex) {
-      window.netrex.getHotkey("mute").then((k) => setMuteKeybinding(k || null));
-      window.netrex
-        .getHotkey("deafen")
-        .then((k) => setDeafenKeybinding(k || null));
-      window.netrex
-        .getHotkey("camera")
-        .then((k) => setCameraKeybinding(k || null));
-    }
+    const loadHotkeys = async () => {
+        if (!window.netrex) return;
+        
+        try {
+            // Load all hotkeys in parallel
+            const [mute, deafen, camera, quickStatus] = await Promise.all([
+                window.netrex.getHotkey("mute").catch(e => { console.error("Error loading mute:", e); return null; }),
+                window.netrex.getHotkey("deafen").catch(e => { console.error("Error loading deafen:", e); return null; }),
+                window.netrex.getHotkey("camera").catch(e => { console.error("Error loading camera:", e); return null; }),
+                window.netrex.getHotkey("quick-status").catch(e => { console.error("Error loading quick-status:", e); return null; })
+            ]);
+
+            console.log("Loaded Hotkeys:", { mute, deafen, camera, quickStatus });
+
+            if (mute) setMuteKeybinding(mute);
+            if (deafen) setDeafenKeybinding(deafen);
+            if (camera) setCameraKeybinding(camera);
+            if (quickStatus) setQuickStatusKeybinding(quickStatus);
+        } catch (error) {
+            console.error("Failed to load hotkeys:", error);
+            setError("Tuş atamaları yüklenirken bir sorun oluştu.");
+        }
+    };
+
+    loadHotkeys();
   }, []);
   /* RECORDING LOGIC */
   // Kullanıcı odada mı kontrol et (input listener zaten çalışıyor mu?)
@@ -90,8 +106,9 @@ export default function KeybindSettings() {
         const currentMute = recording !== "mute" ? muteKeybinding : null;
         const currentDeafen = recording !== "deafen" ? deafenKeybinding : null;
         const currentCamera = recording !== "camera" ? cameraKeybinding : null;
+        const currentQuickStatus = recording !== "quick-status" ? quickStatusKeybinding : null;
 
-        const isDuplicate = [currentMute, currentDeafen, currentCamera].some(existing => {
+        const isDuplicate = [currentMute, currentDeafen, currentCamera, currentQuickStatus].some(existing => {
             if (!existing) return false;
             // Mouse
             if (existing.type === "mouse" && keybinding.type === "mouse") {
@@ -126,6 +143,7 @@ export default function KeybindSettings() {
           if (recording === "mute") setMuteKeybinding(keybinding);
           if (recording === "deafen") setDeafenKeybinding(keybinding);
           if (recording === "camera") setCameraKeybinding(keybinding);
+          if (recording === "quick-status") setQuickStatusKeybinding(keybinding);
           
           // Eğer sadece modifier tuşuna basıldıysa kaydı durdurma (Kombinasyon için bekle)
           // Örnek: Ctrl'ye bastı -> Ctrl atandı ama kayıt devam ediyor -> A'ya bastı -> Ctrl+A atandı ve kayıt bitti.
@@ -287,6 +305,34 @@ export default function KeybindSettings() {
               const result = await window.netrex.updateHotkey("camera", null);
               if (result?.success) {
                 setCameraKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(
+                  result?.error || "Tuş ataması kaldırılamadı.",
+                  "error"
+                );
+              }
+            }
+          }}
+        />
+        <KeybindRow
+          label="Hızlı Durumu Aç/Kapat"
+          description="Son kaydedilen veya seçilen mesajı ekranda gösterir/gizler."
+          shortcut={formatKeybinding(quickStatusKeybinding)}
+          isRecording={recording === "quick-status"}
+          recordedKeybinding={recording === "quick-status" ? recordedKeybinding : null}
+          formatKeybinding={formatKeybinding}
+          icon={<Clock size={16} className="text-amber-400" />}
+          onClick={() => {
+            setRecording("quick-status");
+            setRecordedKeybinding(null);
+            setError(null);
+          }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("quick-status", null);
+              if (result?.success) {
+                setQuickStatusKeybinding(null);
                 toastOnce("Tuş ataması kaldırıldı.", "success");
               } else {
                 toastOnce(

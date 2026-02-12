@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useChatStore } from "@/src/store/chatStore";
 import { toastOnce } from "@/src/utils/toast";
@@ -88,16 +89,14 @@ export default function BottomControls({
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const { 
-    profileColor, 
-    enableCamera, 
-    videoId, 
-    videoResolution, 
-    videoFrameRate, 
-    videoCodec,
-    controlBarHidden,
-    toggleControlBarHidden,
-  } = useSettingsStore();
+  const profileColor = useSettingsStore(state => state.profileColor);
+  const enableCamera = useSettingsStore(state => state.enableCamera);
+  const videoId = useSettingsStore(state => state.videoId);
+  const videoResolution = useSettingsStore(state => state.videoResolution);
+  const videoFrameRate = useSettingsStore(state => state.videoFrameRate);
+  const videoCodec = useSettingsStore(state => state.videoCodec);
+  const controlBarHidden = useSettingsStore(state => state.controlBarHidden);
+  const toggleControlBarHidden = useSettingsStore(state => state.toggleControlBarHidden);
   const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
@@ -106,6 +105,9 @@ export default function BottomControls({
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
   
+  const quickStatus = useSettingsStore(state => state.quickStatus);
+  const toggleLastQuickStatus = useSettingsStore(state => state.toggleLastQuickStatus);
+
   const stateRef = useRef({
     isMuted,
     isDeafened,
@@ -118,6 +120,7 @@ export default function BottomControls({
     deafenedBy,
     mutedAt,
     deafenedAt,
+    quickStatus,
   });
   useEffect(() => {
     stateRef.current = {
@@ -132,8 +135,9 @@ export default function BottomControls({
       deafenedBy,
       mutedAt,
       deafenedAt,
+      quickStatus,
     };
-  }, [isMuted, isDeafened, localParticipant, profileColor, isCameraOn, serverMuted, serverDeafened, mutedBy, deafenedBy, mutedAt, deafenedAt]);
+  }, [isMuted, isDeafened, localParticipant, profileColor, isCameraOn, serverMuted, serverDeafened, mutedBy, deafenedBy, mutedAt, deafenedAt, quickStatus]);
 
   // Metadata update'i debounce et (timeout önlemek için)
   const metadataUpdateRef = useRef(null);
@@ -168,6 +172,7 @@ export default function BottomControls({
       isCameraOn,
       serverMuted,
       serverDeafened,
+      quickStatus,
       mutedBy: serverMuted ? mutedBy : null,
       deafenedBy: serverDeafened ? deafenedBy : null,
       mutedAt: serverMuted ? mutedAt : null,
@@ -271,7 +276,8 @@ export default function BottomControls({
     mutedBy,
     deafenedBy,
     mutedAt,
-    deafenedAt
+    deafenedAt,
+    quickStatus
   ]);
 
   // Video track durumunu senkronize et (sadece event'lerde, sürekli kontrol yok)
@@ -868,6 +874,7 @@ export default function BottomControls({
       if (action === "toggle-mute") toggleMute();
       if (action === "toggle-deafen") toggleDeaf();
       if (action === "toggle-camera") toggleCamera();
+      if (action === "toggle-quick-status") toggleLastQuickStatus();
     };
     
     // ✅ Modern pattern: onHotkeyTriggered returns cleanup function
@@ -879,7 +886,7 @@ export default function BottomControls({
     return () => {
       if (cleanup) cleanup();
     };
-  }, [toggleMute, toggleDeaf, toggleCamera]);
+  }, [toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus]);
 
   // Ekran paylaşımı menüsü için dışarı tıklama kontrolü
   useEffect(() => {
@@ -906,11 +913,11 @@ export default function BottomControls({
         onStart={startScreenShare}
       />
       
-      {/* Show Toggle Button when control bar is hidden - Ultra Bright Indigo Neon */}
-      {controlBarHidden && (
+      {/* Show Toggle Button when control bar is hidden - Ultra Bright Indigo Neon - Rendered via Portal to escape stacking contexts */}
+      {controlBarHidden && createPortal(
         <button
           onClick={toggleControlBarHidden}
-          className="fixed bottom-6 right-6 z-[999] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-300 animate-fadeScaleIn group overflow-hidden"
+          className="fixed bottom-6 right-6 z-[50000] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-300 animate-fadeScaleIn group overflow-hidden"
           title="Kontrolleri Göster"
         >
           {/* Glass Specular Highlight - Stronger */}
@@ -921,7 +928,8 @@ export default function BottomControls({
           
           {/* Icon */}
           <ChevronUp size={22} className="text-white drop-shadow-md relative z-10 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transition-all" strokeWidth={2.5} />
-        </button>
+        </button>,
+        document.body
       )}
       
       {/* Floating Control Bar Container */}

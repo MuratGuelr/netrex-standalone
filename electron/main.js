@@ -251,7 +251,7 @@ app.on("before-quit", async (event) => {
   // Close exit splash and quit (animation delay)
   setTimeout(() => {
     if (exitSplash && !exitSplash.isDestroyed()) {
-      exitSplash.close();
+      exitSplash.destroy();
     }
     app.exit(0);
   }, 2500); // 3.5s → 2.5s (cleanup zaten bitti)
@@ -264,4 +264,15 @@ app.on("will-quit", () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// ============================================
+// ✅ APP RELOAD HANDLER
+// ============================================
+ipcMain.on("reload-app", () => {
+  const mainWindow = getMainWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    log.info("App reload requested from renderer.");
+    mainWindow.reload();
+  }
 });

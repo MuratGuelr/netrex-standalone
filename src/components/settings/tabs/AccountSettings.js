@@ -11,26 +11,10 @@ import {
   AccountActions
 } from "../account-settings";
 
-/**
- * ✅ REFACTORED AccountSettings v2.0
- * 
- * OPTIMIZATIONS:
- * - Split into 5 sub-components (966 lines → ~150 lines each)
- * - Isolated state management per component
- * - Only changed components re-render
- * - Better maintainability
- * 
- * Components:
- * 1. ProfileCard - Banner + Avatar
- * 2. ProfileThemePicker - Color selection
- * 3. ProfileBackgroundUploader - Image upload
- * 4. ProfileInfoEditor - Bio + Status
- * 5. AccountActions - Logout + DevTools
- */
-
 const AccountSettings = forwardRef(({ onClose, scrollToSection, setScrollToSection, contentRef }, ref) => {
   const { user, logout } = useAuthStore();
-  const { profileColor, setProfileColor } = useSettingsStore();
+  const profileColor = useSettingsStore(state => state.profileColor);
+  const setProfileColor = useSettingsStore(state => state.setProfileColor);
   
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileBgImage, setProfileBgImage] = useState(null);

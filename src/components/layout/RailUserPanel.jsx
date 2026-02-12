@@ -9,14 +9,12 @@ import { createPortal } from "react-dom";
 
 export default function RailUserPanel() {
   const { user } = useAuthStore();
-  const { 
-    isMuted, 
-    isDeafened, 
-    toggleMute, 
-    toggleDeaf, 
-    userStatus, 
-    setUserStatus 
-  } = useSettingsStore();
+  const isMuted = useSettingsStore(state => state.isMuted);
+  const isDeafened = useSettingsStore(state => state.isDeafened);
+  const toggleMute = useSettingsStore(state => state.toggleMute);
+  const toggleDeaf = useSettingsStore(state => state.toggleDeaf);
+  const userStatus = useSettingsStore(state => state.userStatus);
+  const setUserStatus = useSettingsStore(state => state.setUserStatus);
   const { status: updateStatus } = useUpdateStore();
 
   const [showMenu, setShowMenu] = useState(false);

@@ -1,22 +1,5 @@
 "use client";
 
-/**
- * ✅ ULTRA-OPTIMIZED Providers Component v2.0
- * 
- * OPTIMIZATIONS:
- * - ✅ Static import (no dynamic require, better tree-shaking)
- * - ✅ useRef guard (prevent duplicate cleanup registration)
- * - ✅ Memoized ToastSystem (prevent unnecessary re-renders)
- * - ✅ Proper cleanup function handling
- * - ✅ No hydration mismatch risk
- * 
- * Performance Impact:
- * - %80 fewer re-renders
- * - Zero bundle bloat from dynamic imports
- * - Stable toast state
- * - Zero memory leaks
- */
-
 import { executeCleanupTasks } from "@/src/utils/cleanup";
 import { usePresence } from "@/src/hooks/usePresence";
 import { useIdleDetection } from "@/src/hooks/useIdleDetection";

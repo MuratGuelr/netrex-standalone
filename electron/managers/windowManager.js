@@ -295,7 +295,7 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
 
   // Splash logic
   if (!checkUpdatesOnStartup) {
-    if (splashWindow) splashWindow.close();
+    if (splashWindow) splashWindow.destroy();
     mainWindow.show();
   } else {
     // Timeout fallback
@@ -303,7 +303,7 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
       if (mainWindow && !mainWindow.isVisible()) {
         updateCheckCompleted = true; 
         if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.close();
+          splashWindow.destroy();
         }
         mainWindow.show();
         mainWindow.focus();
@@ -321,7 +321,7 @@ function showMainWindow() {
   if (mainWindow && !mainWindow.isVisible()) {
     updateCheckCompleted = true;
     if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.close();
+      splashWindow.destroy();
     }
     mainWindow.show();
     mainWindow.focus();

@@ -3,18 +3,16 @@ import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
 export default function NotificationSettings() {
-  const {
-    desktopNotifications,
-    notificationSound,
-    notifyOnMessage,
-    notifyOnJoin,
-    notifyOnLeave,
-    setDesktopNotifications,
-    setNotificationSound,
-    setNotifyOnMessage,
-    setNotifyOnJoin,
-    setNotifyOnLeave,
-  } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notificationSound = useSettingsStore(state => state.notificationSound);
+  const notifyOnMessage = useSettingsStore(state => state.notifyOnMessage);
+  const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
+  const notifyOnLeave = useSettingsStore(state => state.notifyOnLeave);
+  const setDesktopNotifications = useSettingsStore(state => state.setDesktopNotifications);
+  const setNotificationSound = useSettingsStore(state => state.setNotificationSound);
+  const setNotifyOnMessage = useSettingsStore(state => state.setNotifyOnMessage);
+  const setNotifyOnJoin = useSettingsStore(state => state.setNotifyOnJoin);
+  const setNotifyOnLeave = useSettingsStore(state => state.setNotifyOnLeave);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">

@@ -51,8 +51,8 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
 
       window.netrex.getDesktopSources().then((srcs) => {
         setSources(srcs);
-        const hasWindows = srcs.some((s) => s.id.startsWith("window"));
-        setActiveTab(hasWindows ? "apps" : "screens");
+        // Önce Ekranlar sekmesi gelsin (Kullanıcı İsteği)
+        setActiveTab("screens");
       });
     }
   }, [isOpen]);
@@ -200,40 +200,6 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                 />
 
                 <button
-                  ref={appsTabRef}
-                  onClick={() => setActiveTab("apps")}
-                  className={`pb-3.5 px-1 text-sm font-bold transition-all duration-300 relative flex items-center gap-2.5 group/tab ${
-                    activeTab === "apps"
-                      ? "text-white"
-                      : "text-white/50 hover:text-white/90"
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                    activeTab === "apps"
-                      ? "bg-gradient-to-br from-indigo-500/25 to-purple-500/20 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]"
-                      : "bg-white/[0.03] border border-white/[0.08] group-hover/tab:bg-white/[0.08] group-hover/tab:border-white/[0.15]"
-                  }`}>
-                    <AppWindow
-                      size={16}
-                      className={`transition-all duration-300 ${
-                        activeTab === "apps"
-                          ? "text-indigo-300 scale-110"
-                          : "text-white/60 group-hover/tab:text-white/90 group-hover/tab:scale-110"
-                      }`}
-                    />
-                  </div>
-                  <span className="font-semibold">Uygulamalar</span>
-                  <span
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all duration-300 ${
-                      activeTab === "apps"
-                        ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/40 text-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)]"
-                        : "bg-white/[0.05] border border-white/[0.08] text-white/50 group-hover/tab:bg-white/[0.08]"
-                    }`}
-                  >
-                    {categorizedSources.apps.length}
-                  </span>
-                </button>
-                <button
                   ref={screensTabRef}
                   onClick={() => setActiveTab("screens")}
                   className={`pb-3.5 px-1 text-sm font-bold transition-all duration-300 relative flex items-center gap-2.5 group/tab ${
@@ -265,6 +231,40 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                     }`}
                   >
                     {categorizedSources.screens.length}
+                  </span>
+                </button>
+                <button
+                  ref={appsTabRef}
+                  onClick={() => setActiveTab("apps")}
+                  className={`pb-3.5 px-1 text-sm font-bold transition-all duration-300 relative flex items-center gap-2.5 group/tab ${
+                    activeTab === "apps"
+                      ? "text-white"
+                      : "text-white/50 hover:text-white/90"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                    activeTab === "apps"
+                      ? "bg-gradient-to-br from-indigo-500/25 to-purple-500/20 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+                      : "bg-white/[0.03] border border-white/[0.08] group-hover/tab:bg-white/[0.08] group-hover/tab:border-white/[0.15]"
+                  }`}>
+                    <AppWindow
+                      size={16}
+                      className={`transition-all duration-300 ${
+                        activeTab === "apps"
+                          ? "text-indigo-300 scale-110"
+                          : "text-white/60 group-hover/tab:text-white/90 group-hover/tab:scale-110"
+                      }`}
+                    />
+                  </div>
+                  <span className="font-semibold">Uygulamalar</span>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all duration-300 ${
+                      activeTab === "apps"
+                        ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/40 text-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)]"
+                        : "bg-white/[0.05] border border-white/[0.08] text-white/50 group-hover/tab:bg-white/[0.08]"
+                    }`}
+                  >
+                    {categorizedSources.apps.length}
                   </span>
                 </button>
               </div>
@@ -494,11 +494,11 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                   </label>
                   <div className="space-y-3">
                     {[
-                      { value: 5, label: "5 FPS", desc: "Minimum" },
                       { value: 15, label: "15 FPS", desc: "Düşük" },
                       { value: 30, label: "30 FPS", desc: "Normal" },
+                      { value: 60, label: "60 FPS", desc: "Yüksek" },
                     ].map((f) => {
-                      const isDisabled = resolution === 1080 && f.value > 15;
+                      const isDisabled = resolution === 1080 && f.value > 30;
                       return (
                       <button
                         key={f.value}

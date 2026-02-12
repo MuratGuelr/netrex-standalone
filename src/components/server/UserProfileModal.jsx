@@ -48,7 +48,7 @@ export default function UserProfileModal({ member, position, onClose }) {
   const positionRAFRef = useRef(null);
   const { user: currentUser } = useAuthStore();
   const { currentServer, roles, badges: serverBadges } = useServerStore();
-  const { openSettingsToSection } = useSettingsStore();
+  const openSettingsToSection = useSettingsStore(state => state.openSettingsToSection);
   const [userProfile, setUserProfile] = useState(null);
   const [modalPosition, setModalPosition] = useState(position || { x: 0, y: 0 });
   const [isPositioned, setIsPositioned] = useState(false);

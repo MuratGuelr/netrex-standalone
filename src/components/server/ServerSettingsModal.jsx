@@ -1,27 +1,44 @@
 "use client";
 
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { X, Settings, Shield, Award, Users as UsersIcon, Link, Ban } from "lucide-react";
+import { X, Settings, Shield, Award, Users as UsersIcon, Link, Ban, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
+import Button from "@/src/components/ui/Button";
 
 // ✅ OPTIMIZATION: Lazy load tabs - Only load when needed
 const OverviewTab = lazy(() => import("./settings-modal/OverviewTab"));
-const MembersTab = lazy(() => import("./ServerSettingsModal").then(m => ({ default: m.MembersTab })));
-const BansTab = lazy(() => import("./ServerSettingsModal").then(m => ({ default: m.BansTab })));
-const RolesTab = lazy(() => import("./ServerSettingsModal").then(m => ({ default: m.RolesTab })));
-const InvitesTab = lazy(() => import("./ServerSettingsModal").then(m => ({ default: m.InvitesTab })));
-const BadgesTab = lazy(() => import("./ServerSettingsModal").then(m => ({ default: m.BadgesTab })));
+const RolesTab = lazy(() => import("./settings-modal/RolesTab"));
+const MembersTab = lazy(() => import("./settings-modal/MembersTab"));
+const InvitesTab = lazy(() => import("./settings-modal/InvitesTab"));
+const BansTab = lazy(() => import("./settings-modal/BansTab"));
+const BadgesTab = lazy(() => import("./settings-modal/BadgesTab"));
 
-/**
- * 🎛️ ServerSettingsModal - OPTIMIZED v2.0
- * - Unmount when closed (no pre-mount)
- * - Lazy loaded tabs
- * - Better performance
- */
 export default function ServerSettingsModal({ isOpen, onClose, initialTab = "overview" }) {
-  const { currentServer, roles, members, updateServer, deleteServer, createRole, updateRole, deleteRole, fetchInvites, createInvite, badges, createBadge, updateBadge, deleteBadge, assignBadge, removeBadgeFromMember, fetchBans, unbanMember } = useServerStore();
+  const { 
+    currentServer, 
+    roles, 
+    members, 
+    updateServer, 
+    deleteServer, 
+    createRole, 
+    updateRole, 
+    deleteRole, 
+    activeInvites,
+    fetchServerInvites, 
+    createInvite, 
+    badges, 
+    createBadge, 
+    updateBadge, 
+    deleteBadge, 
+    assignBadgeToMember, 
+    removeBadgeFromMember, 
+    fetchBans, 
+    unbanMember 
+  } = useServerStore();
+  
   const { user } = useAuthStore();
   
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -38,9 +55,10 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab = "ove
 
   const canViewOverview = isOwner || canManageServer;
   const canViewRoles = isOwner || canManageRoles;
-  const canViewBadges = isOwner || canManageServer;
+  const canViewBadges = isOwner || canManageRoles;
   const canViewMembers = isOwner || canKickMembers || canBanMembers || canManageServer;
-  const canViewInvites = true;
+  const canViewInvites = canManageServer || isOwner;
+  const canViewBans = canBanMembers || isOwner;
 
   // ✅ OPTIMIZATION: Reset tab when modal opens
   useEffect(() => {
@@ -75,34 +93,70 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab = "ove
       </div>
     );
 
-    switch (activeTab) {
-      case "overview":
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <OverviewTab 
-              server={currentServer} 
-              onUpdate={updateServer} 
-              onDelete={deleteServer} 
-              isOwner={isOwner}
-              onClose={onClose}
-            />
-          </Suspense>
-        );
-      
-      // Diğer tab'lar için placeholder - Henüz extract etmedik
-      case "members":
-        return <div className="text-white">Members Tab (Henüz extract edilmedi)</div>;
-      case "roles":
-        return <div className="text-white">Roles Tab (Henüz extract edilmedi)</div>;
-      case "badges":
-        return <div className="text-white">Badges Tab (Henüz extract edilmedi)</div>;
-      case "invites":
-        return <div className="text-white">Invites Tab (Henüz extract edilmedi)</div>;
-      case "bans":
-        return <div className="text-white">Bans Tab (Henüz extract edilmedi)</div>;
-      default:
-        return null;
-    }
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        {activeTab === "overview" && canViewOverview && (
+          <OverviewTab 
+            server={currentServer} 
+            onUpdate={updateServer} 
+            onDelete={deleteServer} 
+            isOwner={isOwner}
+            onClose={onClose}
+          />
+        )}
+        
+        {activeTab === "roles" && canViewRoles && (
+          <RolesTab 
+            roles={roles} 
+            onCreate={createRole} 
+            onUpdate={updateRole} 
+            onDelete={deleteRole} 
+            showCreateModal={showCreateRoleModal} 
+            setShowCreateModal={setShowCreateRoleModal} 
+          />
+        )}
+
+        {activeTab === "badges" && canViewBadges && (
+          <BadgesTab 
+            badges={badges} 
+            members={members} 
+            onCreate={createBadge} 
+            onUpdate={updateBadge} 
+            onDelete={deleteBadge} 
+            onAssign={assignBadgeToMember} 
+            onRemove={removeBadgeFromMember} 
+            showCreateModal={showCreateBadgeModal} 
+            setShowCreateModal={setShowCreateBadgeModal} 
+            serverId={currentServer.id} 
+          />
+        )}
+
+        {activeTab === "members" && canViewMembers && (
+          <MembersTab 
+            members={members} 
+            roles={roles} 
+          />
+        )}
+
+        {activeTab === "invites" && canViewInvites && (
+          <InvitesTab 
+            invites={activeInvites} 
+            onCreate={createInvite} 
+            serverId={currentServer.id} 
+            userId={user.uid} 
+            fetchInvites={fetchServerInvites} 
+          />
+        )}
+
+        {activeTab === "bans" && canViewBans && (
+          <BansTab 
+            serverId={currentServer.id} 
+            fetchBans={fetchBans} 
+            unbanMember={unbanMember} 
+          />
+        )}
+      </Suspense>
+    );
   };
 
   return (
@@ -204,7 +258,7 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab = "ove
               />
             )}
             
-            {canBanMembers && (
+            {canViewBans && (
               <SidebarItem
                 label="Yasaklılar"
                 icon={<Ban size={16} />}
@@ -229,6 +283,38 @@ export default function ServerSettingsModal({ isOpen, onClose, initialTab = "ove
 
         {/* Content */}
         <div className="flex-1 bg-gradient-to-br from-nds-bg-tertiary to-nds-bg-primary relative flex flex-col min-w-0">
+          
+          {/* Action Header for Tabs that need it */}
+          {(activeTab === 'roles' || activeTab === 'badges' || activeTab === 'invites') && (
+            <div className="absolute top-6 right-8 z-20 flex gap-2">
+               {activeTab === 'roles' && canViewRoles && (
+                 <Button size="sm" onClick={() => setShowCreateRoleModal(true)} className="shadow-lg">
+                   <Plus size={16} className="mr-1" />
+                   Rol Ekle
+                 </Button>
+               )}
+               {activeTab === 'badges' && canViewBadges && (
+                 <Button size="sm" onClick={() => setShowCreateBadgeModal(true)} className="shadow-lg bg-gradient-to-r from-amber-500 to-orange-500 border-0">
+                   <Plus size={16} className="mr-1" />
+                   Rozet Ekle
+                 </Button>
+               )}
+               {activeTab === 'invites' && canViewInvites && (
+                 <Button 
+                   size="sm" 
+                   onClick={async () => {
+                     await createInvite(currentServer.id, { userId: user.uid });
+                     toast.success("Davet oluşturuldu");
+                   }} 
+                   className="shadow-lg bg-indigo-500 hover:bg-indigo-600 border-0"
+                 >
+                   <Plus size={16} className="mr-1" />
+                   Davet Oluştur
+                 </Button>
+               )}
+            </div>
+          )}
+
           <div ref={contentRef} className="flex-1 overflow-y-auto scrollbar-thin p-6 pb-20 relative">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl"></div>
@@ -320,10 +406,3 @@ function SidebarItem({ label, icon, active, onClick, color = "indigo" }) {
     </button>
   );
 }
-
-// Export other tabs for lazy loading (temporarily from original file)
-export { default as MembersTab } from "./ServerSettingsModal";
-export { default as BansTab } from "./ServerSettingsModal";
-export { default as RolesTab } from "./ServerSettingsModal";
-export { default as InvitesTab } from "./ServerSettingsModal";
-export { default as BadgesTab } from "./ServerSettingsModal";

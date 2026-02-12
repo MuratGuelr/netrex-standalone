@@ -52,7 +52,7 @@ contextBridge.exposeInMainWorld("netrex", {
   // AUTH
   // ============================================
   startOAuth: () => ipcRenderer.invoke("start-oauth"),
-  onOAuthSuccess: createOnceHandler("oauth-success", (_, token) => [token]), // ✅ once()
+  onOAuthSuccess: createEventHandler("oauth-success", (_, token) => [token]), // ✅ Persistent handler for SPA support
 
   // ============================================
   // SETTINGS & HOTKEYS
@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld("netrex", {
   // ============================================
   // APP LIFECYCLE
   // ============================================
+  reloadApp: () => ipcRenderer.send("reload-app"),
   onAppWillQuit: createOnceHandler("app-will-quit"), // ✅ once()
   notifyCleanupComplete: () => ipcRenderer.send("cleanup-complete"),
 

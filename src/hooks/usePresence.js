@@ -1,29 +1,5 @@
 "use client";
 
-/**
- * 🟢 usePresence - User Presence Management Hook (ULTRA-OPTIMIZED v6.0)
- * Tracks user's online/idle/offline status and syncs to Firebase
- * 
- * States:
- * - online: User is active in the app
- * - idle: App is minimized/hidden or not focused (set after delay)
- * - offline: App is closed
- * 
- * Heartbeat System:
- * - Updates lastSeen every HEARTBEAT_INTERVAL while user is online/idle
- * - Client-side checks if lastSeen is stale to show offline status
- * - This handles cases where computer is shut down without closing app
- * 
- * OPTIMIZATIONS v6.0:
- * - ✅ Ref-based dependency management (no callback hell)
- * - ✅ Batch updates (reduce Firebase writes by 60%)
- * - ✅ navigator.sendBeacon for reliable beforeunload
- * - ✅ Dynamic heartbeat interval (voice chat = 2min, idle = 5min)
- * - ✅ Proper cleanup (zero memory leaks)
- * - ✅ Optimized date parsing in getEffectivePresence
- * - ✅ Development-only logging
- */
-
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
@@ -48,13 +24,16 @@ export const PRESENCE_STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 export function usePresence() {
   const { user } = useAuthStore();
   const { currentServer } = useServerStore();
-  const { userStatus, isInVoiceRoom } = useSettingsStore();
+  const userStatus = useSettingsStore(state => state.userStatus);
+  const isInVoiceRoom = useSettingsStore(state => state.isInVoiceRoom);
+  const quickStatus = useSettingsStore(state => state.quickStatus);
   
   // ✅ OPTIMIZATION #1: Ref-based state (eliminate dependency hell)
   const userRef = useRef(user);
   const userStatusRef = useRef(userStatus);
   const currentServerRef = useRef(currentServer);
   const isInVoiceRoomRef = useRef(isInVoiceRoom);
+  const quickStatusRef = useRef(quickStatus);
   
   // ✅ OPTIMIZATION #2: Batch update state
   const pendingUpdateRef = useRef(null);
@@ -70,7 +49,8 @@ export function usePresence() {
     userStatusRef.current = userStatus;
     currentServerRef.current = currentServer;
     isInVoiceRoomRef.current = isInVoiceRoom;
-  }, [user, userStatus, currentServer, isInVoiceRoom]);
+    quickStatusRef.current = quickStatus;
+  }, [user, userStatus, currentServer, isInVoiceRoom, quickStatus]);
 
   // ✅ OPTIMIZATION #2: Batch-optimized presence update
   const updatePresence = useCallback(async (status) => {
@@ -97,7 +77,8 @@ export function usePresence() {
       try {
         const updateData = {
           presence: finalStatus,
-          lastSeen: serverTimestamp()
+          lastSeen: serverTimestamp(),
+          quickStatus: quickStatusRef.current || null
         };
 
         // Clear game activity when going offline
@@ -160,12 +141,12 @@ export function usePresence() {
     }
   }, []); // ✅ No dependencies - uses refs
 
-  // Handle userStatus changes from settingsStore
+  // Handle userStatus or quickStatus changes from settingsStore
   useEffect(() => {
     if (user?.uid) {
       updatePresence(userStatus);
     }
-  }, [userStatus, user?.uid, updatePresence]);
+  }, [userStatus, quickStatus, user?.uid, updatePresence]);
 
   // ✅ OPTIMIZATION #9: Dynamic heartbeat interval based on voice chat
   useEffect(() => {

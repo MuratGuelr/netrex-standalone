@@ -222,7 +222,8 @@ export default function ChatView({ channelId, username, userId }) {
     if (supported) setNotificationPermission(Notification.permission);
   }, []);
 
-  const { desktopNotifications, notifyOnMessage } = useSettingsStore();
+  const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
+  const notifyOnMessage = useSettingsStore(state => state.notifyOnMessage);
 
   const handleDataReceived = useCallback((payload, participant, kind, topic) => {
     if (topic !== "chat") return;

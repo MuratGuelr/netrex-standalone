@@ -4,30 +4,6 @@ import { Track, RoomEvent, ConnectionState } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { shallow } from "zustand/shallow";
 
-// ============================================
-// 🚀 OPTİMİZE EDİLMİŞ SES İŞLEME SİSTEMİ v5.0
-// ============================================
-// 
-// v5.0 Optimizasyonlar (Next.js + Electron):
-// 1. ✅ Module-level cache (RNNoise, resources path)
-// 2. ✅ Zustand shallow selectors
-// 3. ✅ Resources path cache (IPC call eliminate)
-// 4. ✅ Strict mode protection
-// 5. ✅ Track state tracking optimized
-//
-// v4.0 Optimizasyonlar:
-// - AudioContext warmup kaldırıldı
-// - Clone stream cleanup düzeltildi
-// - Threshold cache
-// - RNNoise top-level import
-//
-// v3.1 Optimizasyonlar:
-// - RMS smoothing Worklet'te
-// - Worklet classification güvenilir
-// - Main thread minimal CPU
-//
-// ============================================
-
 const CONFIG = {
   FFT_SIZE: 2048,
   SAMPLE_RATE: 48000,
@@ -155,7 +131,9 @@ export function useVoiceProcessor() {
   }, []);
 
   // ========== CLEANUP ==========
-  const cleanup = useCallback((preserveRNNoise = false) => {
+  // ✅ FIX: preserveRNNoise kaldırıldı - her zaman tamamen temizle
+  // suspend() kullanmak Audio Graph Leak'e neden oluyordu
+  const cleanup = useCallback(() => {
     isCleaningUpRef.current = true;
     
     if (currentUISpeakingRef.current) {
@@ -163,17 +141,18 @@ export function useVoiceProcessor() {
       setLocalIsSpeaking(false);
     }
 
+    // Clone stream track'leri durdur
     if (cloneStreamRef.current) {
       cloneStreamRef.current.getTracks().forEach(t => t.stop());
       cloneStreamRef.current = null;
     }
 
+    // ✅ FIX: Tüm node'lar (rnnoise dahil) her zaman temizlenir
     const nodesToClean = [
       sourceRef, analyserRef, highPassFilterRef, lowPassFilterRef,
-      notchFilterRef, compressorRef, gainNodeRef, workletNodeRef
+      notchFilterRef, compressorRef, gainNodeRef, workletNodeRef,
+      rnnoiseNodeRef
     ];
-    
-    if (!preserveRNNoise) nodesToClean.push(rnnoiseNodeRef);
     
     nodesToClean.forEach(ref => {
       if (ref.current) {
@@ -188,19 +167,14 @@ export function useVoiceProcessor() {
       }
     });
 
-    if (audioContextRef.current?.state !== "closed") {
-      if (preserveRNNoise) {
-        if (audioContextRef.current.state === "running") {
-          audioContextRef.current.suspend().catch(() => {});
-        }
-      } else {
-        try {
-          audioContextRef.current.close().catch(() => {});
-        } catch (e) {}
-        audioContextRef.current = null;
-        rnnoiseNodeRef.current = null;
-      }
+    // ✅ FIX: Mutlaka close() kullan, asla suspend() değil
+    // suspend() AudioContext'i durdurmaz, worklet thread'leri çalışmaya devam eder
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch (e) {}
     }
+    audioContextRef.current = null;
   }, [setLocalIsSpeaking]);
 
   // ========== ANA EFFECT ==========
@@ -213,11 +187,8 @@ export function useVoiceProcessor() {
     let lastTrackEnabled = null; // ✅ Track state tracking
 
     const setupProcessor = async () => {
-      const shouldPreserveRNNoise = noiseSuppressionMode === "krisp" && 
-                                     rnnoiseNodeRef.current && 
-                                     audioContextRef.current?.state !== "closed";
-      
-      cleanup(shouldPreserveRNNoise);
+      // ✅ FIX: Her zaman tamamen temizle, preserveRNNoise yok
+      cleanup();
       isCleaningUpRef.current = false;
       
       // Audio Context
@@ -242,7 +213,7 @@ export function useVoiceProcessor() {
         return;
       }
       
-      const track = trackPublication.track;
+      const { track } = trackPublication;
       if (!track.mediaStreamTrack || track.mediaStreamTrack.kind !== "audio" || track.mediaStreamTrack.readyState === "ended") {
         return;
       }
@@ -258,30 +229,25 @@ export function useVoiceProcessor() {
       let currentNode = source;
 
       // ============================================
-      // ✅ RNNoise Setup (Module-level cache)
+      // ✅ RNNoise Setup (Module-level cache, her seferinde yeni node)
       // ============================================
       if (noiseSuppressionMode === "krisp") {
-        if (!rnnoiseNodeRef.current) {
-          try {
-            const rnnoiseModule = await getRNNoiseModule();
-            const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModule;
-            
-            const workletUrl = getResourcePath('rnnoise.worklet.js');
-            const wasmUrl = getResourcePath('rnnoise.wasm');
-            
-            const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
-            await RNNoiseNode.register(ctx, assets);
-            const rnnoiseNode = new RNNoiseNode(ctx);
-            currentNode.connect(rnnoiseNode);
-            currentNode = rnnoiseNode;
-            rnnoiseNodeRef.current = rnnoiseNode;
-            console.log("✅ RNNoise initialized");
-          } catch(e) {
-            console.error("❌ RNNoise error:", e);
-          }
-        } else {
-          currentNode.connect(rnnoiseNodeRef.current);
-          currentNode = rnnoiseNodeRef.current;
+        try {
+          const rnnoiseModule = await getRNNoiseModule();
+          const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModule;
+          
+          const workletUrl = getResourcePath('rnnoise.worklet.js');
+          const wasmUrl = getResourcePath('rnnoise.wasm');
+          
+          const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
+          await RNNoiseNode.register(ctx, assets);
+          const rnnoiseNode = new RNNoiseNode(ctx);
+          currentNode.connect(rnnoiseNode);
+          currentNode = rnnoiseNode;
+          rnnoiseNodeRef.current = rnnoiseNode;
+          console.log("✅ RNNoise initialized (fresh)");
+        } catch(e) {
+          console.error("❌ RNNoise error:", e);
         }
       }
 
@@ -465,15 +431,23 @@ export function useVoiceProcessor() {
       }
     };
 
+    // ✅ FIX: Use local variable instead of useRef (can't call hooks inside useEffect)
+    let hasRegisteredConnection = false;
+    
     if (room.state === ConnectionState.Connected) {
       checkConnection();
-    } else {
+    } else if (!hasRegisteredConnection) {
+      hasRegisteredConnection = true;
+      console.log("✅ Registering voice processor connection listener (ONCE)");
       room.on(RoomEvent.ConnectionStateChanged, checkConnection);
     }
 
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      room.off(RoomEvent.ConnectionStateChanged, checkConnection);
+      if (hasRegisteredConnection) {
+        console.log("🧹 Cleaning up voice processor connection listener");
+        room.off(RoomEvent.ConnectionStateChanged, checkConnection);
+      }
       cleanup();
       if (originalStreamTrack) originalStreamTrack.enabled = true;
     };

@@ -100,6 +100,7 @@ function initHotkeysCache() {
         mute: allHotkeys.mute || null,
         deafen: allHotkeys.deafen || null,
         camera: allHotkeys.camera || null,
+        "quick-status": allHotkeys["quick-status"] || null,
     };
 }
 
