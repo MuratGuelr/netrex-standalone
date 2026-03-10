@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, memo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, memo, useState, useCallback, useRef } from "react";
 import {
   useParticipantInfo,
   useTracks,
@@ -16,8 +16,8 @@ const UserCard = ({
   onContextMenu,
   compact,
   hideIncomingVideo,
-  setActiveStreamId,
-  activeStreamId,
+  setPinnedStreamIds,
+  pinnedStreamIds,
 }) => {
   const { identity, name, metadata } = useParticipantInfo({ participant });
   const livekitIsSpeaking = useIsSpeaking(participant);
@@ -49,7 +49,11 @@ const UserCard = ({
     (t) => t.participant.sid === participant.sid
   );
   const hasScreenShare = !!screenShareTrack;
-  const isCurrentlyWatching = activeStreamId === participant.identity;
+  const isCurrentlyWatching = pinnedStreamIds?.some(id => 
+    id === participant.identity || 
+    id === `${participant.identity}:screen` || 
+    id === `${participant.identity}:camera`
+  );
   
   // ✅ DÜZELTME: Animasyon kontrolleri
   const shouldAnimate = useMemo(() => {
@@ -101,23 +105,40 @@ const UserCard = ({
     transform: 'translateZ(0)'
   }), [isMuted, isDeafened]);
 
-  // ✅ OPTIMIZED: Debounced Speaking State (LiveKit Native Only)
+  // ✅ FIX v2.0: Speaking state - anında açılsın, gecikmeli kapansın
   const [debouncedIsSpeaking, setDebouncedIsSpeaking] = useState(false);
+  const speakingTimerRef = useRef(null);
   
   useEffect(() => {
-    // ✅ Sadece LiveKit native isSpeaking kullan (audioLevelStore polling kaldırıldı!)
     const rawIsSpeaking = participant.isLocal 
       ? localIsSpeaking 
-      : livekitIsSpeaking;  // ❌ remoteAudioLevel KALDIRILDI - %70 CPU kazancı!
+      : livekitIsSpeaking;
     const isSpeakingNow = rawIsSpeaking && !isMuted && !isDeafened;
     
     if (isSpeakingNow) {
+      // ✅ Konuşma ANINDA başlasın - debounce yok
+      if (speakingTimerRef.current) {
+        clearTimeout(speakingTimerRef.current);
+        speakingTimerRef.current = null;
+      }
       setDebouncedIsSpeaking(true);
     } else {
-      const timer = setTimeout(() => setDebouncedIsSpeaking(false), 100);
-      return () => clearTimeout(timer);
+      // ✅ Kapanma 200ms gecikmeli - çok kısa kesintilerde titreme olmasın
+      if (!speakingTimerRef.current) {
+        speakingTimerRef.current = setTimeout(() => {
+          setDebouncedIsSpeaking(false);
+          speakingTimerRef.current = null;
+        }, 200);
+      }
     }
-  }, [livekitIsSpeaking, localIsSpeaking, isMuted, isDeafened, participant.isLocal]);  // ❌ remoteAudioLevel dependency kaldırıldı!
+    
+    return () => {
+      if (speakingTimerRef.current) {
+        clearTimeout(speakingTimerRef.current);
+        speakingTimerRef.current = null;
+      }
+    };
+  }, [livekitIsSpeaking, localIsSpeaking, isMuted, isDeafened, participant.isLocal]);
 
   const isSpeaking = debouncedIsSpeaking;
 
@@ -145,11 +166,12 @@ const UserCard = ({
   const hasVisibleContent = (shouldShowVideo && videoTrack) || (hasScreenShare && screenShareTrack);
 
   const handleVideoClick = useCallback((e) => {
-    if (!isCurrentlyWatching && setActiveStreamId && participant.identity && (hasScreenShare || shouldShowVideo)) {
+    if (!isCurrentlyWatching && setPinnedStreamIds && participant.identity && (hasScreenShare || shouldShowVideo)) {
       e.stopPropagation();
-      setActiveStreamId(participant.identity);
+      const pinId = hasScreenShare ? `${participant.identity}:screen` : `${participant.identity}:camera`;
+      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), pinId])));
     }
-  }, [isCurrentlyWatching, setActiveStreamId, participant.identity, hasScreenShare, shouldShowVideo]);
+  }, [isCurrentlyWatching, setPinnedStreamIds, participant.identity, hasScreenShare, shouldShowVideo]);
 
   const videoStyle = useMemo(() => ({
     transform: participant.isLocal && cameraMirrorEffect ? 'scaleX(-1)' : undefined
@@ -204,7 +226,16 @@ const UserCard = ({
     <div className="w-full h-full p-1 will-change-transform">
       <div
         onContextMenu={onContextMenu}
-        className="relative w-full h-full rounded-xl flex flex-col items-center justify-center group cursor-context-menu overflow-hidden bg-[#141418]/85"
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          if (hasScreenShare || shouldShowVideo) {
+             setPinnedStreamIds?.(prev => prev.includes(participant.identity) 
+               ? prev.filter(id => id !== participant.identity)
+               : [...prev, participant.identity]
+             );
+          }
+        }}
+        className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center group overflow-hidden bg-[#141418]/85 ${(hasScreenShare || shouldShowVideo) ? 'cursor-pointer' : 'cursor-context-menu'}`}
         style={borderStyle}
       >
         {/* 🚀 Speaking Indicator Layer - Her modda göster */}
@@ -247,7 +278,7 @@ const UserCard = ({
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
                   className={`absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveStreamId?.(participant.identity); }}
+                  onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...prev, participant.identity]))); }}
                 >
                   <Tv size={32} className="text-white drop-shadow-lg" />
                   <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Yayına Katıl</span>
@@ -257,7 +288,7 @@ const UserCard = ({
               {!hasScreenShare && shouldShowVideo && !isCurrentlyWatching && (
                 <div
                   className={`absolute inset-0 bg-black/40 opacity-0 group-hover/camera:opacity-100 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveStreamId?.(participant.identity); }}
+                  onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...prev, participant.identity]))); }}
                 >
                   <Maximize size={32} className="text-white drop-shadow-lg scale-90 group-hover/camera:scale-100 transition-transform duration-200" />
                   <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Büyüt</span>
@@ -300,7 +331,7 @@ const UserCard = ({
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
                   className={`absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? 'backdrop-blur-md' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveStreamId?.(participant.identity); }}
+                  onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...(prev || []), `${participant.identity}:screen`]))); }}
                 >
                   <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-300">
                     <Tv size={20} className="text-white drop-shadow-md" />

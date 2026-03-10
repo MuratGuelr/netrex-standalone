@@ -1,4 +1,5 @@
-import { Bell, Monitor, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bell, Monitor, Zap, Volume2 } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
@@ -13,6 +14,31 @@ export default function NotificationSettings() {
   const setNotifyOnMessage = useSettingsStore(state => state.setNotifyOnMessage);
   const setNotifyOnJoin = useSettingsStore(state => state.setNotifyOnJoin);
   const setNotifyOnLeave = useSettingsStore(state => state.setNotifyOnLeave);
+  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
+  const setTtsEnabled = useSettingsStore(state => state.setTtsEnabled);
+  const ttsVolume = useSettingsStore(state => state.ttsVolume);
+  const setTtsVolume = useSettingsStore(state => state.setTtsVolume);
+  const ttsVoiceURI = useSettingsStore(state => state.ttsVoiceURI);
+  const setTtsVoiceURI = useSettingsStore(state => state.setTtsVoiceURI);
+  const ttsOnlyUnfocused = useSettingsStore(state => state.ttsOnlyUnfocused);
+  const setTtsOnlyUnfocused = useSettingsStore(state => state.setTtsOnlyUnfocused);
+
+  const [availableVoices, setAvailableVoices] = useState([]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const fetchVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const trVoices = voices.filter(v => v.lang.includes('tr') || v.lang.includes('TR'));
+        setAvailableVoices(trVoices);
+      };
+
+      fetchVoices();
+      if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = fetchVoices;
+      }
+    }
+  }, []);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
@@ -110,6 +136,64 @@ export default function NotificationSettings() {
               checked={notifyOnLeave}
               onChange={() => setNotifyOnLeave(!notifyOnLeave)}
             />
+          </div>
+          <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
+            <ToggleSwitch
+              label="Gelen Mesajları Sesli Oku"
+              description="Yeni gelen mesajları sesli olarak otomatik okur."
+              checked={ttsEnabled}
+              onChange={() => {
+                const newState = !ttsEnabled;
+                setTtsEnabled(newState);
+                if (!newState && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                }
+              }}
+            />
+            {ttsEnabled && (
+              <div className="mt-4 pt-4 border-t border-white/5 ml-12 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-white/80">Ses Seviyesi</span>
+                  <span className="text-sm font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded">% {ttsVolume}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={ttsVolume}
+                  onChange={(e) => setTtsVolume(Number(e.target.value))}
+                  className="w-full accent-indigo-500 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer mb-6"
+                />
+
+                <div className="mb-6">
+                  <ToggleSwitch
+                    label="Sadece Arka Plandayken Oku"
+                    description="Pencere odakta değilken (örn. oyundayken) veya arka plandayken sesi okur."
+                    checked={ttsOnlyUnfocused}
+                    onChange={() => setTtsOnlyUnfocused(!ttsOnlyUnfocused)}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-white/80">Tercih Edilen Ses</span>
+                  <select 
+                    value={ttsVoiceURI}
+                    onChange={(e) => setTtsVoiceURI(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 appearance-none transition-colors"
+                  >
+                    <option value="auto" className="bg-[#1e1f22] text-white">Otomatik (Kişilere Özel Dağıtım)</option>
+                    {availableVoices.map((voice) => (
+                      <option key={voice.voiceURI} value={voice.voiceURI} className="bg-[#1e1f22] text-white">
+                        {voice.name} {voice.default ? '(Varsayılan)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-white/50 mt-1">
+                    Cihazınızdaki mevcut Türkçe sentez motorları. "Otomatik" kalması, herkesi farklı bir profilde seslendirmeye çalışır.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

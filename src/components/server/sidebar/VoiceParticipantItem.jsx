@@ -19,6 +19,7 @@ const VoiceParticipantItem = memo(function VoiceParticipantItem({ participant })
               alt={participant.username} 
               className="w-full h-full object-cover"
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <span className="text-[9px] text-white font-bold">
@@ -64,7 +65,8 @@ const VoiceParticipantItem = memo(function VoiceParticipantItem({ participant })
     prevProps.participant.isMuted === nextProps.participant.isMuted &&
     prevProps.participant.isDeafened === nextProps.participant.isDeafened &&
     prevProps.participant.username === nextProps.participant.username &&
-    prevProps.participant.quickStatus === nextProps.participant.quickStatus
+    prevProps.participant.quickStatus === nextProps.participant.quickStatus &&
+    prevProps.participant.photoURL === nextProps.participant.photoURL
   );
 });
 

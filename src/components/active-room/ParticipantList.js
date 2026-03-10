@@ -9,8 +9,8 @@ const ParticipantList = React.memo(({
   onUserContextMenu,
   compact,
   hideIncomingVideo,
-  setActiveStreamId,
-  activeStreamId,
+  setPinnedStreamIds,
+  pinnedStreamIds,
 }) => {
   const participants = useParticipants();
   const count = participants.length;
@@ -58,8 +58,8 @@ const ParticipantList = React.memo(({
                   onContextMenu={(e) => onUserContextMenu(e, p)}
                   compact={true}
                   hideIncomingVideo={hideIncomingVideo}
-                  setActiveStreamId={setActiveStreamId}
-                  activeStreamId={activeStreamId}
+                  setPinnedStreamIds={setPinnedStreamIds}
+                  pinnedStreamIds={pinnedStreamIds}
                 />
               </motion.div>
             ))}
@@ -77,8 +77,8 @@ const ParticipantList = React.memo(({
                   onContextMenu={(e) => onUserContextMenu(e, p)}
                   compact={true}
                   hideIncomingVideo={hideIncomingVideo}
-                  setActiveStreamId={setActiveStreamId}
-                  activeStreamId={activeStreamId}
+                  setPinnedStreamIds={setPinnedStreamIds}
+                  pinnedStreamIds={pinnedStreamIds}
                 />
             </div>
            ))
@@ -109,8 +109,8 @@ const ParticipantList = React.memo(({
                     totalCount={count}
                     onContextMenu={(e) => onUserContextMenu(e, p)}
                     hideIncomingVideo={hideIncomingVideo}
-                    setActiveStreamId={setActiveStreamId}
-                    activeStreamId={activeStreamId}
+                    setPinnedStreamIds={setPinnedStreamIds}
+                    pinnedStreamIds={pinnedStreamIds}
                 />
             </motion.div>
             ))}
@@ -127,8 +127,8 @@ const ParticipantList = React.memo(({
                   totalCount={count}
                   onContextMenu={(e) => onUserContextMenu(e, p)}
                   hideIncomingVideo={hideIncomingVideo}
-                  setActiveStreamId={setActiveStreamId}
-                  activeStreamId={activeStreamId}
+                  setPinnedStreamIds={setPinnedStreamIds}
+                  pinnedStreamIds={pinnedStreamIds}
                 />
             </div>
         ))

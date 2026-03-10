@@ -72,7 +72,8 @@ export default function BottomControls({
   onOpenSettings,
   isDeafened,
   playSound,
-  setActiveStreamId,
+  setPinnedStreamIds,
+  pinnedStreamIds,
   isCameraOn,
   setIsCameraOn,
   stopScreenShare,
@@ -173,6 +174,8 @@ export default function BottomControls({
       serverMuted,
       serverDeafened,
       quickStatus,
+      watchingStreamId: pinnedStreamIds?.[0] || null, // Geri uyumluluk için ilkini tut
+      watchingStreamIds: pinnedStreamIds || [], // Yeni: Birden fazla yayın izliyor olabilir
       mutedBy: serverMuted ? mutedBy : null,
       deafenedBy: serverDeafened ? deafenedBy : null,
       mutedAt: serverMuted ? mutedAt : null,
@@ -277,7 +280,8 @@ export default function BottomControls({
     deafenedBy,
     mutedAt,
     deafenedAt,
-    quickStatus
+    quickStatus,
+    pinnedStreamIds
   ]);
 
   // Video track durumunu senkronize et (sadece event'lerde, sürekli kontrol yok)
@@ -774,19 +778,21 @@ export default function BottomControls({
       let stream;
       if (window.netrex && sourceId) {
         // Electron: getUserMedia ile chromeMediaSource kullan
-        // Sadece mandatory kullan, diğer constraint'leri sonra applyConstraints ile uygula
         const constraints = {
           audio: audioConstraints || false,
           video: {
             mandatory: {
               chromeMediaSource: "desktop",
               chromeMediaSourceId: sourceId,
+              maxWidth: width,
+              maxHeight: height,
+              maxFrameRate: fps,
             },
           },
         };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-        // Track'i aldıktan sonra resolution ve frame rate ayarlarını uygula
+        // Track'i aldıktan sonra resolution ve frame rate ayarlarını ekstra olarak uygula
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack && videoTrack.applyConstraints) {
           try {
@@ -796,7 +802,7 @@ export default function BottomControls({
               frameRate: { ideal: fps },
             });
           } catch (e) {
-            // Constraint uygulanamazsa devam et (bazı constraint'ler desteklenmeyebilir)
+            // Constraint uygulanamazsa devam et
             console.warn("Could not apply video constraints:", e);
           }
         }
@@ -815,15 +821,14 @@ export default function BottomControls({
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.contentHint = fps > 15 ? "motion" : "detail";
       
-      // Çözünürlüğe göre bitrate ayarla (yüksek kalite için)
-      // 2K: 8Mbps, 1080p: 5Mbps, 720p: 2.5Mbps
+      // Çözünürlüğe ve FPS'ye göre bitrate ayarla (yüksek kalite için)
       const maxBitrate =
         resolution === 1440
           ? 8000000
           : resolution === 1080
-          ? 5000000
+          ? (fps > 30 ? 6000000 : 5000000)
           : resolution === 720
-          ? 2500000
+          ? (fps >= 60 ? 4000000 : 2500000)
           : 1500000;
 
       await localParticipant.publishTrack(videoTrack, {
@@ -862,7 +867,7 @@ export default function BottomControls({
         };
       }
 
-      setActiveStreamId(localParticipant.identity);
+      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), localParticipant.identity])));
     } catch (e) {
       console.error("Screen share error:", e);
       toastOnce("Ekran paylaşımı başlatılamadı: " + e.message, "error");

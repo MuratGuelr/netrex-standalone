@@ -95,7 +95,7 @@ export default function RailUserPanel() {
                    
                    <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-lg z-10" style={{ background: !user?.photoURL ? profileColor : 'transparent' }}>
                        {user?.photoURL ? (
-                          <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                          <img src={user.photoURL} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                        ) : (
                           <User size={20} />
                        )}
@@ -148,7 +148,7 @@ export default function RailUserPanel() {
                       style={{ background: profileColor }}
                     >
                         {user?.photoURL ? (
-                          <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                          <img src={user.photoURL} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
                           user?.displayName?.charAt(0).toUpperCase() || "?"
                         )}

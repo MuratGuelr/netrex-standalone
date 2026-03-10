@@ -2,14 +2,13 @@ import { useEffect, useRef, useCallback } from "react";
 import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent, ConnectionState } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import { shallow } from "zustand/shallow";
 
 const CONFIG = {
   FFT_SIZE: 2048,
   SAMPLE_RATE: 48000,
   RELEASE_TIME: 100,
   RELEASE_TIME_RNNOISE: 80,
-  UI_RELEASE_TIME: 200, // CPU Optimizasyonu: UI update sıklığını düşür
+  UI_RELEASE_TIME: 120, // ✅ FIX: 200ms → 120ms - UserCard'ın kendi debounce'u var (200ms)
   IMPACT_HOLD_MS: 50,
   MIN_RMS: 0.001,
   MAX_RMS: 0.10,
@@ -24,6 +23,9 @@ const CONFIG = {
 // ============================================
 let rnnoiseModulePromise = null;
 let cachedResourcesPath = null;
+let globalSharedAudioContext = null;
+let globalRNNoiseNode = null;
+let isRNNoiseRegistering = false;
 
 const getRNNoiseModule = () => {
   if (!rnnoiseModulePromise) {
@@ -61,30 +63,18 @@ const getResourcePath = (filename) => {
 };
 
 export function useVoiceProcessor() {
-  const { localParticipant } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const room = useRoomContext();
   
   // ============================================
   // ✅ OPTIMIZED ZUSTAND SELECTORS (shallow)
   // ============================================
-  const {
-    noiseSuppressionMode,
-    advancedNoiseReduction,
-    spectralFiltering,
-    aiNoiseSuppression,
-    voiceThreshold,
-    setLocalIsSpeaking
-  } = useSettingsStore(
-    s => ({
-      noiseSuppressionMode: s.noiseSuppressionMode,
-      advancedNoiseReduction: s.advancedNoiseReduction,
-      spectralFiltering: s.spectralFiltering,
-      aiNoiseSuppression: s.aiNoiseSuppression,
-      voiceThreshold: s.voiceThreshold,
-      setLocalIsSpeaking: s.setLocalIsSpeaking,
-    }),
-    shallow
-  );
+  const noiseSuppressionMode = useSettingsStore(s => s.noiseSuppressionMode);
+  const advancedNoiseReduction = useSettingsStore(s => s.advancedNoiseReduction);
+  const spectralFiltering = useSettingsStore(s => s.spectralFiltering);
+  const aiNoiseSuppression = useSettingsStore(s => s.aiNoiseSuppression);
+  const voiceThreshold = useSettingsStore(s => s.voiceThreshold);
+  const setLocalIsSpeaking = useSettingsStore(s => s.setLocalIsSpeaking);
 
   // Krisp modu senkronizasyonu
   useEffect(() => {
@@ -106,6 +96,7 @@ export function useVoiceProcessor() {
   const notchFilterRef = useRef(null);
   const compressorRef = useRef(null);
   const gainNodeRef = useRef(null);
+  const antiSilenceOscRef = useRef(null); // ✅ Anti-silence
   
   const lastSpeakingTimeRef = useRef(0);
   const isCleaningUpRef = useRef(false);
@@ -141,9 +132,8 @@ export function useVoiceProcessor() {
       setLocalIsSpeaking(false);
     }
 
-    // Clone stream track'leri durdur
+    // MediaStream objesini referanslardan temizle (TRACK'LERİ SAKIN DURDURMA!)
     if (cloneStreamRef.current) {
-      cloneStreamRef.current.getTracks().forEach(t => t.stop());
       cloneStreamRef.current = null;
     }
 
@@ -154,26 +144,34 @@ export function useVoiceProcessor() {
       rnnoiseNodeRef
     ];
     
+    // Anti-silence oscillator
+    if (antiSilenceOscRef.current) {
+      try { antiSilenceOscRef.current.stop(); } catch(e) {}
+      try { antiSilenceOscRef.current.disconnect(); } catch(e) {}
+      antiSilenceOscRef.current = null;
+    }
+    
     nodesToClean.forEach(ref => {
       if (ref.current) {
         try {
-          ref.current.disconnect();
-          if (ref.current.port) {
-            ref.current.port.close?.();
-            ref.current.port.onmessage = null;
+          if (ref === rnnoiseNodeRef) {
+             // ✅ FIX: RNNoise node is kept globally! We only disconnect its outputs 
+             // to prevent feedback loops when the graph is rebuilt.
+             ref.current.disconnect(); 
+          } else {
+             ref.current.disconnect();
+             if (ref.current.port) {
+               ref.current.port.close?.();
+               ref.current.port.onmessage = null;
+             }
           }
         } catch (e) {}
         ref.current = null;
       }
     });
 
-    // ✅ FIX: Mutlaka close() kullan, asla suspend() değil
-    // suspend() AudioContext'i durdurmaz, worklet thread'leri çalışmaya devam eder
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      try {
-        audioContextRef.current.close().catch(() => {});
-      } catch (e) {}
-    }
+    // ✅ FIX: Do NOT suspend global context to prevent gesture lockouts.
+    // Since we disconnect all nodes, resource usage is minimal.
     audioContextRef.current = null;
   }, [setLocalIsSpeaking]);
 
@@ -192,17 +190,22 @@ export function useVoiceProcessor() {
       isCleaningUpRef.current = false;
       
       // Audio Context
-      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+      if (!globalSharedAudioContext || globalSharedAudioContext.state === "closed") {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        audioContextRef.current = new AudioCtx({
+        globalSharedAudioContext = new AudioCtx({
           sampleRate: CONFIG.SAMPLE_RATE,
           latencyHint: "interactive",
         });
       }
+      audioContextRef.current = globalSharedAudioContext;
       
       const ctx = audioContextRef.current;
-      if (ctx.state === "suspended") await ctx.resume();
-      if (ctx.state !== "running") await ctx.resume();
+      try {
+        if (ctx.state === "suspended") await ctx.resume();
+        if (ctx.state !== "running") await ctx.resume();
+      } catch(e) {
+        console.warn("AudioContext resume failed:", e);
+      }
 
       // Track
       const trackPublication = localParticipant.getTrackPublication(Track.Source.Microphone);
@@ -219,11 +222,10 @@ export function useVoiceProcessor() {
       }
       
       originalStreamTrack = track.mediaStreamTrack;
-      lastTrackEnabled = originalStreamTrack.enabled;
 
-      // Stream Cloning
-      const cloneStream = originalStreamTrack.clone();
-      cloneStreamRef.current = new MediaStream([cloneStream]);
+      // ✅ FIX: Do NOT clone the stream track. Use it directly to ensure we get live audio bytes.
+      // Cloning sometimes results in a dead track if the original was toggled.
+      cloneStreamRef.current = new MediaStream([originalStreamTrack]);
       const source = ctx.createMediaStreamSource(cloneStreamRef.current);
       sourceRef.current = source;
       let currentNode = source;
@@ -233,19 +235,49 @@ export function useVoiceProcessor() {
       // ============================================
       if (noiseSuppressionMode === "krisp") {
         try {
-          const rnnoiseModule = await getRNNoiseModule();
-          const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModule;
-          
-          const workletUrl = getResourcePath('rnnoise.worklet.js');
-          const wasmUrl = getResourcePath('rnnoise.wasm');
-          
-          const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
-          await RNNoiseNode.register(ctx, assets);
-          const rnnoiseNode = new RNNoiseNode(ctx);
-          currentNode.connect(rnnoiseNode);
-          currentNode = rnnoiseNode;
-          rnnoiseNodeRef.current = rnnoiseNode;
-          console.log("✅ RNNoise initialized (fresh)");
+          // ✅ AudioContext çalışıyor mu kontrol et
+          if (!ctx || ctx.state === "closed") {
+            console.warn("⚠️ AudioContext closed, RNNoise atlanıyor");
+          } else {
+            if (!globalRNNoiseNode && !isRNNoiseRegistering) {
+              isRNNoiseRegistering = true;
+              const rnnoiseModule = await getRNNoiseModule();
+              const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModule;
+              
+              const workletUrl = getResourcePath('rnnoise.worklet.js');
+              const wasmUrl = getResourcePath('rnnoise.wasm');
+              
+              const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
+              
+              // Wait until it's safe to register (in case context was suspended quickly)
+              if (ctx.state !== "closed") {
+                 await RNNoiseNode.register(ctx, assets);
+                 globalRNNoiseNode = new RNNoiseNode(ctx);
+                 console.log("✅ RNNoise initialized (Globally created)");
+              }
+              isRNNoiseRegistering = false;
+            }
+
+            // Wait if it's currently downloading/compiling
+            while (isRNNoiseRegistering) {
+              await new Promise(r => setTimeout(r, 50));
+            }
+
+            if (globalRNNoiseNode) {
+              // ✅ RNNOISE CRASH FIX: rnnoise.worklet.js crashes if inputs are empty (silence optimization).
+              const antiSilenceOsc = ctx.createOscillator();
+              const antiSilenceGain = ctx.createGain();
+              antiSilenceGain.gain.value = 1e-10; // Practically zero
+              antiSilenceOsc.connect(antiSilenceGain);
+              antiSilenceGain.connect(globalRNNoiseNode);
+              antiSilenceOsc.start();
+              antiSilenceOscRef.current = antiSilenceOsc;
+
+              currentNode.connect(globalRNNoiseNode);
+              currentNode = globalRNNoiseNode;
+              rnnoiseNodeRef.current = globalRNNoiseNode;
+            }
+          }
         } catch(e) {
           console.error("❌ RNNoise error:", e);
         }
@@ -295,6 +327,7 @@ export function useVoiceProcessor() {
       }
 
       // Main Analyser
+      if (ctx.state === "closed" || isCleaningUpRef.current) return;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = CONFIG.FFT_SIZE;
       analyser.smoothingTimeConstant = CONFIG.SPECTRAL_SMOOTHING;
@@ -312,10 +345,12 @@ export function useVoiceProcessor() {
           console.warn("Worklet module load failed:", e);
         }
 
+        if (ctx.state === "closed" || isCleaningUpRef.current) return;
         const processorNode = new AudioWorkletNode(ctx, 'voice-processor');
         workletNodeRef.current = processorNode;
         currentNode.connect(processorNode);
         
+        if (ctx.state === "closed") return;
         const silentGain = ctx.createGain();
         silentGain.gain.value = 0;
         processorNode.connect(silentGain);
@@ -341,79 +376,36 @@ export function useVoiceProcessor() {
           const now = Date.now();
           const threshold = cachedThresholdRef.current; // ✅ CACHED
           
-          // Darbe tespiti
-          if (isTransient) {
-            impactBlockTimestampRef.current = now;
-            if (lastTrackEnabled !== false) {
-              originalStreamTrack.enabled = false;
-              lastTrackEnabled = false;
-            }
-            return;
-          }
-          
-          const impactActive = (now - impactBlockTimestampRef.current) < CONFIG.IMPACT_HOLD_MS;
-          if (impactActive) {
-            if (lastTrackEnabled !== false) {
-              originalStreamTrack.enabled = false;
-              lastTrackEnabled = false;
-            }
-            return;
-          }
-          
           // ============================================
-          // ✅ MOD BAZLI VAD (Voice Activity Detection)
+          // ✅ SADECE UI VAD - Track asla kapatılmaz
+          // Multi-speaker sesi bastırma sorununu çözmek için
+          // originalStreamTrack.enabled'a dokunulmaz, LiveKit kendi yönetir
           // ============================================
-          // ÖNEMLI: Tüm modlarda threshold ZORUNLU - altındaki ses geçmez
           const isKrisp = noiseSuppressionMode === "krisp";
           const isStandard = noiseSuppressionMode === "standard";
           
           let isSpeaking = false;
           
-          // ✅ Önce threshold kontrolü - altındaysa hiçbir şey geçmez
-          if (rms < threshold * 0.5) {
-            isSpeaking = false;
-          } else if (isKrisp) {
-            // Krisp: RNNoise temiz sinyal + threshold
-            isSpeaking = rms > threshold && (
-              isSustainedVoice || 
-              (isWhisper && CONFIG.KRISP_WHISPER_ENABLED) ||
-              hasPotentialVoice ||
-              !isTransient
-            );
+          if (isKrisp) {
+            // ✅ KESIN ÇÖZÜM: Krisp zaten arkaplan gürültüsünü sildiği için karmaşık vad hesaplarına gerek yok.
+            // Sadece kullanıcının ayarladığı Noise Gate (Eşik) seviyesini geçip geçmediğine bakıyoruz.
+            isSpeaking = rms > threshold && !isTransient;
           } else if (isStandard) {
-            // Standard: Filter chain + threshold
-            isSpeaking = rms > threshold * 0.8 && (
-              isSustainedVoice || hasPotentialVoice
-            );
+            isSpeaking = rms > threshold && (isSustainedVoice || hasPotentialVoice);
           } else {
-            // None: Sadece threshold
-            isSpeaking = rms > threshold * 1.3 && isSustainedVoice;
+            // None modu: sadece threshold
+            isSpeaking = rms > threshold;
           }
           
+          // ✅ Sadece UI indikatörü güncelle - track'e dokunma
           if (isSpeaking) {
             lastSpeakingTimeRef.current = now;
-            impactBlockTimestampRef.current = 0;
-            
-            // ✅ Track state tracking
-            if (lastTrackEnabled !== true) {
-              originalStreamTrack.enabled = true;
-              lastTrackEnabled = true;
-            }
-            
-            // UI indicator
             lastUISpeakingTimeRef.current = now;
             if (!currentUISpeakingRef.current && room.state === ConnectionState.Connected) {
               currentUISpeakingRef.current = true;
               setLocalIsSpeaking(true);
             }
           } else {
-            const releaseTime = isKrisp ? CONFIG.RELEASE_TIME_RNNOISE : CONFIG.RELEASE_TIME;
-            
-            if ((now - lastSpeakingTimeRef.current) > releaseTime && lastTrackEnabled !== false) {
-              originalStreamTrack.enabled = false;
-              lastTrackEnabled = false;
-            }
-            
             if (currentUISpeakingRef.current && (now - lastUISpeakingTimeRef.current) > CONFIG.UI_RELEASE_TIME) {
               currentUISpeakingRef.current = false;
               setLocalIsSpeaking(false);
@@ -449,10 +441,10 @@ export function useVoiceProcessor() {
         room.off(RoomEvent.ConnectionStateChanged, checkConnection);
       }
       cleanup();
-      if (originalStreamTrack) originalStreamTrack.enabled = true;
     };
   }, [
     localParticipant,
+    isMicrophoneEnabled,
     room,
     noiseSuppressionMode,
     advancedNoiseReduction,

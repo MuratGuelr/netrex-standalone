@@ -17,7 +17,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { Crown, User } from "lucide-react";
+import { useSettingsStore } from "@/src/store/settingsStore";
+import { Crown, User, Mic, VolumeX } from "lucide-react";
 import Avatar from "@/src/components/ui/Avatar";
 import { toast } from "sonner";
 import RolesList from "./context/RolesList";
@@ -38,6 +39,9 @@ export default function MemberContextMenu({
     setMemberRoles 
   } = useServerStore();
   const { user } = useAuthStore();
+  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
+  const mutedTtsUsers = useSettingsStore(state => state.mutedTtsUsers);
+  const toggleMutedTtsUser = useSettingsStore(state => state.toggleMutedTtsUser);
   
   const [coords, setCoords] = useState({ top: y, left: x });
 
@@ -204,6 +208,30 @@ export default function MemberContextMenu({
 
       {/* MENU ITEMS */}
       <div className="p-2 space-y-1 relative z-10">
+        {!isSelf && ttsEnabled && (
+          <button
+            onClick={() => {
+              toggleMutedTtsUser(member.id || member.userId);
+              const isMuted = !mutedTtsUsers.includes(member.id || member.userId);
+              toast.success(isMuted ? "Kullanıcının mesaj okuması kapatıldı" : "Kullanıcının mesaj okuması açıldı");
+              onClose();
+            }}
+            className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-[#5865F2] transition-colors border-b border-white/5 mb-1 pb-2"
+          >
+            {mutedTtsUsers.includes(member.id || member.userId) ? (
+              <>
+                <Mic size={16} className="text-green-400 group-hover:text-white" />
+                <span className="font-medium">Sesli Okumayı Aç</span>
+              </>
+            ) : (
+              <>
+                <VolumeX size={16} className="text-[#b5bac1] group-hover:text-white" />
+                <span className="font-medium">Kullanıcıyı Sustur (TTS)</span>
+              </>
+            )}
+          </button>
+        )}
+
         {/* ✅ Isolated RolesList */}
         <RolesList
           sortedRoles={sortedRoles}

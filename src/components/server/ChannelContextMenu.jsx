@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom"; // Portal eklendi
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { Settings, Trash2, Shield, Hash, Volume2 } from "lucide-react";
+import { useSettingsStore } from "@/src/store/settingsStore";
+import { Settings, Trash2, Shield, Hash, Volume2, VolumeX, Mic } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ChannelContextMenu({
@@ -16,6 +17,9 @@ export default function ChannelContextMenu({
 }) {
   const { currentServer, deleteChannel, roles, members } = useServerStore();
   const { user } = useAuthStore();
+  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
+  const mutedTtsChannels = useSettingsStore(state => state.mutedTtsChannels);
+  const toggleMutedTtsChannel = useSettingsStore(state => state.toggleMutedTtsChannel);
   
   const [coords, setCoords] = useState({ top: y, left: x });
 
@@ -60,6 +64,13 @@ export default function ChannelContextMenu({
       toast.success("Kanal silindi");
       onClose();
     }
+  };
+
+  const handleToggleTtsMute = () => {
+    toggleMutedTtsChannel(channel.id);
+    const isMuted = !mutedTtsChannels.includes(channel.id);
+    toast.success(isMuted ? "Kanal sesi susturuldu" : "Kanal sesi açıldı");
+    onClose();
   };
 
   const handleOpenSettings = (tab = 'overview') => {
@@ -129,6 +140,28 @@ export default function ChannelContextMenu({
 
         {/* Menu Items */}
         <div className="p-2 space-y-1">
+          {!isVoiceChannel && ttsEnabled && (
+            <>
+              <button
+                onClick={handleToggleTtsMute}
+                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200"
+              >
+                {mutedTtsChannels.includes(channel.id) ? (
+                  <>
+                    <Mic size={16} className="text-gray-500 group-hover:text-green-400 transition-colors" />
+                    <span className="font-medium">Sesli Okumayı Aç</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX size={16} className="text-gray-500 group-hover:text-red-400 transition-colors" />
+                    <span className="font-medium">Sesli Okumayı Kapat</span>
+                  </>
+                )}
+              </button>
+              <div className="h-px bg-white/5 my-1.5 mx-2"></div>
+            </>
+          )}
+
           {canManageChannels ? (
             <>
               <button

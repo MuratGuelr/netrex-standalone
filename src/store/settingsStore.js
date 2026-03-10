@@ -28,18 +28,18 @@ export const useSettingsStore = create(
 
       // Gelişmiş Ses İşleme (Krisp/Discord benzeri)
       // Ses İşleme Modu: "none" | "standard" | "krisp"
-      noiseSuppressionMode: "standard", // Discord benzeri mod seçimi
-      advancedNoiseReduction: true, // Çok katmanlı gürültü azaltma (otomatik ayarlanır)
-      adaptiveThreshold: true, // Otomatik eşik ayarlama (otomatik ayarlanır)
-      noiseProfiling: true, // Arka plan gürültü profili (otomatik ayarlanır)
-      spectralFiltering: true, // Spektral filtreleme (otomatik ayarlanır)
+      noiseSuppressionMode: "krisp", // Discord benzeri mod seçimi - Varsayılan: Krisp (AI)
+      advancedNoiseReduction: false, // Krisp modunda RNNoise kendi yapıyor
+      adaptiveThreshold: false, // Krisp modunda gerekli değil
+      noiseProfiling: false, // Krisp modunda gerekli değil
+      spectralFiltering: false, // Krisp modunda gerekli değil
       windNoiseReduction: true, // Rüzgar gürültüsü azaltma
       noiseReductionLevel: 70, // 0-100 arası gürültü azaltma seviyesi
-      aiNoiseSuppression: false, // AI tabanlı gürültü bastırma (RNNoise) - Opsiyonel (otomatik ayarlanır)
+      aiNoiseSuppression: true, // AI tabanlı gürültü bastırma (RNNoise) - Krisp varsayılan açık
 
       // Seviyeler
-      voiceThreshold: 15,
-      sfxVolume: 50,
+      voiceThreshold: 5, // %5 varsayılan hassasiyet
+      sfxVolume: 30, // %30 varsayılan uygulama sesleri
       profileColor: "#6366f1",
 
       // Kullanıcı sesleri
@@ -56,6 +56,12 @@ export const useSettingsStore = create(
       notifyOnJoin: false,
       notifyOnLeave: false,
       notificationSoundType: "default", // "default" | "custom"
+      ttsEnabled: false, // Text-to-Speech
+      ttsVolume: 80, // TTS Volume (0-100)
+      ttsVoiceURI: "auto", // Specific Voice Engine URI or 'auto' for dynamic distribution
+      ttsOnlyUnfocused: true, // Sadece arka plandayken çalışsın (varsayılan: evet)
+      mutedTtsChannels: [], // Sesi kapatılan kanalların ID'leri
+      mutedTtsUsers: [], // Sesi kapatılan kullanıcıların ID'leri
 
       // Görünüm
       uiScale: 100, // 75, 100, 125, 150
@@ -64,15 +70,15 @@ export const useSettingsStore = create(
 
       // Performans
       hardwareAcceleration: true, // Animasyonlar için GPU zorlama
-      graphicsQuality: "high", // "high" | "low" | "potato"
+      graphicsQuality: "low", // "high" | "low" | "potato" - Varsayılan: Düşük
       disableAnimations: false, // Animasyonları tamamen kapat
       disableBackgroundEffects: false, // Arka plan efektlerini kapat
       videoCodec: "vp8", // "vp8" | "h264" | "av1"
 
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
-      videoResolution: "240p", // "240p" | "360p" | "480p"
-      videoFrameRate: 18, // 15 | 18 | 24
+      videoResolution: "480p", // "240p" | "360p" | "480p"
+      videoFrameRate: 24, // 15 | 18 | 24
 
       // Kontrol Çubuğu Ayarları
       controlBarHidden: false, // Kontrol çubuğu gizli mi?
@@ -130,8 +136,24 @@ export const useSettingsStore = create(
       }),
 
       // Voice State Toggles
-      toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
-      toggleDeaf: () => set((state) => ({ isDeafened: !state.isDeafened })),
+      // Voice State Toggles
+      toggleMute: () => set((state) => {
+        const nextMuted = !state.isMuted;
+        const updates = { isMuted: nextMuted };
+        if (!nextMuted && !state.isDeafened && state.quickStatus) {
+          updates.quickStatus = null;
+        }
+        return updates;
+      }),
+      toggleDeaf: () => set((state) => {
+        const nextDeafened = !state.isDeafened;
+        const updates = { isDeafened: nextDeafened };
+        // Deafen kapatılıyorsa ve Mute da kapalıysa durumu sıfırla
+        if (!nextDeafened && !state.isMuted && state.quickStatus) {
+          updates.quickStatus = null;
+        }
+        return updates;
+      }),
       setSettingsOpen: (isOpen) => set({ showSettingsModal: isOpen }),
       setSettingsScrollToSection: (section) => set({ settingsScrollToSection: section }),
       // Settings modal'ı belirli bir bölüme scroll ederek aç
@@ -231,6 +253,20 @@ export const useSettingsStore = create(
       setNotifyOnJoin: (enabled) => set({ notifyOnJoin: enabled }),
       setNotifyOnLeave: (enabled) => set({ notifyOnLeave: enabled }),
       setNotificationSoundType: (type) => set({ notificationSoundType: type }),
+      setTtsEnabled: (enabled) => set({ ttsEnabled: enabled }),
+      setTtsVolume: (volume) => set({ ttsVolume: Math.max(0, Math.min(100, volume)) }),
+      setTtsVoiceURI: (uri) => set({ ttsVoiceURI: uri }),
+      setTtsOnlyUnfocused: (enabled) => set({ ttsOnlyUnfocused: enabled }),
+      toggleMutedTtsChannel: (channelId) => set((state) => ({
+        mutedTtsChannels: state.mutedTtsChannels.includes(channelId) 
+          ? state.mutedTtsChannels.filter(id => id !== channelId) 
+          : [...state.mutedTtsChannels, channelId]
+      })),
+      toggleMutedTtsUser: (userId) => set((state) => ({
+        mutedTtsUsers: state.mutedTtsUsers.includes(userId) 
+          ? state.mutedTtsUsers.filter(id => id !== userId) 
+          : [...state.mutedTtsUsers, userId]
+      })),
 
       setUIScale: (scale) => set({ uiScale: scale }),
       setFontSize: (size) => set({ fontSize: size }),
@@ -329,6 +365,11 @@ export const useSettingsStore = create(
       name: "netrex-user-settings",
       version: 2, // Upgraded for Quick Status v2 (4 slots fixed)
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => Object.fromEntries(
+        Object.entries(state).filter(
+          ([key]) => !['localIsSpeaking', 'isInVoiceRoom', 'showSettingsModal'].includes(key)
+        )
+      ),
       migrate: (persistedState, version) => {
         if (version === 0 || version === 1) {
           // Reset Quick Status to healthy defaults

@@ -36,6 +36,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor }) {
                     src={user.photoURL}
                     alt="Avatar"
                     className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   user.displayName?.charAt(0).toUpperCase() || "?"

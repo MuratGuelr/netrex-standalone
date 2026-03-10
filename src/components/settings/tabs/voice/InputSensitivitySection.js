@@ -6,6 +6,7 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
   const audioInputId = useSettingsStore(s => s.audioInputId);
   const voiceThreshold = useSettingsStore(s => s.voiceThreshold);
   const setVoiceThreshold = useSettingsStore(s => s.setVoiceThreshold);
+  const noiseSuppressionMode = useSettingsStore(s => s.noiseSuppressionMode);
 
   const [micVolume, setMicVolume] = useState(0);
   const [localThreshold, setLocalThreshold] = useState(voiceThreshold);
@@ -22,10 +23,11 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
     const MAX_RMS = 0.12;
 
     // RMS değerini normalize et (0-1 arası)
-    const normalized = Math.max(
+    let normalized = Math.max(
       0,
       Math.min(1, (rms - MIN_RMS) / (MAX_RMS - MIN_RMS))
     );
+    
     // Yüzdeye çevir (0-100)
     return normalized * 100;
   }, []);

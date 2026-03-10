@@ -162,8 +162,7 @@ export default function AppShell({
 
           {/* Right Sidebar with integrated Toggle Button */}
           {hasRightSidebarContent && (
-            <div className="h-full flex-shrink-0 relative flex">
-              {/* Toggle Button - Outside overflow container, always visible */}
+            <div className="h-full flex-shrink-0 relative flex" style={{ zIndex: 'auto' }}>
               <button
                 onClick={onToggleRightSidebar}
                 className={`

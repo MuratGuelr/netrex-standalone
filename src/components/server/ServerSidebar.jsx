@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
+import { useSettingsStore } from "@/src/store/settingsStore";
 import { Plus, Trash2 } from "lucide-react";
 import { useChatStore } from "@/src/store/chatStore";
 import ServerSettingsModal from "./ServerSettingsModal";
@@ -27,6 +28,9 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
   const canManageServer = useServerPermission("MANAGE_SERVER");
+  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
+  const mutedTtsChannels = useSettingsStore(state => state.mutedTtsChannels);
+  const toggleMutedTtsChannel = useSettingsStore(state => state.toggleMutedTtsChannel);
 
   // State
   const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview' });
@@ -158,6 +162,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
             {textChannels.map(channel => {
               const hasUnread = unreadCounts[channel.id] > 0;
               const isActive = (currentChannel?.id === channel.id && showChatPanel) || activeTextChannelId === channel.id;
+              const isTtsMuted = ttsEnabled && mutedTtsChannels.includes(channel.id);
               
               return (
                 <TextChannelItem
@@ -166,6 +171,9 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                   isActive={isActive}
                   hasUnread={hasUnread}
                   hasRestrictions={hasRestrictions(channel)}
+                  ttsEnabled={ttsEnabled}
+                  isTtsMuted={isTtsMuted}
+                  onToggleTtsMute={toggleMutedTtsChannel}
                   onClick={() => handleTextChannelClick(channel)}
                   onContextMenu={(e) => handleChannelContextMenu(e, channel)}
                 />

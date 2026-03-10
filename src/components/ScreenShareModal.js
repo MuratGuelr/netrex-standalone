@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Monitor,
   X,
@@ -16,7 +17,7 @@ import {
 
 export default function ScreenShareModal({ isOpen, onClose, onStart }) {
   const [step, setStep] = useState(1); // 1: Kaynak Seçimi, 2: Kalite Ayarı
-  const [activeTab, setActiveTab] = useState("apps"); // 'apps' | 'screens'
+  const [activeTab, setActiveTab] = useState("screens"); // ✅ FIX: Direkt ekranlarla başla
   const [sources, setSources] = useState([]);
   const [selectedSourceId, setSelectedSourceId] = useState(null);
   const appsTabRef = useRef(null);
@@ -25,17 +26,17 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
   const [tabPositions, setTabPositions] = useState({ apps: 0, screens: 0 });
 
   // Varsayılan Ayarlar
-  const [resolution, setResolution] = useState(720); // 720p varsayılan
-  const [fps, setFps] = useState(30); // 30fps varsayılan
+  const [resolution, setResolution] = useState(1080); // 1080p varsayılan
+  const [fps, setFps] = useState(15); // 15fps varsayılan
 
   // YENİ: Ses Paylaşım Ayarı
   const [withAudio, setWithAudio] = useState(true);
   const [audioMode, setAudioMode] = useState("system"); // "system" | "app" - Ekran için sistem, uygulama için uygulama
 
-  // 1080p seçildiğinde FPS'i 15'e düşür (Kısıtlama)
+  // 1080p seçildiğinde FPS'i 30'a düşür (Kısıtlama)
   useEffect(() => {
-    if (resolution === 1080 && fps > 15) {
-      setFps(15);
+    if (resolution === 1080 && fps > 30) {
+      setFps(30);
     }
   }, [resolution, fps]);
 
@@ -45,14 +46,22 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       setStep(1);
       setSources([]);
       setSelectedSourceId(null);
+      // ✅ FIX: Hemen ekranlar sekmesiyle başla (async beklenmeden)
+      setActiveTab("screens");
       // Varsayılan olarak ses kapalı başlasın (otomatik açılmasın)
       setWithAudio(false);
       setAudioMode("system");
 
       window.netrex.getDesktopSources().then((srcs) => {
         setSources(srcs);
-        // Önce Ekranlar sekmesi gelsin (Kullanıcı İsteği)
-        setActiveTab("screens");
+        // İlk mevcut ekranı otomatik seç
+        const firstScreen = srcs.find((s) => s.id.startsWith("screen"));
+        if (firstScreen) {
+          setSelectedSourceId(firstScreen.id);
+        } else if (srcs.length > 0) {
+          // Ekran yoksa ilk kaynağı seç
+          setSelectedSourceId(srcs[0].id);
+        }
       });
     }
   }, [isOpen]);
@@ -129,8 +138,10 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
       ? categorizedSources.screens
       : categorizedSources.apps;
 
-  return (
-    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4 backdrop-blur-xl animate-fadeIn">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/70 z-[99999] flex items-center justify-center p-4 backdrop-blur-xl animate-fadeIn">
       {/* Animated background gradient - More vibrant */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 pointer-events-none animate-gradient" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
@@ -656,7 +667,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
                     className="shrink-0 relative z-10 text-indigo-300"
                   />
                   <span className="relative z-10">
-                    1080p çözünürlük için kare hızı 15 FPS ile sınırlandırılmıştır.
+                    1080p çözünürlük için kare hızı 30 FPS ile sınırlandırılmıştır.
                   </span>
                 </div>
               )}
@@ -724,6 +735,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

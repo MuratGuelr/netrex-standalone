@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
-import { Send, Copy, ImageIcon, Trash2 } from "lucide-react";
+import { Send, Copy, ImageIcon, Trash2, Mic, VolumeX } from "lucide-react";
+import { useSettingsStore } from "@/src/store/settingsStore";
 
 export default function MessageContextMenu({
   contextMenu,
@@ -13,6 +14,10 @@ export default function MessageContextMenu({
   handleDeleteMsg,
   handleDeleteSequence
 }) {
+  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
+  const mutedTtsUsers = useSettingsStore(state => state.mutedTtsUsers);
+  const toggleMutedTtsUser = useSettingsStore(state => state.toggleMutedTtsUser);
+
   if (!contextMenu) return null;
 
   return createPortal(
@@ -52,6 +57,28 @@ export default function MessageContextMenu({
             </button>
           ))}
         </div>
+
+        {ttsEnabled && contextMenu.message.userId !== userId && (
+          <div
+            className="mx-2 px-2 py-1.5 hover:bg-[#5865F2] hover:text-white rounded cursor-pointer flex items-center gap-2 group select-none transition-colors border-b border-white/5 mb-1 pb-1.5"
+            onClick={() => { 
+              toggleMutedTtsUser(contextMenu.message.userId); 
+              setContextMenu(null); 
+            }}
+          >
+            {mutedTtsUsers.includes(contextMenu.message.userId) ? (
+              <>
+                <Mic size={16} className="text-green-400 group-hover:text-white" />
+                <span className="font-medium">Kullanıcının Sesini Aç</span>
+              </>
+            ) : (
+              <>
+                <VolumeX size={16} className="text-[#b5bac1] group-hover:text-white" />
+                <span className="font-medium">Kullanıcıyı Sustur (TTS)</span>
+              </>
+            )}
+          </div>
+        )}
 
         {contextMenu.message.type === 'image' ? (
           <>

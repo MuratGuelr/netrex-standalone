@@ -5,7 +5,7 @@ import { Track } from "livekit-client";
 
 // ScreenShareManager: stopScreenShare fonksiyonunu LiveKitRoom içinde tanımlar
 export default function ScreenShareManager({
-  setActiveStreamId,
+  setPinnedStreamIds,
   renderStageManager,
   renderBottomControls,
 }) {
@@ -26,8 +26,8 @@ export default function ScreenShareManager({
       );
 
       if (screenShareTracks.length === 0) {
-        // Track yoksa, activeStreamId'yi sıfırla
-        setActiveStreamId(null);
+        // Track yoksa, diziden kendi yayınını çıkar
+        setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity));
         return;
       }
 
@@ -87,18 +87,18 @@ export default function ScreenShareManager({
       // Tüm unpublish işlemlerini bekle
       await Promise.all(unpublishPromises);
 
-      // activeStreamId'yi sıfırla
-      setActiveStreamId(null);
+      // Kendi yayınımızı diziden çıkar
+      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity));
 
       if (process.env.NODE_ENV === "development") {
         console.log("✅ Screen share durduruldu");
       }
     } catch (error) {
       console.error("Screen share durdurma hatası:", error);
-      // Hata olsa bile activeStreamId'yi sıfırla
-      setActiveStreamId(null);
+      // Hata olsa bile kendi yayınımızı diziden çıkar
+      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant?.identity));
     }
-  }, [localParticipant, setActiveStreamId]);
+  }, [localParticipant, setPinnedStreamIds]);
 
   return (
     <>

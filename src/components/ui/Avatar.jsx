@@ -117,6 +117,7 @@ const Avatar = forwardRef(function Avatar({
             src={src}
             alt={alt || name}
             className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
             onError={(e) => {
               e.target.style.display = "none";
               e.target.parentNode.querySelector(".avatar-fallback")?.classList.remove("hidden");

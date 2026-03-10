@@ -28,6 +28,7 @@ const ProfileHeader = memo(({
                src={profileBgImage} 
                className="absolute inset-0 w-full h-full object-cover" 
                alt="banner" 
+               referrerPolicy="no-referrer"
              />
              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f11] via-transparent to-black/30"></div>
            </>

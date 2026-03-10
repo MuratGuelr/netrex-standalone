@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { MessageSquare, Lock } from "lucide-react";
+import { MessageSquare, Lock, Volume2, VolumeX } from "lucide-react";
 
 /**
  * 💬 TextChannelItem - OPTIMIZED Text Channel Item
@@ -12,6 +12,9 @@ const TextChannelItem = memo(function TextChannelItem({
   isActive,
   hasUnread,
   hasRestrictions,
+  ttsEnabled,
+  isTtsMuted,
+  onToggleTtsMute,
   onClick,
   onContextMenu
 }) {
@@ -36,8 +39,25 @@ const TextChannelItem = memo(function TextChannelItem({
         {channel.name}
       </span>
 
-      {hasUnread && <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_5px_currentColor]" />}
-      {hasRestrictions && <Lock size={12} className="text-[#5c5e66]" />}
+      <div className="flex items-center gap-2">
+        {ttsEnabled && (
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleTtsMute(channel.id);
+            }}
+            className="flex items-center justify-center -mr-1 z-10 p-1 rounded-md hover:bg-white/5"
+          >
+            {isTtsMuted ? (
+              <VolumeX size={14} className="text-red-400 hover:text-red-300 transition-colors" />
+            ) : (
+              <Volume2 size={14} className="text-[#5c5e66]/0 group-hover:text-[#5c5e66] transition-colors hover:!text-green-400" />
+            )}
+          </div>
+        )}
+        {hasUnread && <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_5px_currentColor]" />}
+        {hasRestrictions && <Lock size={12} className="text-[#5c5e66]" />}
+      </div>
     </div>
   );
 }, (prevProps, nextProps) => {
@@ -47,7 +67,10 @@ const TextChannelItem = memo(function TextChannelItem({
     prevProps.channel.name === nextProps.channel.name &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.hasUnread === nextProps.hasUnread &&
-    prevProps.hasRestrictions === nextProps.hasRestrictions
+    prevProps.hasRestrictions === nextProps.hasRestrictions &&
+    prevProps.ttsEnabled === nextProps.ttsEnabled &&
+    prevProps.isTtsMuted === nextProps.isTtsMuted &&
+    prevProps.onToggleTtsMute === nextProps.onToggleTtsMute // Bu değiştiyse re-render et!
   );
 });
 

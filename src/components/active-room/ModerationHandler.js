@@ -24,48 +24,65 @@ export default function ModerationHandler({
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
 
+  // ✅ FIX v2.0: Sync Lock + Debounce for race condition prevention
+  const syncLockRef = useRef(false);
+  const syncTimerRef = useRef(null);
+  const lastDesiredStateRef = useRef(null);
+
   // Mikrofon ve Hoparlör durumunu hem manuel hem de sunucu kısıtlamalarına göre senkronize et
   useEffect(() => {
     if (!localParticipant) return;
 
-    const syncMicState = async () => {
-      // Mikrofon açık olmalı mı? (Manuel mute kapalı VE sunucu susturması kapalı VE sağırlaştırma kapalı)
-      const shouldEnableMic = !(isMuted || serverMuted || isDeafened || serverDeafened);
-      
-      // Döngü koruması: Mevcut durum zaten istenen gibiyse işlem yapma
-      if (localParticipant.isMicrophoneEnabled === shouldEnableMic) {
+    // ✅ Desired state hesapla
+    const shouldEnableMic = !(isMuted || serverMuted || isDeafened || serverDeafened);
+
+    // ✅ Eğer istenen durum aynıysa tekrar çalıştırma
+    if (lastDesiredStateRef.current === shouldEnableMic) {
+      return;
+    }
+    lastDesiredStateRef.current = shouldEnableMic;
+
+    // ✅ Debounce: Hızlı art arda değişimlerde sadece son durumu uygula (50ms)
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+
+    syncTimerRef.current = setTimeout(async () => {
+      // ✅ Sync Lock: Aynı anda birden fazla çağrı olmasın
+      if (syncLockRef.current) {
+        console.log("⏳ syncMicState atlandı (lock aktif)");
         return;
       }
 
+      // Asıl istenen durumu tekrar kontrol et (debounce sırasında değişmiş olabilir)
+      const currentDesiredState = !(isMuted || serverMuted || isDeafened || serverDeafened);
+      
+      // Döngü koruması: Mevcut durum zaten istenen gibiyse işlem yapma
+      if (localParticipant.isMicrophoneEnabled === currentDesiredState) {
+        return;
+      }
+
+      syncLockRef.current = true;
+
       try {
-        await localParticipant.setMicrophoneEnabled(shouldEnableMic);
-        
-        // Eğer kapalı olması gerekiyorsa, ekstra güvenlik kontrolü yap
-        // setMicrophoneEnabled bazen track'i unpublish eder, bazen mute eder.
-        // Eğer track hala varsa ve unmuted ise, zorla mute et.
-        if (!shouldEnableMic) {
-          const micPub = localParticipant.getTrackPublication("microphone"); // Source 'microphone' string is not standard, use Track.Source.Microphone is better but imports needed.
-          // Or iterate
-          const publications = localParticipant.getTrackPublications();
-          for (const pub of publications) {
-             if (pub.source === "microphone" || pub.source === "screen_share_audio") { // Ensure generic audio is checked if needed, but mainly mic
-                if (!pub.isMuted) {
-                   console.log(`Force muting track ${pub.trackSid} due to restriction`);
-                   await pub.setMuted(true);
-                }
-                if (pub.track) {
-                   pub.track.enabled = false;
-                   if (pub.track.mediaStreamTrack) pub.track.mediaStreamTrack.enabled = false;
-                }
-             }
-          }
-        }
+        await localParticipant.setMicrophoneEnabled(currentDesiredState);
+        // ✅ FIX: Force-mute kaldırıldı!
+        // Eski kodda pub.setMuted(true), track.enabled = false, mediaStreamTrack.enabled = false
+        // yapıyorduk. Bu LiveKit'in dahili audio mixing mekanizmasıyla çatışıyordu ve
+        // diğer kullanıcıların seslerinin bastırılmasına (ducking) yol açıyordu.
+        // LiveKit'in setMicrophoneEnabled() zaten track state'ini yönetiyor.
       } catch (error) {
         console.error("Microphone state sync error:", error);
+      } finally {
+        syncLockRef.current = false;
+      }
+    }, 50); // 50ms debounce - hızlı toggle'ları birleştirir
+
+    return () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
       }
     };
-
-    syncMicState();
   }, [isMuted, serverMuted, isDeafened, serverDeafened, localParticipant]);
 
   // İlk bağlantıda metadata'dan durumu oku
@@ -115,6 +132,8 @@ export default function ModerationHandler({
            if (data.targetId === localParticipant.identity) {
              if (data.action === "MUTE") {
                const modName = data.moderatorName || "Bir yetkili";
+               // ✅ FIX: Batch state updates - syncMicState'in tekrar çalışmasını sağla
+               lastDesiredStateRef.current = null;
                setServerMuted(data.value);
                if (data.value) {
                  setMutedBy(modName);
@@ -141,6 +160,8 @@ export default function ModerationHandler({
              } else if (data.action === "DEAFEN") {
                 const modName = data.moderatorName || "Bir yetkili";
                 const newValue = data.value;
+                // ✅ FIX: syncMicState'in tekrar çalışmasını sağla
+                lastDesiredStateRef.current = null;
                 setServerDeafened(newValue);
                 if (newValue) {
                   setDeafenedBy(modName);

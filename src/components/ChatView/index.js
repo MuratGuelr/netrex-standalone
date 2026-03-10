@@ -19,6 +19,7 @@ import ChatInput from "./ChatInput";
 import ImageOverlay from "./ImageOverlay";
 import SecurityModal from "./SecurityModal";
 import MessageContextMenu from "./MessageContextMenu";
+// TTS utils are now handled by GlobalChatListener
 
 export default function ChatView({ channelId, username, userId }) {
   const {
@@ -53,6 +54,7 @@ export default function ChatView({ channelId, username, userId }) {
   // Typing status management
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
+
 
   // Editing State
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -225,13 +227,17 @@ export default function ChatView({ channelId, username, userId }) {
   const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
   const notifyOnMessage = useSettingsStore(state => state.notifyOnMessage);
 
+
   const handleDataReceived = useCallback((payload, participant, kind, topic) => {
     if (topic !== "chat") return;
     try {
       const decoder = new TextDecoder();
       const data = JSON.parse(decoder.decode(payload));
-      if (data.type === "chat" && data.channelId === channelId && data.message.userId !== userId) {
-        addIncomingMessage(data.message);
+      if (data.type === "chat" && data.channelId === channelId) {
+        if (data.message.userId !== userId) {
+          addIncomingMessage(data.message);
+        }
+        // TTS artık GlobalChatListener tarafından yönetiliyor (tüm kanallar için)
       }
     } catch (error) {}
   }, [channelId, userId, addIncomingMessage]);
@@ -287,6 +293,8 @@ export default function ChatView({ channelId, username, userId }) {
         if (fileToSend) { setPendingImage(URL.createObjectURL(fileToSend)); setPendingImageFile(fileToSend); }
         if (result?.cooldownRemaining) setCooldownRemaining(result.cooldownRemaining);
         else toast.error(result?.error || "Mesaj gönderilemedi.");
+      } else {
+        // TTS artık GlobalChatListener tarafından yönetiliyor
       }
     } catch (error) {
       toast.error("Mesaj gönderilemedi.");

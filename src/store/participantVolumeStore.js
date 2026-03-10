@@ -25,8 +25,8 @@ export const useParticipantVolumeStore = create(
       setVolume: (participantIdentity, volume) => {
         if (!participantIdentity) return;
         
-        // Clamp to 0.0 - 1.0 range
-        const clampedVolume = Math.max(0, Math.min(1, volume));
+        // Clamp to 0.0 - 2.0 range
+        const clampedVolume = Math.max(0, Math.min(2.0, volume));
         
         set(state => ({
           volumes: {

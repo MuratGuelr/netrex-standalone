@@ -72,6 +72,7 @@ export default function UserPanel({
               src={user.photoURL} 
               alt={displayName}
               className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <span>{displayName.charAt(0).toUpperCase()}</span>

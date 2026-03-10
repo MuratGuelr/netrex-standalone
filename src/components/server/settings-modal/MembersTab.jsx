@@ -89,6 +89,7 @@ export default function MembersTab({ members, roles }) {
                     src={member.photoURL} 
                     alt={member.displayName} 
                     className="w-10 h-10 rounded-xl object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">

@@ -188,11 +188,33 @@ export default function RoomEventsHandler({
     };
 
     // Bağlantı event'leri
-    const onRoomConnected = () => {
+    const onRoomConnected = async () => {
       const { setInVoiceRoom, onConnected } = callbacksRef.current;
       
       // 🚀 v5.2: Ses odasına bağlandı - idle detection'a bildir
       setInVoiceRoom(true);
+      
+      // ✅ MemoizedMicrophoneManager kaldırıldığından mikrofonu burada publish et
+      // Bu olmadan useVoiceProcessor track bulamaz ve ses gitmez
+      try {
+        if (room?.localParticipant) {
+          // Yüksek kaliteli ses için Opus codec ayarları
+          await room.localParticipant.setMicrophoneEnabled(true, {
+            // Yüksek kalite mikrofon - gürültü bastırmayı LiveKit'e bırak
+            echoCancellation: true,
+            noiseSuppression: false,  // useVoiceProcessor zaten hallediyor
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+          }, {
+            // Opus codec yüksek bitrate
+            audioBitrate: 96000, // 96 kbps - Discord benzeri kalite
+          });
+          console.log("🎤 Mikrofon yüksek kalite ile publish edildi (onRoomConnected)");
+        }
+      } catch (micError) {
+        console.warn("⚠️ Mikrofon publish hatası:", micError);
+      }
       
       // Sadece development'ta log göster (spam'i önlemek için)
       if (process.env.NODE_ENV === "development") {
