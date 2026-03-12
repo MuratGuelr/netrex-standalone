@@ -867,7 +867,7 @@ export default function BottomControls({
         };
       }
 
-      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), localParticipant.identity])));
+      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), `${localParticipant.identity}:screen`])));
     } catch (e) {
       console.error("Screen share error:", e);
       toastOnce("Ekran paylaşımı başlatılamadı: " + e.message, "error");

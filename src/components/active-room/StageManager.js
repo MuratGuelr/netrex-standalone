@@ -193,6 +193,33 @@ function DragPreview({ track, size = 'normal' }) {
 // --- STREAM CONTEXT MENU ---
 function StreamContextMenu({ x, y, onClose, onRemove, onSpotlight, onMoveFirst, onFullscreen, streamName }) {
   const menuRef = useRef(null);
+  const [coords, setCoords] = useState({ top: y, left: x });
+  const [isPositioned, setIsPositioned] = useState(false);
+
+  // ✅ Akıllı pozisyonlama - gerçek boyutu ölç
+  useEffect(() => {
+    setIsPositioned(false);
+    const raf = requestAnimationFrame(() => {
+      const menu = menuRef.current;
+      if (!menu) return;
+      const rect = menu.getBoundingClientRect();
+      const mW = rect.width || 180;
+      const mH = rect.height || 200;
+      const PADDING = 8;
+
+      let newLeft = x;
+      let newTop = y;
+
+      if (newLeft + mW > window.innerWidth - PADDING) newLeft = x - mW;
+      if (newLeft < PADDING) newLeft = PADDING;
+      if (newTop + mH > window.innerHeight - PADDING) newTop = window.innerHeight - mH - PADDING;
+      if (newTop < PADDING) newTop = PADDING;
+
+      setCoords({ top: newTop, left: newLeft });
+      setIsPositioned(true);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [x, y]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -217,8 +244,15 @@ function StreamContextMenu({ x, y, onClose, onRemove, onSpotlight, onMoveFirst, 
   return (
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[180px] bg-[#111214]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-      style={{ left: x, top: y }}
+      className="fixed z-[100] min-w-[180px] bg-[#111214]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+      style={{ 
+        left: coords.left, 
+        top: coords.top,
+        opacity: isPositioned ? 1 : 0,
+        transform: isPositioned ? 'scale(1)' : 'scale(0.95)',
+        transition: 'opacity 150ms ease-out, transform 150ms ease-out',
+        transformOrigin: 'top left',
+      }}
     >
       <div className="px-3 py-2 border-b border-white/[0.06]">
         <span className="text-[10px] uppercase tracking-widest text-[#72767d] font-semibold">{streamName}</span>
@@ -353,14 +387,12 @@ function StageManager({
           if (camera) tracks.push({ track: camera, pinnedId: idWithSource, id: `${identity}:${source}` });
         }
       } else {
-        // Fallback for double-clicking user card without suffix
+        // Fallback for bare identity (eski format) - HER İKİ track'i de ekle
         const screen = screenTracks.find((t) => t.participant.identity === idWithSource);
         const camera = cameraTracks.find((t) => t.participant.identity === idWithSource);
         
-        // If they double clicked, prefer showing screen if they have both.
-        // They can manually open camera from the top bar.
         if (screen) tracks.push({ track: screen, pinnedId: idWithSource, id: `${screen.participant.identity}:screen` });
-        else if (camera) tracks.push({ track: camera, pinnedId: idWithSource, id: `${camera.participant.identity}:camera` });
+        if (camera) tracks.push({ track: camera, pinnedId: idWithSource, id: `${camera.participant.identity}:camera` });
       }
       return tracks;
     }).filter(Boolean);
@@ -430,52 +462,51 @@ function StageManager({
     prevScreenTracksRef.current = screenTracks;
   }, [screenTracks, desktopNotifications, notifyOnJoin]);
 
-  // activeStreamId'yi yönet - sadece track değiştiğinde veya track kaybolduğunda güncelle
-  // Kullanıcı manuel olarak durdurduğunda (boş array yaptığında) tekrar seçme
+  // ✅ Birleşik stream yönetimi - kamera ve yayın tek yerden yönetiliyor
+  // Race condition fix: Local track'ler için track listesi yerine localParticipant.isEnabled kontrolü
   useEffect(() => {
     // Kullanıcı manuel olarak durdurduysa, tekrar otomatik seçme
     if (userStoppedWatchingRef.current && (!pinnedStreamIds || pinnedStreamIds.length === 0)) {
-      // Kullanıcı durdurdu, track'ler değişmediyse hiçbir şey yapma
       return;
     }
 
     // Track kaybolduysa filterla
     if (pinnedStreamIds && pinnedStreamIds.length > 0) {
+      const localIdentity = localParticipant?.identity;
+      
       const stillActiveIds = pinnedStreamIds.filter(idWithSource => {
         const [identity, source] = idWithSource.includes(':') ? idWithSource.split(':') : [idWithSource, 'any'];
+        const isLocalUser = identity === localIdentity;
         
+        if (isLocalUser) {
+          // ✅ Local kullanıcı için: Track listesi yerine ENABLED durumuna bak
+          // Track henüz publish olmamış olsa bile enabled ise silme (race condition fix)
+          if (source === 'screen') return localParticipant?.isScreenShareEnabled || screenTracks.some(t => t.participant.identity === identity);
+          if (source === 'camera') return localParticipant?.isCameraEnabled || cameraTracks.some(t => t.participant.identity === identity);
+          return localParticipant?.isScreenShareEnabled || localParticipant?.isCameraEnabled || 
+                 screenTracks.some(t => t.participant.identity === identity) || 
+                 cameraTracks.some(t => t.participant.identity === identity);
+        }
+        
+        // Remote kullanıcılar için: Track listesine bak (her zamanki gibi)
         if (source === 'screen') return screenTracks.some(t => t.participant.identity === identity);
         if (source === 'camera') return cameraTracks.some(t => t.participant.identity === identity);
-        
         return screenTracks.some(t => t.participant.identity === identity) || cameraTracks.some(t => t.participant.identity === identity);
       });
 
-      // Dedup — aynı id birden fazla kez eklenmişse temizle
+      // Dedup
       const dedupedIds = [...new Set(stillActiveIds)];
-
       if (dedupedIds.length !== pinnedStreamIds.length || dedupedIds.some((id, i) => id !== pinnedStreamIds[i])) {
-        if (dedupedIds.length === 0) {
-          userStoppedWatchingRef.current = false; // Tüm track'ler kayboldu, reset
-        }
+        if (dedupedIds.length === 0) userStoppedWatchingRef.current = false;
         setPinnedStreamIds(dedupedIds);
         return;
       }
     }
 
-    // YENİ: Otomatik seçim kaldırıldı - kullanıcılar manuel olarak yayına katılacak
-    // Sadece kendi yayınını açan kişi için otomatik olarak kendi yayınını göster
-    if (screenTracks.length > 0 && (!pinnedStreamIds || pinnedStreamIds.length === 0)) {
-      const myScreenShare = screenTracks.find((t) => t.participant.isLocal);
-      if (myScreenShare) {
-        const myId = `${myScreenShare.participant.identity}:screen`;
-        // Tekrar eklenmesini önle
-        if (!pinnedStreamIds || !pinnedStreamIds.includes(myId)) {
-          userStoppedWatchingRef.current = false;
-          setPinnedStreamIds([myId]);
-        }
-      }
-    }
-  }, [screenTracks, cameraTracks, pinnedStreamIds, setPinnedStreamIds]);
+    // YENİ: Otomatik ekleme mantığı kaldırıldı (BottomControls zaten startScreenShare'de ekliyor)
+    // Bu sayede kullanıcı kendi yayınını "X" ile veya sağ tık ile kapattığında geri gelmeyecek.
+
+  }, [screenTracks, cameraTracks, pinnedStreamIds, setPinnedStreamIds, localParticipant]);
 
   const isLocalSharing = activeTracks.length > 0 && activeTracks[0].track.participant.isLocal;
   const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
@@ -577,20 +608,22 @@ function StageManager({
           }}
         >
           {(screenTracks.length > 0 || cameraTracks.length > 0) && activeTracks.length > 0 && (
-            <div className="bg-gradient-to-r from-[#1a1b1f] via-[#1e1f23] to-[#1a1b1f] px-3 py-2 flex items-center gap-3 overflow-x-auto border-b border-white/[0.06] shrink-0 custom-scrollbar">
+            <div className="bg-gradient-to-r from-[#1a1b1f] via-[#1e1f23] to-[#1a1b1f] px-3 py-1.5 flex items-center gap-2 overflow-x-auto border-b border-white/[0.06] shrink-0 custom-scrollbar">
               {/* Yayınlar Bölümü */}
               {screenTracks.length > 0 && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold mr-1 select-none">
-                    <Monitor size={10} className="opacity-60" />
-                    Yayınlar
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold mr-0.5 select-none">
+                    <Monitor size={20} className="opacity-60" />
                   </div>
                   {screenTracks.map((t) => {
                     const targetId = `${t.participant.identity}:screen`;
                     const isPinned = pinnedStreamIds?.includes(targetId) || pinnedStreamIds?.includes(t.participant.identity);
+                    const name = t.participant.isLocal ? "Sen" : (t.participant.name || t.participant.identity);
+                    const initial = name.charAt(0).toUpperCase();
                     return (
                       <button
                         key={`screen-${t.participant.sid}`}
+                        title={`${name} - ${isPinned ? 'İzlemeyi bırak' : 'Yayını izle'}`}
                         onClick={() => {
                           setPinnedStreamIds(prev => {
                             const newArr = (prev || []).filter(id => id !== t.participant.identity && id !== targetId);
@@ -599,24 +632,19 @@ function StageManager({
                           });
                           setLocalPreviewHidden(false);
                         }}
-                        className={`group/btn relative px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all duration-200 border ${
+                        className={`group/btn relative w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold transition-all duration-200 shrink-0 ${
                           isPinned
-                            ? "bg-[#5865f2]/20 text-[#8b9cff] border-[#5865f2]/40 shadow-[0_0_12px_rgba(88,101,242,0.15)]"
-                            : "bg-white/[0.04] text-[#949ba4] border-white/[0.06] hover:bg-white/[0.08] hover:text-white hover:border-white/[0.12]"
+                            ? "bg-[#5865f2]/30 text-white ring-2 ring-[#5865f2] shadow-[0_0_10px_rgba(88,101,242,0.3)]"
+                            : "bg-white/[0.08] text-[#949ba4] ring-1 ring-white/[0.08] hover:ring-white/[0.2] hover:bg-white/[0.12] hover:text-white"
                         }`}
                       >
-                        <div className="relative">
-                          <Monitor size={13} className={isPinned ? "text-[#5865f2]" : ""} />
-                          <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isPinned ? 'bg-red-500' : 'bg-emerald-500'} animate-pulse`} />
+                        {initial}
+                        {/* Canlı göstergesi */}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center ${isPinned ? 'bg-[#5865f2]' : 'bg-[#2d2f34]'}`}>
+                          <Monitor size={9} className={isPinned ? 'text-white' : 'text-[#949ba4]'} />
                         </div>
-                        <span className="whitespace-nowrap">
-                          {t.participant.isLocal ? "Senin Yayının" : (t.participant.name || t.participant.identity)}
-                        </span>
-                        {isPinned && (
-                          <div className="w-4 h-4 rounded-full bg-[#5865f2]/30 flex items-center justify-center ml-0.5">
-                            <Eye size={9} className="text-[#5865f2]" />
-                          </div>
-                        )}
+                        {/* Canlı pulse */}
+                        {!isPinned && <div className="absolute -top-0.5 -left-0.5 w-2 h-2 bg-red-500 rounded-full animate-pulse ring-1 ring-[#1e1f23]" />}
                       </button>
                     );
                   })}
@@ -631,42 +659,37 @@ function StageManager({
               {/* Kameralar Bölümü */}
               {cameraTracks.length > 0 && (
                 <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold mr-1 select-none">
-                    <Video size={10} className="opacity-60" />
-                    Kameralar
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold mr-0.5 select-none">
+                    <Video size={25} className="opacity-70" />
                   </div>
                   {cameraTracks.map((t) => {
                     const targetId = `${t.participant.identity}:camera`;
-                    const isPinned = pinnedStreamIds?.includes(targetId);
+                    const isPinned = pinnedStreamIds?.includes(targetId) || pinnedStreamIds?.includes(t.participant.identity);
+                    const name = t.participant.isLocal ? "Sen" : (t.participant.name || t.participant.identity);
+                    const initial = name.charAt(0).toUpperCase();
                     return (
                       <button
                         key={`camera-${t.participant.sid}`}
+                        title={`${name} - ${isPinned ? 'İzlemeyi bırak' : 'Kamerayı izle'}`}
                         onClick={() => {
                           setPinnedStreamIds(prev => {
-                            const newArr = (prev || []).filter(id => id !== targetId);
+                            const newArr = (prev || []).filter(id => id !== targetId && id !== t.participant.identity);
                             if (!isPinned) newArr.push(targetId);
                             return newArr;
                           });
                           setLocalPreviewHidden(false);
                         }}
-                        className={`group/btn relative px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all duration-200 border ${
+                        className={`group/btn relative w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold transition-all duration-200 shrink-0 ${
                           isPinned
-                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.12)]"
-                            : "bg-white/[0.04] text-[#949ba4] border-white/[0.06] hover:bg-white/[0.08] hover:text-white hover:border-white/[0.12]"
+                            ? "bg-emerald-500/20 text-white ring-2 ring-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                            : "bg-white/[0.08] text-[#949ba4] ring-1 ring-white/[0.08] hover:ring-white/[0.2] hover:bg-white/[0.12] hover:text-white"
                         }`}
                       >
-                        <div className="relative">
-                          <Video size={13} className={isPinned ? "text-emerald-400" : ""} />
-                          <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ${isPinned ? 'animate-pulse' : 'opacity-60'}`} />
+                        {initial}
+                        {/* Kamera göstergesi */}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center ${isPinned ? 'bg-emerald-500' : 'bg-[#2d2f34]'}`}>
+                          <Video size={9} className={isPinned ? 'text-white' : 'text-[#949ba4]'} />
                         </div>
-                        <span className="whitespace-nowrap">
-                          {t.participant.isLocal ? "Kameran" : `${t.participant.name || t.participant.identity}`}
-                        </span>
-                        {isPinned && (
-                          <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center ml-0.5">
-                            <Eye size={9} className="text-emerald-400" />
-                          </div>
-                        )}
                       </button>
                     );
                   })}
@@ -677,9 +700,10 @@ function StageManager({
               {pinnedStreamIds?.length > 1 && (
                 <button
                   onClick={() => setPinnedStreamIds([])}
-                  className="ml-auto shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-red-400/70 hover:text-red-400 bg-red-500/[0.06] hover:bg-red-500/[0.12] border border-red-500/[0.1] hover:border-red-500/[0.2] transition-all duration-200"
+                  title="Tüm izlemeleri kapat"
+                  className="ml-auto shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-red-400/60 hover:text-red-400 bg-red-500/[0.06] hover:bg-red-500/[0.15] ring-1 ring-red-500/[0.1] hover:ring-red-500/[0.3] transition-all duration-200"
                 >
-                  Tümünü Kaldır
+                  <X size={12} />
                 </button>
               )}
             </div>
@@ -738,13 +762,6 @@ function StageManager({
                           <div className="relative min-h-0">
                             <SortableTrackItem key={id} id={id} spotlightMode disableDrag>
                               <QualityBadge trackRef={track} />
-                              <div
-                                className="absolute inset-0 z-30"
-                                onContextMenu={(e) => {
-                                  e.preventDefault();
-                                  setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
-                                }}
-                              />
                               {isLocal && localPreviewHidden && track.source !== Track.Source.Camera ? (
                                 <LocalHiddenPlaceholder
                                   onShow={() => setLocalPreviewHidden(false)}
@@ -756,6 +773,10 @@ function StageManager({
                                   onStopWatching={() => {
                                     userStoppedWatchingRef.current = true;
                                     setPinnedStreamIds(prev => prev.filter(streamId => streamId !== `${track.participant.identity}:${track.source === Track.Source.Camera ? 'camera' : 'screen'}` && streamId !== track.participant.identity));
+                                  }}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
                                   }}
                                   onUserContextMenu={onUserContextMenu}
                                   isLocalSharing={isLocal}
@@ -778,20 +799,6 @@ function StageManager({
                             <div key={id} className="relative shrink-0 h-full rounded-xl" style={{ width: '220px', minWidth: '220px' }}>
                               <SortableTrackItem id={id} spotlightMode>
                                 <QualityBadge trackRef={track} />
-                                <div
-                                  className="absolute inset-0 z-30"
-                                  onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
-                                  }}
-                                  onDoubleClick={() => {
-                                    setPinnedStreamIds(prev => {
-                                      const idx = prev.indexOf(pinnedId);
-                                      if (idx > 0) return [pinnedId, ...prev.filter(p => p !== pinnedId)];
-                                      return prev;
-                                    });
-                                  }}
-                                />
                                 {isLocal && localPreviewHidden && track.source !== Track.Source.Camera ? (
                                   <LocalHiddenPlaceholder
                                     onShow={() => setLocalPreviewHidden(false)}
@@ -804,6 +811,17 @@ function StageManager({
                                     onStopWatching={() => {
                                       userStoppedWatchingRef.current = true;
                                       setPinnedStreamIds(prev => prev.filter(streamId => streamId !== `${track.participant.identity}:${track.source === Track.Source.Camera ? 'camera' : 'screen'}` && streamId !== track.participant.identity));
+                                    }}
+                                    onContextMenu={(e) => {
+                                      e.preventDefault();
+                                      setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
+                                    }}
+                                    onDoubleClick={() => {
+                                      setPinnedStreamIds(prev => {
+                                        const idx = prev.indexOf(pinnedId);
+                                        if (idx > 0) return [pinnedId, ...prev.filter(p => p !== pinnedId)];
+                                        return prev;
+                                      });
                                     }}
                                     onUserContextMenu={onUserContextMenu}
                                     isLocalSharing={isLocal}
@@ -835,13 +853,6 @@ function StageManager({
                         return (
                           <SortableTrackItem key={id} id={id} disableDrag={activeTracks.length <= 1}>
                             <QualityBadge trackRef={track} />
-                            <div
-                              className="absolute inset-0 z-30"
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
-                              }}
-                            />
                             {isLocal && localPreviewHidden && track.source !== Track.Source.Camera ? (
                               <LocalHiddenPlaceholder
                                 onShow={() => setLocalPreviewHidden(false)}
@@ -857,6 +868,10 @@ function StageManager({
                                 onStopWatching={() => {
                                   userStoppedWatchingRef.current = true;
                                   setPinnedStreamIds(prev => prev.filter(streamId => streamId !== `${track.participant.identity}:${track.source === Track.Source.Camera ? 'camera' : 'screen'}` && streamId !== track.participant.identity));
+                                }}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  setContextMenu({ x: e.clientX, y: e.clientY, trackId: id, pinnedId, track });
                                 }}
                                 onUserContextMenu={onUserContextMenu}
                                 isLocalSharing={isLocal}
@@ -913,8 +928,15 @@ function StageManager({
                     });
                   }}
                   onFullscreen={() => {
-                    // Focus only this stream
+                    // Tek yayın moduna geç + tam ekran yap
                     setPinnedStreamIds([contextMenu.pinnedId]);
+                    // Biraz bekle ki DOM güncellensin, sonra tam ekran yap
+                    setTimeout(() => {
+                      const stageContainer = containerRef.current?.querySelector('[data-stage-container]');
+                      if (stageContainer) {
+                        stageContainer.requestFullscreen?.().catch(() => {});
+                      }
+                    }, 100);
                   }}
                 />
               )}
@@ -1090,9 +1112,10 @@ const StageOverlay = React.memo(({ showOverlay, showCursor, isLocalSharing, isAu
           </span>
         </div>
         <div className="flex gap-2 pointer-events-auto">
-          {isLocalSharing && (
+          {isLocalSharing && trackRef.source !== Track.Source.Camera && (
             <button
               onClick={onHideLocal}
+              title="Önizlemeyi gizle"
               className={`backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white/70 hover:text-white p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 will-change-transform ${
                 showOverlay ? "opacity-100" : "opacity-0"
               }`}
@@ -1102,11 +1125,12 @@ const StageOverlay = React.memo(({ showOverlay, showCursor, isLocalSharing, isAu
           )}
           <button
             onClick={onStopWatching}
+            title="İzlemeyi kapat"
             className={`backdrop-blur-md bg-white/[0.06] hover:bg-red-500/20 border border-white/[0.12] text-white/70 hover:text-red-400 p-2 sm:p-2.5 rounded-2xl transition-all duration-200 hover:scale-110 will-change-transform ${
               showOverlay ? "opacity-100" : "opacity-0"
             }`}
           >
-            <Minimize size={18} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -1158,7 +1182,8 @@ const StageOverlay = React.memo(({ showOverlay, showCursor, isLocalSharing, isAu
             )}
             <button
               onClick={toggleFullscreen}
-              className="p-2.5 rounded-xl border border-white/10 text-white hover:bg-indigo-500/20 transition-all duration-200 hover:scale-110 backdrop-blur-sm"
+              title={isFullscreen ? 'Tam ekrandan çık (ESC)' : 'Tam ekran yap'}
+              className="p-2.5 rounded-xl border border-white/10 text-white hover:bg-indigo-500/20 transition-all duration-200 hover:scale-110 backdrop-blur-sm flex items-center gap-1.5"
             >
               {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
@@ -1173,6 +1198,8 @@ function ScreenShareStage({
   trackRef,
   onStopWatching,
   onUserContextMenu,
+  onContextMenu: onContextMenuProp,
+  onDoubleClick: onDoubleClickProp,
   isLocalSharing,
   onHideLocal,
   amISharing,
@@ -1213,19 +1240,25 @@ function ScreenShareStage({
     }).length;
   }, [participants, participant]);
   const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
-  const cameraTracks = useTracks([Track.Source.Camera]);
   const audioTrackRef = audioTracks.find(
     (t) => t.participant.sid === participant?.sid
   );
   const isAudioDisabled = amISharing && !isLocalSharing;
 
   useEffect(() => {
-    if (audioTrackRef?.publication?.track && audioRef.current) {
-      audioTrackRef.publication.track.attach(audioRef.current);
+    const audioEl = audioRef.current;
+    const track = audioTrackRef?.publication?.track;
+    
+    if (track && audioEl) {
+      track.attach(audioEl);
     }
     return () => {
-      if (audioTrackRef?.publication?.track && audioRef.current) {
-        audioTrackRef.publication.track.detach(audioRef.current);
+      // ✅ Captured variables kullan (stale ref önleme)
+      if (track && audioEl) {
+        track.detach(audioEl);
+        // ✅ Audio element'in srcObject'ini temizle (memory leak önleme)
+        audioEl.srcObject = null;
+        audioEl.pause();
       }
     };
   }, [audioTrackRef]);
@@ -1280,15 +1313,37 @@ function ScreenShareStage({
       setVolume(prevVolume > 0 ? prevVolume : 50);
     }
   };
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
+    const target = containerRef.current;
+    if (!target) return;
+    
     if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen();
-      setIsFullscreen(true);
+      target.requestFullscreen?.().then(() => {
+        setIsFullscreen(true);
+      }).catch((err) => {
+        console.warn('Fullscreen request failed:', err);
+      });
     } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      }).catch(() => {});
     }
-  };
+  }, []);
+
+  // ✅ Fullscreen state senkronizasyonu (ESC ile çıkınca da doğru state)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      // ✅ Tam ekrandan çıkılmamışsa çık (component unmount)
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
 
   // Mouse movement tracking - overlay ve cursor kontrolü
   // 🚀 OPTIMIZATION: Throttle eklendi
@@ -1347,7 +1402,12 @@ function ScreenShareStage({
   }, []);
 
   return (
-    <div className={`flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] relative overflow-hidden`}>
+    <div 
+      ref={containerRef}
+      data-stage-container
+      onContextMenu={onContextMenuProp}
+      className={`flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] relative overflow-hidden`}
+    >
       {/* Ambient background orbs - only in non-compact mode */}
       {!compact && !disableBackgroundEffects && (
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -1357,8 +1417,7 @@ function ScreenShareStage({
       )}
 
       <div
-        ref={containerRef}
-        onDoubleClick={onStopWatching}
+        onDoubleClick={onDoubleClickProp || onStopWatching}
         className={`flex-1 relative flex items-center justify-center overflow-hidden ${
           !showCursor ? "cursor-none" : ""
         }`}

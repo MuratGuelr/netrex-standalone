@@ -202,6 +202,20 @@ const PipGrid = forwardRef(({ tracks, isSelfSharing }, ref) => {
         master.srcObject = stream;
         master.play().catch(() => {});
     }
+    
+    return () => {
+      // ✅ Canvas stream cleanup (memory leak önleme)
+      if (master) {
+        const stream = master.srcObject;
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+        }
+        master.srcObject = null;
+        master.pause();
+      }
+      // ✅ Source video map'i temizle
+      sourceVideosRef.current.clear();
+    };
   }, []);
 
   // Expose methods

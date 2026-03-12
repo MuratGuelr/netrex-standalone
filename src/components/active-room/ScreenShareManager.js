@@ -27,7 +27,7 @@ export default function ScreenShareManager({
 
       if (screenShareTracks.length === 0) {
         // Track yoksa, diziden kendi yayınını çıkar
-        setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity));
+        setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity && id !== `${localParticipant.identity}:screen`));
         return;
       }
 
@@ -87,8 +87,8 @@ export default function ScreenShareManager({
       // Tüm unpublish işlemlerini bekle
       await Promise.all(unpublishPromises);
 
-      // Kendi yayınımızı diziden çıkar
-      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity));
+      // Kendi yayınımızı diziden çıkar (sadece screen, kamerayı kaldırma)
+      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant.identity && id !== `${localParticipant.identity}:screen`));
 
       if (process.env.NODE_ENV === "development") {
         console.log("✅ Screen share durduruldu");
@@ -96,7 +96,7 @@ export default function ScreenShareManager({
     } catch (error) {
       console.error("Screen share durdurma hatası:", error);
       // Hata olsa bile kendi yayınımızı diziden çıkar
-      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant?.identity));
+      setPinnedStreamIds(prev => prev.filter(id => id !== localParticipant?.identity && id !== `${localParticipant?.identity}:screen`));
     }
   }, [localParticipant, setPinnedStreamIds]);
 

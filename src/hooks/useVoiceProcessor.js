@@ -8,7 +8,7 @@ const CONFIG = {
   SAMPLE_RATE: 48000,
   RELEASE_TIME: 100,
   RELEASE_TIME_RNNOISE: 80,
-  UI_RELEASE_TIME: 120, // ✅ FIX: 200ms → 120ms - UserCard'ın kendi debounce'u var (200ms)
+  UI_RELEASE_TIME: 120,
   IMPACT_HOLD_MS: 50,
   MIN_RMS: 0.001,
   MAX_RMS: 0.10,
@@ -16,6 +16,9 @@ const CONFIG = {
   VOICE_HIGH_FREQ: 5000,
   KRISP_WHISPER_ENABLED: true,
   SPECTRAL_SMOOTHING: 0.05,
+  // ✅ Noise Gate: smooth fade in/out süresi (saniye)
+  GATE_ATTACK: 0.005,  // 5ms - hızlı açılsın
+  GATE_RELEASE: 0.08,  // 80ms - yumuşak kapansın (pop/click önleme)
 };
 
 // ============================================
@@ -96,7 +99,13 @@ export function useVoiceProcessor() {
   const notchFilterRef = useRef(null);
   const compressorRef = useRef(null);
   const gainNodeRef = useRef(null);
-  const antiSilenceOscRef = useRef(null); // ✅ Anti-silence
+  const antiSilenceOscRef = useRef(null);
+  
+  // ✅ YENİ: Track replacement refs
+  const destinationNodeRef = useRef(null);
+  const gateGainNodeRef = useRef(null);
+  const originalSenderRef = useRef(null);
+  const processedTrackRef = useRef(null);
   
   const lastSpeakingTimeRef = useRef(0);
   const isCleaningUpRef = useRef(false);
@@ -122,8 +131,6 @@ export function useVoiceProcessor() {
   }, []);
 
   // ========== CLEANUP ==========
-  // ✅ FIX: preserveRNNoise kaldırıldı - her zaman tamamen temizle
-  // suspend() kullanmak Audio Graph Leak'e neden oluyordu
   const cleanup = useCallback(() => {
     isCleaningUpRef.current = true;
     
@@ -132,7 +139,17 @@ export function useVoiceProcessor() {
       setLocalIsSpeaking(false);
     }
 
-    // MediaStream objesini referanslardan temizle (TRACK'LERİ SAKIN DURDURMA!)
+    // ✅ Orijinal track'i geri yükle (eğer replace edilmişse)
+    if (originalSenderRef.current && processedTrackRef.current) {
+      try {
+        // Track'i stop et
+        processedTrackRef.current.stop();
+      } catch(e) {}
+      processedTrackRef.current = null;
+      originalSenderRef.current = null;
+    }
+
+    // MediaStream objesini referanslardan temizle
     if (cloneStreamRef.current) {
       cloneStreamRef.current = null;
     }
@@ -141,7 +158,7 @@ export function useVoiceProcessor() {
     const nodesToClean = [
       sourceRef, analyserRef, highPassFilterRef, lowPassFilterRef,
       notchFilterRef, compressorRef, gainNodeRef, workletNodeRef,
-      rnnoiseNodeRef
+      rnnoiseNodeRef, destinationNodeRef, gateGainNodeRef
     ];
     
     // Anti-silence oscillator
@@ -155,8 +172,6 @@ export function useVoiceProcessor() {
       if (ref.current) {
         try {
           if (ref === rnnoiseNodeRef) {
-             // ✅ FIX: RNNoise node is kept globally! We only disconnect its outputs 
-             // to prevent feedback loops when the graph is rebuilt.
              ref.current.disconnect(); 
           } else {
              ref.current.disconnect();
@@ -169,9 +184,11 @@ export function useVoiceProcessor() {
         ref.current = null;
       }
     });
-
-    // ✅ FIX: Do NOT suspend global context to prevent gesture lockouts.
-    // Since we disconnect all nodes, resource usage is minimal.
+    // ✅ AudioContext'i kapat (memory leak'in en büyük kaynağı!)
+    // close() çağrılmazsa tüm internal node'lar, buffer'lar ve audio thread'ler bellekte kalır
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close().catch(() => {});
+    }
     audioContextRef.current = null;
   }, [setLocalIsSpeaking]);
 
@@ -182,10 +199,9 @@ export function useVoiceProcessor() {
     isCleaningUpRef.current = false;
     let originalStreamTrack = null;
     let retryTimer = null;
-    let lastTrackEnabled = null; // ✅ Track state tracking
+    let lastTrackEnabled = null;
 
     const setupProcessor = async () => {
-      // ✅ FIX: Her zaman tamamen temizle, preserveRNNoise yok
       cleanup();
       isCleaningUpRef.current = false;
       
@@ -223,19 +239,25 @@ export function useVoiceProcessor() {
       
       originalStreamTrack = track.mediaStreamTrack;
 
-      // ✅ FIX: Do NOT clone the stream track. Use it directly to ensure we get live audio bytes.
-      // Cloning sometimes results in a dead track if the original was toggled.
+      // ✅ Orijinal track'ten MediaStream oluştur (analiz + işleme için)
       cloneStreamRef.current = new MediaStream([originalStreamTrack]);
       const source = ctx.createMediaStreamSource(cloneStreamRef.current);
       sourceRef.current = source;
       let currentNode = source;
 
       // ============================================
-      // ✅ RNNoise Setup (Module-level cache, her seferinde yeni node)
+      // ✅ NOISE GATE GAIN NODE - Tüm modlarda kullanılacak
+      // Bu node, threshold altındaki sesleri bastırmak için
+      // ============================================
+      const gateGain = ctx.createGain();
+      gateGain.gain.value = 1.0; // Başlangıçta açık
+      gateGainNodeRef.current = gateGain;
+
+      // ============================================
+      // ✅ RNNoise Setup (GERÇEK SES İŞLEME!)
       // ============================================
       if (noiseSuppressionMode === "krisp") {
         try {
-          // ✅ AudioContext çalışıyor mu kontrol et
           if (!ctx || ctx.state === "closed") {
             console.warn("⚠️ AudioContext closed, RNNoise atlanıyor");
           } else {
@@ -249,7 +271,6 @@ export function useVoiceProcessor() {
               
               const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
               
-              // Wait until it's safe to register (in case context was suspended quickly)
               if (ctx.state !== "closed") {
                  await RNNoiseNode.register(ctx, assets);
                  globalRNNoiseNode = new RNNoiseNode(ctx);
@@ -264,10 +285,10 @@ export function useVoiceProcessor() {
             }
 
             if (globalRNNoiseNode) {
-              // ✅ RNNOISE CRASH FIX: rnnoise.worklet.js crashes if inputs are empty (silence optimization).
+              // ✅ RNNOISE CRASH FIX: anti-silence oscillator
               const antiSilenceOsc = ctx.createOscillator();
               const antiSilenceGain = ctx.createGain();
-              antiSilenceGain.gain.value = 1e-10; // Practically zero
+              antiSilenceGain.gain.value = 1e-10;
               antiSilenceOsc.connect(antiSilenceGain);
               antiSilenceGain.connect(globalRNNoiseNode);
               antiSilenceOsc.start();
@@ -326,29 +347,90 @@ export function useVoiceProcessor() {
         }
       }
 
-      // Main Analyser
+      // ============================================
+      // ✅ KRİTİK: Sinyal BÖLME noktası
+      // currentNode = RNNoise/Filtreler sonrası ses
+      // Bu sesi iki yere bağlıyoruz:
+      //   1. Analyser → Worklet (VAD analizi - gate'den ETKİLENMEZ)
+      //   2. Gate → Destination → LiveKit (karşı tarafa giden ses)
+      // Gate kapalıyken bile VAD analizi çalışır!
+      // ============================================
+      const preGateNode = currentNode; // Gate'den önceki son node'u sakla
+
+      // ── YOL 1: VAD Analizi (gate'den bağımsız) ──
       if (ctx.state === "closed" || isCleaningUpRef.current) return;
+      
       const analyser = ctx.createAnalyser();
       analyser.fftSize = CONFIG.FFT_SIZE;
       analyser.smoothingTimeConstant = CONFIG.SPECTRAL_SMOOTHING;
-      currentNode.connect(analyser);
+      preGateNode.connect(analyser); // Gate'den ÖNCE bağla!
       analyserRef.current = analyser;
-      
+
+      // ── YOL 2: Gate → Destination → LiveKit ──
+      preGateNode.connect(gateGain);
+      currentNode = gateGain;
+
       // ============================================
-      // 🚀 AUDIO WORKLET SETUP
+      // ✅ ÇIKIŞ: İşlenmiş sesi LiveKit Track'e bağla
+      // createMediaStreamDestination ile yeni bir MediaStream oluştur
+      // ve LiveKit'in sender'ı üzerinde replaceTrack yap
+      // ============================================
+      if (ctx.state === "closed" || isCleaningUpRef.current) return;
+      
+      const destination = ctx.createMediaStreamDestination();
+      destinationNodeRef.current = destination;
+      currentNode.connect(destination);
+      
+      // ✅ İşlenmiş track'i LiveKit sender'ına bağla
+      const processedTrack = destination.stream.getAudioTracks()[0];
+      processedTrackRef.current = processedTrack;
+      
+      try {
+        // ✅ LiveKit'in resmi API'si: track.sender kullan (internal pcManager yerine)
+        const trackPub = localParticipant.getTrackPublication(Track.Source.Microphone);
+        const livekitTrack = trackPub?.track;
+        
+        if (livekitTrack?.sender) {
+          originalSenderRef.current = livekitTrack.sender;
+          await livekitTrack.sender.replaceTrack(processedTrack);
+          console.log("✅ LiveKit track replaced with processed audio (RNNoise + NoiseGate applied!)");
+        } else {
+          // Fallback: PC sender'larından bul
+          const senders = room.engine?.pcManager?.publisher?.pc?.getSenders?.();
+          if (senders) {
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            if (audioSender) {
+              originalSenderRef.current = audioSender;
+              await audioSender.replaceTrack(processedTrack);
+              console.log("✅ LiveKit track replaced via fallback sender");
+            } else {
+              console.warn("⚠️ Audio sender bulunamadı");
+            }
+          } else {
+            console.warn("⚠️ Senders erişilemedi, track replacement atlandı");
+          }
+        }
+      } catch(e) {
+        console.warn("⚠️ Track replacement başarısız:", e);
+      }
+
+      // ============================================
+      // 🚀 AUDIO WORKLET SETUP (Sadece UI VAD + Gate Control)
       // ============================================
       try {
         try {
           const processorPath = getResourcePath('voice-processor.worklet.js');
           await ctx.audioWorklet.addModule(processorPath);
         } catch(e) {
-          console.warn("Worklet module load failed:", e);
+          // Worklet zaten kayıtlıysa hata verebilir, sorun değil
         }
 
         if (ctx.state === "closed" || isCleaningUpRef.current) return;
         const processorNode = new AudioWorkletNode(ctx, 'voice-processor');
         workletNodeRef.current = processorNode;
-        currentNode.connect(processorNode);
+        
+        // ✅ Analyser (gate'den ÖNCE bağlı) → processorNode (VAD analizi)
+        analyserRef.current.connect(processorNode);
         
         if (ctx.state === "closed") return;
         const silentGain = ctx.createGain();
@@ -357,7 +439,8 @@ export function useVoiceProcessor() {
         silentGain.connect(ctx.destination);
 
         // ============================================
-        // ✅ OPTIMIZED MESSAGE HANDLER v5.0
+        // ✅ VAD + NOISE GATE MESSAGE HANDLER
+        // Hem UI animasyonunu hem de noise gate'i kontrol eder
         // ============================================
         processorNode.port.onmessage = (event) => {
           if (isCleaningUpRef.current || !originalStreamTrack) return;
@@ -374,21 +457,16 @@ export function useVoiceProcessor() {
           if (type !== 'metrics') return;
           
           const now = Date.now();
-          const threshold = cachedThresholdRef.current; // ✅ CACHED
+          const threshold = cachedThresholdRef.current;
           
-          // ============================================
-          // ✅ SADECE UI VAD - Track asla kapatılmaz
-          // Multi-speaker sesi bastırma sorununu çözmek için
-          // originalStreamTrack.enabled'a dokunulmaz, LiveKit kendi yönetir
-          // ============================================
           const isKrisp = noiseSuppressionMode === "krisp";
           const isStandard = noiseSuppressionMode === "standard";
           
           let isSpeaking = false;
           
           if (isKrisp) {
-            // ✅ KESIN ÇÖZÜM: Krisp zaten arkaplan gürültüsünü sildiği için karmaşık vad hesaplarına gerek yok.
-            // Sadece kullanıcının ayarladığı Noise Gate (Eşik) seviyesini geçip geçmediğine bakıyoruz.
+            // ✅ Krisp: RNNoise arkaplan gürültüsünü zaten siliyor
+            // Sadece noise gate threshold'u kontrol et
             isSpeaking = rms > threshold && !isTransient;
           } else if (isStandard) {
             isSpeaking = rms > threshold && (isSustainedVoice || hasPotentialVoice);
@@ -397,7 +475,25 @@ export function useVoiceProcessor() {
             isSpeaking = rms > threshold;
           }
           
-          // ✅ Sadece UI indikatörü güncelle - track'e dokunma
+          // ============================================
+          // ✅ NOISE GATE: Gerçek sesi de kontrol et
+          // Gate gain'i smooth şekilde aç/kapat
+          // ============================================
+          const gateNode = gateGainNodeRef.current;
+          if (gateNode && gateNode.gain) {
+            const currentTime = ctx.currentTime;
+            if (isSpeaking) {
+              // Konuşma var → gate AÇ (hızlı attack)
+              gateNode.gain.cancelScheduledValues(currentTime);
+              gateNode.gain.setTargetAtTime(1.0, currentTime, CONFIG.GATE_ATTACK);
+            } else {
+              // Konuşma yok → gate KAPAT (yumuşak release)
+              gateNode.gain.cancelScheduledValues(currentTime);
+              gateNode.gain.setTargetAtTime(0.0, currentTime, CONFIG.GATE_RELEASE);
+            }
+          }
+          
+          // ✅ UI indikatörü güncelle
           if (isSpeaking) {
             lastSpeakingTimeRef.current = now;
             lastUISpeakingTimeRef.current = now;
@@ -423,7 +519,6 @@ export function useVoiceProcessor() {
       }
     };
 
-    // ✅ FIX: Use local variable instead of useRef (can't call hooks inside useEffect)
     let hasRegisteredConnection = false;
     
     if (room.state === ConnectionState.Connected) {

@@ -51,45 +51,85 @@ export default function UserContextMenu({
   }), [targetMetadata]);
 
   const [coords, setCoords] = useState({ top: y, left: x });
+  const [isPositioned, setIsPositioned] = useState(false);
 
-  // Position calculation
+  // ✅ Akıllı pozisyonlama - gerçek menü boyutunu ÖLÇ, sonra konumla
   useEffect(() => {
-    let newLeft = x;
-    let newTop = y;
+    setIsPositioned(false);
+    
+    // RAF ile DOM ölçümü yap (menü render edildikten sonra)
+    const raf = requestAnimationFrame(() => {
+      const menu = menuRef.current;
+      if (!menu) return;
 
-    // Menu size estimate: w:288, h: depends on content
-    // For local user h is approx 300, for remote approx 400
-    const mWidth = 288;
-    const mHeight = isLocal ? 350 : 450;
+      const rect = menu.getBoundingClientRect();
+      const mWidth = rect.width || 288;
+      const mHeight = rect.height || 400;
+      
+      const viewW = window.innerWidth;
+      const viewH = window.innerHeight;
+      const PADDING = 8; // Ekran kenarından minimum boşluk
 
-    if (x + mWidth > window.innerWidth) {
-      newLeft = x - mWidth;
-    }
+      let newLeft = x;
+      let newTop = y;
 
-    if (y + mHeight > window.innerHeight) {
-      newTop = y - mHeight;
-    }
+      // Sağ kenardan taşıyorsa sola kaydır
+      if (newLeft + mWidth > viewW - PADDING) {
+        newLeft = x - mWidth;
+      }
+      
+      // Sol kenardan taşıyorsa sağa çek
+      if (newLeft < PADDING) {
+        newLeft = PADDING;
+      }
 
-    setCoords({ top: newTop, left: newLeft });
-  }, [x, y, isLocal]);
+      // Alt kenardan taşıyorsa yukarı kaydır
+      if (newTop + mHeight > viewH - PADDING) {
+        newTop = viewH - mHeight - PADDING;
+      }
+      
+      // Üst kenardan taşıyorsa aşağı çek
+      if (newTop < PADDING) {
+        newTop = PADDING;
+      }
 
-  // Outside click handler
+      setCoords({ top: newTop, left: newLeft });
+      setIsPositioned(true);
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [x, y]);
+
+  // Outside click + ESC handler
   useEffect(() => {
     const handleClick = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         onClose();
       }
     };
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
 
     window.addEventListener("mousedown", handleClick);
-    return () => window.removeEventListener("mousedown", handleClick);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("keydown", handleEsc);
+    };
   }, [onClose]);
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] w-72 bg-[#0d0e10] border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)] p-3 flex flex-col gap-2 select-none animate-scaleIn origin-top-left"
-      style={{ top: coords.top, left: coords.left }}
+      className="fixed z-[9999] w-72 bg-[#0d0e10] border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)] p-3 flex flex-col gap-2 select-none overflow-y-auto custom-scrollbar"
+      style={{ 
+        top: coords.top, 
+        left: coords.left,
+        maxHeight: 'calc(100vh - 16px)',
+        opacity: isPositioned ? 1 : 0,
+        transform: isPositioned ? 'scale(1)' : 'scale(0.95)',
+        transition: 'opacity 150ms ease-out, transform 150ms ease-out',
+        transformOrigin: 'top left',
+      }}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

@@ -6,8 +6,8 @@ class VoiceProcessor extends AudioWorkletProcessor {
     this._buffer = new Float32Array(this._bufferSize);
     this._bufferIndex = 0;
     
-    // ✅ FIX: 32 → 128 (4x daha az mesaj, CPU yükü düşer)
-    this._reportIntervalQuanta = 128;
+    // ✅ FIX: 128 → 48 (noise gate + animasyon tepkisi için ~128ms @ 48kHz)
+    this._reportIntervalQuanta = 48;
     this._quantaCount = 0;
     
     // Hann Window

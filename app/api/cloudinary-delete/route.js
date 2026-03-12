@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 
+// YENİ EKLENEN KISIM: Next.js'in statik export modunda (output: export) 
+// API rotalarını tamamen derlemek istememesi için. 'force-dynamic' statik modda hata verdiği için prerender = false kullanıyoruz.
+export const prerender = false;
+
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,

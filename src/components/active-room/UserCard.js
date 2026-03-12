@@ -168,8 +168,11 @@ const UserCard = ({
   const handleVideoClick = useCallback((e) => {
     if (!isCurrentlyWatching && setPinnedStreamIds && participant.identity && (hasScreenShare || shouldShowVideo)) {
       e.stopPropagation();
-      const pinId = hasScreenShare ? `${participant.identity}:screen` : `${participant.identity}:camera`;
-      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), pinId])));
+      // ✅ Hem ekran hem kamera açıksa IKISINIDE ekle
+      const newPins = [];
+      if (hasScreenShare) newPins.push(`${participant.identity}:screen`);
+      if (shouldShowVideo) newPins.push(`${participant.identity}:camera`);
+      setPinnedStreamIds(prev => Array.from(new Set([...(prev || []), ...newPins])));
     }
   }, [isCurrentlyWatching, setPinnedStreamIds, participant.identity, hasScreenShare, shouldShowVideo]);
 
@@ -274,24 +277,40 @@ const UserCard = ({
                 ></div>
               )}
 
-              {/* Hover overlays */}
+              {/* Hover overlay - Ekran Paylaşımı İzleme */}
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...prev, participant.identity]))); }}
+                  className={`absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-1.5 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Yayını izle + kamera da açıksa onu da ekle
+                    const newPins = [`${participant.identity}:screen`];
+                    if (shouldShowVideo) newPins.push(`${participant.identity}:camera`);
+                    setPinnedStreamIds?.(prev => Array.from(new Set([...(prev || []), ...newPins])));
+                  }}
                 >
-                  <Tv size={32} className="text-white drop-shadow-lg" />
-                  <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Yayına Katıl</span>
+                  <div className="w-12 h-12 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 flex items-center justify-center">
+                    <Tv size={22} className="text-[#5865f2] drop-shadow-lg" />
+                  </div>
+                  <span className="text-sm font-bold text-white drop-shadow-lg">Yayını İzle</span>
+                  <span className="text-[10px] text-white/60">Tıkla ve ekran paylaşımını aç</span>
                 </div>
               )}
 
+              {/* Hover overlay - Kamerayı Büyüt */}
               {!hasScreenShare && shouldShowVideo && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-black/40 opacity-0 group-hover/camera:opacity-100 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-2 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...prev, participant.identity]))); }}
+                  className={`absolute inset-0 bg-black/40 opacity-0 group-hover/camera:opacity-100 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-1.5 ${shouldBlur ? 'backdrop-blur-sm' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPinnedStreamIds?.(prev => Array.from(new Set([...(prev || []), `${participant.identity}:camera`])));
+                  }}
                 >
-                  <Maximize size={32} className="text-white drop-shadow-lg scale-90 group-hover/camera:scale-100 transition-transform duration-200" />
-                  <span className="text-xs font-bold text-white drop-shadow-lg uppercase tracking-wide">Büyüt</span>
+                  <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
+                    <Maximize size={20} className="text-white drop-shadow-lg" />
+                  </div>
+                  <span className="text-sm font-bold text-white drop-shadow-lg">Kamerayı Büyüt</span>
+                  <span className="text-[10px] text-white/60">Kamerayı tam boyut izle</span>
                 </div>
               )}
             </div>
@@ -333,10 +352,11 @@ const UserCard = ({
                   className={`absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? 'backdrop-blur-md' : ''}`}
                   onClick={(e) => { e.stopPropagation(); setPinnedStreamIds?.(prev => Array.from(new Set([...(prev || []), `${participant.identity}:screen`]))); }}
                 >
-                  <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-300">
-                    <Tv size={20} className="text-white drop-shadow-md" />
+                  <div className="w-12 h-12 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-300">
+                    <Tv size={20} className="text-[#5865f2] drop-shadow-md" />
                   </div>
-                  <span className="text-[12px] font-semibold text-white/90 tracking-wide drop-shadow-md mt-2">Yayını İzle</span>
+                  <span className="text-[12px] font-bold text-white/90 tracking-wide drop-shadow-md mt-2">Yayını İzle</span>
+                  <span className="text-[9px] text-white/50 mt-0.5">Ekran paylaşımını aç</span>
                 </div>
               )}
             </div>

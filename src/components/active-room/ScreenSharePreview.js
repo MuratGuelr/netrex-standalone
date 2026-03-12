@@ -21,6 +21,18 @@ export default function ScreenSharePreviewComponent({ trackRef }) {
     }
   }, [currentTrackSid]);
 
+  // ✅ Unmount cleanup - base64 image'ı temizle (memory leak önleme)
+  useEffect(() => {
+    return () => {
+      setPreviewImage(null);
+      hasCapturedRef.current = false;
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    };
+  }, []);
+
   // Video element'ini track'e bağla - trackSid ve publication'ı stabilize et
   const trackPublicationSid = trackRef?.publication?.trackSid ?? null;
 
