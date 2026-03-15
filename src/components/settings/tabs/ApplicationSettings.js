@@ -1,4 +1,4 @@
-import { AppWindow, Monitor, Zap, ChevronRight } from "lucide-react";
+import { AppWindow, Monitor, Zap, ChevronRight, Film } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
@@ -12,7 +12,6 @@ export default function ApplicationSettings() {
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
       <h3 className="text-2xl font-bold text-white mb-6 relative">
         <span className="relative z-10">Uygulama Ayarları</span>
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
       </h3>
 
       {/* Header Banner */}
@@ -55,6 +54,26 @@ export default function ApplicationSettings() {
             description="Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt köşedeki (saat yanı) simge durumuna küçülür."
             checked={closeToTray}
             onChange={() => setCloseToTray(!closeToTray)}
+          />
+        </div>
+      </div>
+
+      {/* İzleme Partisi (Watch Party) */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+            <Film size={14} className="text-emerald-400" />
+          </div>
+          İzleme Partisi (Watch Party)
+        </h4>
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300">
+          <ToggleSwitch
+            label="Watch Party Özelliğini Etkinleştir"
+            description="Bu ayar açıkken ses odalarında Watch Party simgesini görebilir ve diğer katılımcılarla birlikte senkronize olarak YouTube videoları izleyebilirsiniz."
+            checked={useSettingsStore(s => s.watchPartyEnabled)}
+            onChange={() => useSettingsStore.getState().toggleWatchPartyEnabled()}
           />
         </div>
       </div>

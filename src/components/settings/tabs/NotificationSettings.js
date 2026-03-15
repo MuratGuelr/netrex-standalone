@@ -44,7 +44,6 @@ export default function NotificationSettings() {
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
       <h3 className="text-2xl font-bold text-white mb-6 relative">
         <span className="relative z-10">Bildirim Ayarları</span>
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
       </h3>
 
       {/* Header Banner */}

@@ -14,7 +14,12 @@ import CreateChannelModal from "./CreateChannelModal";
 import ChannelContextMenu from "./ChannelContextMenu";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
-import { ServerHeader, TextChannelItem, VoiceChannelItem, ServerDropdownMenu } from "./sidebar";
+import {
+  ServerHeader,
+  TextChannelItem,
+  VoiceChannelItem,
+  ServerDropdownMenu,
+} from "./sidebar";
 
 /**
  * 🎨 ServerSidebar - OPTIMIZED & MODULAR v2.0
@@ -23,25 +28,48 @@ import { ServerHeader, TextChannelItem, VoiceChannelItem, ServerDropdownMenu } f
  * - Reduced re-renders
  */
 export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
-  const { currentServer, channels, deleteServer, members, canUserViewChannel, voiceStates } = useServerStore();
+  const {
+    currentServer,
+    channels,
+    deleteServer,
+    members,
+    canUserViewChannel,
+    voiceStates,
+  } = useServerStore();
   const { user } = useAuthStore();
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
   const canManageServer = useServerPermission("MANAGE_SERVER");
-  const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
-  const mutedTtsChannels = useSettingsStore(state => state.mutedTtsChannels);
-  const toggleMutedTtsChannel = useSettingsStore(state => state.toggleMutedTtsChannel);
+  const ttsEnabled = useSettingsStore((state) => state.ttsEnabled);
+  const mutedTtsChannels = useSettingsStore((state) => state.mutedTtsChannels);
+  const toggleMutedTtsChannel = useSettingsStore(
+    (state) => state.toggleMutedTtsChannel,
+  );
 
   // State
-  const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview' });
+  const [serverSettings, setServerSettings] = useState({
+    isOpen: false,
+    initialTab: "overview",
+  });
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [createChannelModal, setCreateChannelModal] = useState({ isOpen: false, type: 'text' });
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, data: null });
+  const [createChannelModal, setCreateChannelModal] = useState({
+    isOpen: false,
+    type: "text",
+  });
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    type: null,
+    data: null,
+  });
   const [channelContextMenu, setChannelContextMenu] = useState(null);
-  const [channelSettings, setChannelSettings] = useState({ isOpen: false, channel: null, initialTab: "overview" });
-  
+  const [channelSettings, setChannelSettings] = useState({
+    isOpen: false,
+    channel: null,
+    initialTab: "overview",
+  });
+
   const menuRef = useRef(null);
 
   // Click Outside
@@ -56,30 +84,46 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   }, []);
 
   // ✅ OPTIMIZATION: Memoized computed values
-  const currentUserMember = useMemo(() => 
-    members.find(m => m.id === user?.uid || m.userId === user?.uid), 
-    [members, user?.uid]
+  const currentUserMember = useMemo(
+    () => members.find((m) => m.id === user?.uid || m.userId === user?.uid),
+    [members, user?.uid],
   );
-  
+
   const userRoles = currentUserMember?.roles || [];
   const isOwner = currentServer?.ownerId === user?.uid;
 
   const visibleChannels = useMemo(() => {
     if (!currentServer) return [];
     if (isOwner || canManageChannels) return channels;
-    return channels.filter(channel => canUserViewChannel(channel, userRoles));
-  }, [channels, isOwner, canManageChannels, userRoles, canUserViewChannel, currentServer]);
+    return channels.filter((channel) => canUserViewChannel(channel, userRoles));
+  }, [
+    channels,
+    isOwner,
+    canManageChannels,
+    userRoles,
+    canUserViewChannel,
+    currentServer,
+  ]);
 
-  const textChannels = useMemo(() => visibleChannels.filter(c => c.type === 'text'), [visibleChannels]);
-  const voiceChannels = useMemo(() => visibleChannels.filter(c => c.type === 'voice'), [visibleChannels]);
-  
+  const textChannels = useMemo(
+    () => visibleChannels.filter((c) => c.type === "text"),
+    [visibleChannels],
+  );
+  const voiceChannels = useMemo(
+    () => visibleChannels.filter((c) => c.type === "voice"),
+    [visibleChannels],
+  );
+
   const voiceCount = useMemo(() => {
     return voiceStates ? Object.values(voiceStates).flat().length : 0;
   }, [voiceStates]);
 
   // ✅ OPTIMIZATION: Memoized callbacks
   const hasRestrictions = useCallback((channel) => {
-    return channel.permissionOverwrites && Object.keys(channel.permissionOverwrites).length > 0;
+    return (
+      channel.permissionOverwrites &&
+      Object.keys(channel.permissionOverwrites).length > 0
+    );
   }, []);
 
   const handleChannelContextMenu = useCallback((e, channel) => {
@@ -93,22 +137,27 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   }, []);
 
   const handleDeleteServer = useCallback(() => {
-    setDeleteModal({ isOpen: true, type: 'server', data: currentServer });
+    setDeleteModal({ isOpen: true, type: "server", data: currentServer });
     setShowMenu(false);
   }, [currentServer]);
 
   const onConfirmDelete = useCallback(async () => {
-    if (deleteModal.type === 'server') {
+    if (deleteModal.type === "server") {
       await deleteServer(deleteModal.data.id);
-    } else if (deleteModal.type === 'channel') {
-      await useServerStore.getState().deleteChannel(currentServer.id, deleteModal.data.id);
+    } else if (deleteModal.type === "channel") {
+      await useServerStore
+        .getState()
+        .deleteChannel(currentServer.id, deleteModal.data.id);
     }
     setDeleteModal({ isOpen: false, type: null, data: null });
   }, [deleteModal, deleteServer, currentServer?.id]);
 
-  const handleTextChannelClick = useCallback((channel) => {
-    onJoinChannel(channel);
-  }, [onJoinChannel]);
+  const handleTextChannelClick = useCallback(
+    (channel) => {
+      onJoinChannel(channel);
+    },
+    [onJoinChannel],
+  );
 
   if (!currentServer) return null;
 
@@ -135,35 +184,51 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
             isOwner={isOwner}
             canManageServer={canManageServer}
             canManageChannels={canManageChannels}
-            onInvite={() => { setShowInviteModal(true); setShowMenu(false); }}
-            onSettings={() => { setServerSettings({ isOpen: true, initialTab: 'overview' }); setShowMenu(false); }}
-            onCreateChannel={() => handleCreateChannel('text')}
+            onInvite={() => {
+              setShowInviteModal(true);
+              setShowMenu(false);
+            }}
+            onSettings={() => {
+              setServerSettings({ isOpen: true, initialTab: "overview" });
+              setShowMenu(false);
+            }}
+            onCreateChannel={() => handleCreateChannel("text")}
             onDeleteServer={handleDeleteServer}
-            onLeaveServer={() => { setLeaveModalOpen(true); setShowMenu(false); }}
+            onLeaveServer={() => {
+              setLeaveModalOpen(true);
+              setShowMenu(false);
+            }}
           />
         )}
       </div>
 
       {/* 2. CHANNELS SCROLL AREA */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
-        
         {/* TEXT CHANNELS */}
         <div>
           <div className="flex items-center justify-between px-2 mb-3">
-            <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">Sohbet</span>
+            <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">
+              Sohbet
+            </span>
             {canManageChannels && (
-              <button onClick={() => handleCreateChannel('text')} className="text-[#5c5e66] hover:text-white transition-colors">
+              <button
+                onClick={() => handleCreateChannel("text")}
+                className="text-[#5c5e66] hover:text-white transition-colors"
+              >
                 <Plus size={14} />
               </button>
             )}
           </div>
 
           <div className="space-y-1">
-            {textChannels.map(channel => {
+            {textChannels.map((channel) => {
               const hasUnread = unreadCounts[channel.id] > 0;
-              const isActive = (currentChannel?.id === channel.id && showChatPanel) || activeTextChannelId === channel.id;
-              const isTtsMuted = ttsEnabled && mutedTtsChannels.includes(channel.id);
-              
+              const isActive =
+                (currentChannel?.id === channel.id && showChatPanel) ||
+                activeTextChannelId === channel.id;
+              const isTtsMuted =
+                ttsEnabled && mutedTtsChannels.includes(channel.id);
+
               return (
                 <TextChannelItem
                   key={channel.id}
@@ -185,19 +250,42 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
         {/* VOICE CHANNELS */}
         <div>
           <div className="flex items-center justify-between px-2 mb-3">
-            <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">Ses Odaları</span>
+            <span className="text-[11px] font-extrabold text-[#5c5e66] uppercase tracking-[0.1em]">
+              Ses Odaları
+            </span>
             {canManageChannels && (
-              <button onClick={() => handleCreateChannel('voice')} className="text-[#5c5e66] hover:text-white transition-colors">
+              <button
+                onClick={() => handleCreateChannel("voice")}
+                className="text-[#5c5e66] hover:text-white transition-colors"
+              >
                 <Plus size={14} />
               </button>
             )}
           </div>
-          
+
           <div className="space-y-3">
-            {voiceChannels.map(channel => {
-              const isActive = voiceStates?.[channel.id]?.some(u => u.userId === user?.uid) || false;
-              const participants = voiceStates?.[channel.id] || [];
-              
+            {voiceChannels.map((channel) => {
+              const isActive =
+                voiceStates?.[channel.id]?.some(
+                  (u) => u.userId === user?.uid,
+                ) || false;
+
+              // ✅ voiceStates sadece room_presence'tan geliyor, profileColor içermiyor.
+              // members listesiyle cross-reference yaparak enrich ediyoruz.
+              const participants = (voiceStates?.[channel.id] || []).map(
+                (p) => {
+                  const member = members.find(
+                    (m) => m.id === p.userId || m.userId === p.userId,
+                  );
+                  return {
+                    ...p,
+                    profileColor:
+                      member?.profileColor || p.profileColor || null,
+                    photoURL: member?.photoURL || p.photoURL || null,
+                  };
+                },
+              );
+
               return (
                 <VoiceChannelItem
                   key={channel.id}
@@ -216,60 +304,87 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
 
       {/* MODALS */}
       {serverSettings.isOpen && (
-        <ServerSettingsModal 
-          isOpen={serverSettings.isOpen} 
-          onClose={() => setServerSettings({ ...serverSettings, isOpen: false })} 
+        <ServerSettingsModal
+          isOpen={serverSettings.isOpen}
+          onClose={() =>
+            setServerSettings({ ...serverSettings, isOpen: false })
+          }
           initialTab={serverSettings.initialTab}
         />
       )}
 
-      <CreateInviteModal 
+      <CreateInviteModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         serverId={currentServer.id}
       />
-      
+
       <LeaveServerModal
         isOpen={leaveModalOpen}
         onClose={() => setLeaveModalOpen(false)}
         onConfirm={async () => {
-          await useServerStore.getState().leaveServer(currentServer.id, user.uid);
+          await useServerStore
+            .getState()
+            .leaveServer(currentServer.id, user.uid);
           setLeaveModalOpen(false);
         }}
         serverName={currentServer.name}
       />
 
-      <CreateChannelModal 
+      <CreateChannelModal
         isOpen={createChannelModal.isOpen}
-        onClose={() => setCreateChannelModal({ ...createChannelModal, isOpen: false })}
+        onClose={() =>
+          setCreateChannelModal({ ...createChannelModal, isOpen: false })
+        }
         channelType={createChannelModal.type}
         serverId={currentServer.id}
       />
 
-      {deleteModal.isOpen && createPortal(
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}></div>
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 shadow-2xl bg-[#111214] overflow-hidden animate-in zoom-in-95">
-            <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-            <div className="p-8 text-center">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 text-red-500">
-                <Trash2 size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                {deleteModal.type === 'server' ? "Sunucuyu Yok Et" : "Kanalı Sil"}
-              </h3>
-              <p className="text-[#949ba4] mb-6">
-                <span className="text-white font-bold">{deleteModal.data?.name}</span> kalıcı olarak silinecek. Bu işlem geri alınamaz.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })} className="px-5 py-2.5 rounded-xl text-[#dbdee1] hover:bg-white/5 transition-colors">Vazgeç</button>
-                <button onClick={onConfirmDelete} className="px-6 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20">Sil ve Onayla</button>
+      {deleteModal.isOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[10050] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in"
+              onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+            ></div>
+            <div className="relative w-full max-w-md rounded-3xl border border-white/10 shadow-2xl bg-[#111214] overflow-hidden animate-in zoom-in-95">
+              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+              <div className="p-8 text-center">
+                <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 text-red-500">
+                  <Trash2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">
+                  {deleteModal.type === "server"
+                    ? "Sunucuyu Yok Et"
+                    : "Kanalı Sil"}
+                </h3>
+                <p className="text-[#949ba4] mb-6">
+                  <span className="text-white font-bold">
+                    {deleteModal.data?.name}
+                  </span>{" "}
+                  kalıcı olarak silinecek. Bu işlem geri alınamaz.
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() =>
+                      setDeleteModal({ ...deleteModal, isOpen: false })
+                    }
+                    className="px-5 py-2.5 rounded-xl text-[#dbdee1] hover:bg-white/5 transition-colors"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    onClick={onConfirmDelete}
+                    className="px-6 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20"
+                  >
+                    Sil ve Onayla
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
 
       {channelContextMenu && (
         <ChannelContextMenu
@@ -277,7 +392,13 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
           y={channelContextMenu.y}
           channel={channelContextMenu.channel}
           onClose={() => setChannelContextMenu(null)}
-          onOpenSettings={(channel, initialTab) => setChannelSettings({ isOpen: true, channel, initialTab: initialTab || "overview" })}
+          onOpenSettings={(channel, initialTab) =>
+            setChannelSettings({
+              isOpen: true,
+              channel,
+              initialTab: initialTab || "overview",
+            })
+          }
         />
       )}
 

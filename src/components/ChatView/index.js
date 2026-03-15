@@ -9,6 +9,7 @@ import { Image as ImageIcon, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "@/src/utils/toast";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useAuthStore } from "@/src/store/authStore";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 import { uploadImageToCloudinary } from "@/src/utils/imageUpload";
 import { popularEmojis } from "./constants";
@@ -40,7 +41,8 @@ export default function ChatView({ channelId, username, userId }) {
     setTypingStatus,
     toggleReaction,
   } = useChatStore();
-  const { currentServer } = useServerStore();
+  const { currentServer, members } = useServerStore();
+  const currentUser = useAuthStore((s) => s.user);
 
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -287,7 +289,41 @@ export default function ChatView({ channelId, username, userId }) {
           }
       }
 
-      const result = await sendMessage(channelId, textToSend, userId, username, room, currentChannel?.serverId, { type: imageUrl ? 'image' : 'text', imageUrl });
+      // Kullanıcı metadata'sını hazırla (avatar + profil rengi için)
+      const member = members?.find((m) => m.id === userId);
+      const displayName =
+        member?.displayName ||
+        currentUser?.displayName ||
+        username ||
+        "Kullanıcı";
+      const photoURL =
+        currentUser?.photoURL ||
+        member?.photoURL ||
+        null;
+      const profileColor = member?.profileColor || null;
+
+      const userMeta = {
+        id: userId,
+        displayName,
+        photoURL,
+        profileColor,
+      };
+
+      const result = await sendMessage(
+        channelId,
+        textToSend,
+        userId,
+        displayName,
+        room,
+        currentChannel?.serverId,
+        {
+          type: imageUrl ? "image" : "text",
+          imageUrl,
+          user: userMeta,
+          profileColor,
+          avatarUrl: photoURL,
+        }
+      );
       if (!result?.success) {
         setMessageInput(textToSend);
         if (fileToSend) { setPendingImage(URL.createObjectURL(fileToSend)); setPendingImageFile(fileToSend); }
@@ -561,6 +597,7 @@ export default function ChatView({ channelId, username, userId }) {
               typingUsers={typingUsers}
               channelId={channelId}
               userId={userId}
+              members={members}
               editingMessageId={editingMessageId}
               editingText={editingText}
               setEditingText={setEditingText}

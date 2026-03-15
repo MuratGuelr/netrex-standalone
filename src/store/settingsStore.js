@@ -20,6 +20,9 @@ export const useSettingsStore = create(
       // YENİ: KAMERA İZNİ (Varsayılan Açık)
       enableCamera: true,
 
+      // Watch Party
+      watchPartyEnabled: false,
+
       // Ses İşleme
       noiseSuppression: true,
       echoCancellation: true,
@@ -41,6 +44,7 @@ export const useSettingsStore = create(
       voiceThreshold: 5, // %5 varsayılan hassasiyet
       sfxVolume: 30, // %30 varsayılan uygulama sesleri
       profileColor: "#6366f1",
+      autoThemeFromImage: false,
 
       // Kullanıcı sesleri
       userVolumes: {},
@@ -162,6 +166,9 @@ export const useSettingsStore = create(
       // YENİ: KAMERA İZNİ TOGGLE
       toggleEnableCamera: () =>
         set((state) => ({ enableCamera: !state.enableCamera })),
+        
+      toggleWatchPartyEnabled: () =>
+        set((state) => ({ watchPartyEnabled: !state.watchPartyEnabled })),
 
       toggleNoiseSuppression: () =>
         set((state) => ({ noiseSuppression: !state.noiseSuppression })),
@@ -227,6 +234,7 @@ export const useSettingsStore = create(
       setVoiceThreshold: (threshold) => set({ voiceThreshold: threshold }),
       setSfxVolume: (volume) => set({ sfxVolume: volume }),
       setProfileColor: (color) => set({ profileColor: color }),
+      setAutoThemeFromImage: (enabled) => set({ autoThemeFromImage: enabled }),
 
       setUserVolume: (identity, volume) =>
         set((state) => ({

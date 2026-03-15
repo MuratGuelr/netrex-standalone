@@ -78,8 +78,8 @@ function fixPathsInFile(filePath) {
       if (typeof url !== 'string') return url;
       
       // Remove double _next if present (anywhere in path)
-      if (url.includes('_next/_next/')) {
-        url = url.replace(/_next\/_next\//g, '_next/');
+      while (url.includes('_next/_next/')) {
+        url = url.split('_next/_next/').join('_next/');
       }
 
       // Fix absolute paths starting with /_next/

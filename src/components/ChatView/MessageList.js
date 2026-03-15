@@ -14,6 +14,7 @@ export default function MessageList({
   typingUsers,
   channelId,
   userId,
+  members = [],
   editingMessageId,
   editingText,
   setEditingText,
@@ -130,31 +131,35 @@ export default function MessageList({
             </div>
           )
         }}
-        itemContent={(index, message) => (
-          <div className="px-4">
-            <MessageItem
-              key={message.id}
-              message={{
-                ...message,
-                currentUserId: userId,
-                isEditing: editingMessageId === message.id,
-                tempText: editingText,
-                onTempTextChange: setEditingText,
-                onSave: handleSaveEdit,
-                onCancel: handleCancelEdit,
-                onToggleReaction: (emoji) => handleToggleReaction(message.id, emoji)
-              }}
-              prevMessage={messages[index - 1]}
-              messageIndex={index}
-              onContextMenu={handleContextMenu}
-              renderText={renderMessageText}
-              formatTime={formatTime}
-              formatDateHeader={formatDateHeader}
-              isInSequence={isMessageInSequence(message, index)}
-              onImageClick={setSelectedImage}
-            />
-          </div>
-        )}
+        itemContent={(index, message) => {
+          const member = members.find((m) => m.id === message.userId);
+          return (
+            <div className="px-4">
+              <MessageItem
+                key={message.id}
+                message={{
+                  ...message,
+                  currentUserId: userId,
+                  isEditing: editingMessageId === message.id,
+                  tempText: editingText,
+                  onTempTextChange: setEditingText,
+                  onSave: handleSaveEdit,
+                  onCancel: handleCancelEdit,
+                  onToggleReaction: (emoji) => handleToggleReaction(message.id, emoji),
+                  member,
+                }}
+                prevMessage={messages[index - 1]}
+                messageIndex={index}
+                onContextMenu={handleContextMenu}
+                renderText={renderMessageText}
+                formatTime={formatTime}
+                formatDateHeader={formatDateHeader}
+                isInSequence={isMessageInSequence(message, index)}
+                onImageClick={setSelectedImage}
+              />
+            </div>
+          );
+        }}
       />
     </motion.div>
   );

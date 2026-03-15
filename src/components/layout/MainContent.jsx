@@ -62,7 +62,7 @@ const MainContent = forwardRef(function MainContent({
         main-body
         flex-1
         overflow-hidden
-        relative z-10
+        relative
       ">
         {children}
       </div>

@@ -15,6 +15,7 @@ const PERMISSIONS = [
   { id: "BAN_MEMBERS", label: "Üyeleri Yasakla" },
   { id: "MUTE_MEMBERS", label: "Üyeleri Sustur" },
   { id: "DEAFEN_MEMBERS", label: "Üyeleri Sağırlaştır" },
+  { id: "MANAGE_WATCH_PARTY", label: "Watch Party'yi Yönet" },
 ];
 
 export default function RolesTab({ roles, onCreate, onUpdate, onDelete, showCreateModal, setShowCreateModal }) {

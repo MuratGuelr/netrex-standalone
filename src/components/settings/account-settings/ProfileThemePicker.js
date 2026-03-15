@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Palette, Pipette, Zap, Check } from "lucide-react";
 import { PRESET_GRADIENTS, SOLID_COLORS } from "../constants";
+import { useSettingsStore } from "@/src/store/settingsStore";
 
 /**
  * ✅ ProfileThemePicker - Optimized color picker
@@ -47,6 +48,8 @@ export default function ProfileThemePicker({ profileColor, setProfileColor }) {
   const [gradAngle, setGradAngle] = useState(parsed.angle);
   const [localSolidColor, setLocalSolidColor] = useState(parsed.solidColor);
   const isUpdatingFromStore = useRef(false);
+  const autoThemeFromImage = useSettingsStore((state) => state.autoThemeFromImage);
+  const setAutoThemeFromImage = useSettingsStore((state) => state.setAutoThemeFromImage);
 
   // Sync with profileColor changes
   useEffect(() => {
@@ -235,11 +238,35 @@ export default function ProfileThemePicker({ profileColor, setProfileColor }) {
                 />
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <span className="text-[10px] font-bold text-[#949ba4] uppercase">
                 Hızlı Seçim
               </span>
               <div className="flex flex-wrap gap-3">
+                {/* Otomatik (mevcut) gradient — sadece otomatik tema açıksa göster */}
+                {autoThemeFromImage && profileColor.includes("gradient") && (
+                  <button
+                    onClick={() => setProfileColor(profileColor)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    className={`w-16 h-12 rounded-lg transition-all duration-200 relative shadow-sm focus:outline-none border ${
+                      profileColor.includes("gradient")
+                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#1e1f22] border-white/40"
+                        : "hover:scale-105 border-transparent"
+                    }`}
+                    style={{ background: profileColor }}
+                  >
+                    <span className="absolute bottom-1 left-1 right-1 text-[9px] font-semibold text-white/90 drop-shadow-sm text-left px-1">
+                      Otomatik
+                    </span>
+                    <div className="absolute top-1 right-1">
+                      <Check
+                        size={14}
+                        className="text-white drop-shadow-md"
+                        strokeWidth={3}
+                      />
+                    </div>
+                  </button>
+                )}
                 {PRESET_GRADIENTS.map((grad, i) => (
                   <button
                     key={i}
@@ -263,6 +290,31 @@ export default function ProfileThemePicker({ profileColor, setProfileColor }) {
                     )}
                   </button>
                 ))}
+              </div>
+              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xs text-white/80 font-medium">
+                    Yüklediğim resme göre temayı ayarla
+                  </span>
+                  <span className="text-[10px] text-white/40">
+                    Yeni avatar / arkaplan yüklediğimde profili otomatik renklendir.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoThemeFromImage(!autoThemeFromImage)}
+                  className={`w-10 h-6 rounded-full flex items-center px-1 transition-colors duration-200 ${
+                    autoThemeFromImage
+                      ? "bg-indigo-500"
+                      : "bg-[#2b2d31]"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                      autoThemeFromImage ? "translate-x-4" : ""
+                    }`}
+                  />
+                </button>
               </div>
             </div>
           </div>

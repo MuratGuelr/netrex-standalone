@@ -42,6 +42,7 @@ export default function UserCard({
         speaking={speaking}
         muted={muted}
         deafened={deafened}
+        borderColor={user?.profileColor}
       />
 
       <div className="flex-1 min-w-0">

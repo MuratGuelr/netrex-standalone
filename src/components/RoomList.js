@@ -546,7 +546,6 @@ export default function RoomList({
                     <div>
                       <h3 className="text-2xl font-bold text-white relative">
                         <span className="relative z-10">Kanal Oluştur</span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
                       </h3>
                       <p className="text-xs text-[#949ba4] font-medium mt-0.5">
               Metin Kanalı
@@ -651,7 +650,6 @@ export default function RoomList({
                     <div>
                       <h3 className="text-2xl font-bold text-white relative">
                         <span className="relative z-10">Kanal Oluştur</span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
                       </h3>
                       <p className="text-xs text-[#949ba4] font-medium mt-0.5">
               Ses Kanalı

@@ -1,14 +1,13 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { motion } from "framer-motion";
-import {
-  LiveKitRoom,
-  useTracks,
-  AudioTrack
-} from "@livekit/components-react";
-import {
-  Track,
-  DisconnectReason,
-} from "livekit-client";
+import { LiveKitRoom, useTracks, AudioTrack } from "@livekit/components-react";
+import { Track, DisconnectReason } from "livekit-client";
 import "@livekit/components-styles";
 import {
   MessageSquare,
@@ -49,6 +48,7 @@ import SettingsUpdater from "./active-room/SettingsUpdater";
 import ConnectionStatusIndicator from "./active-room/ConnectionStatusIndicator";
 import RoomEventsHandler from "./active-room/RoomEventsHandler";
 import ModerationHandler from "./active-room/ModerationHandler";
+import WatchPartyManager from "./active-room/WatchPartyManager";
 
 // --- STYLES ---
 // Styles moved to active-room/ActiveRoomStyles.js
@@ -86,14 +86,17 @@ function VoiceProcessorInner() {
 }
 
 function VoiceProcessorHandler() {
-  const rawAudioMode = useSettingsStore(state => state.rawAudioMode);
-  
+  const rawAudioMode = useSettingsStore((state) => state.rawAudioMode);
+
   // ✅ Volume applicator - Store'daki volume değerlerini track'lere uygula
   useApplyParticipantVolumes();
-  
+
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("🎤 VoiceProcessorHandler mounted, rawAudioMode:", rawAudioMode);
+      console.log(
+        "🎤 VoiceProcessorHandler mounted, rawAudioMode:",
+        rawAudioMode,
+      );
     }
   }, [rawAudioMode]);
 
@@ -126,25 +129,31 @@ function DeafenManager({ isDeafened, serverDeafened }) {
 }
 
 // -- PREMIUM LOADING SPLASH COMPONENT --
-const LoadingSplash = ({ title, description, loadingText = "Bağlanıyor...", disableBackgroundEffects }) => {
-  const LOGO_PATH = "M470 2469 c-126 -21 -259 -116 -318 -227 -63 -119 -62 -98 -62 -952 0 -451 4 -800 10 -835 20 -127 120 -269 232 -330 102 -56 87 -55 954 -55 703 0 807 2 855 16 149 44 264 158 315 314 17 51 19 114 22 825 2 540 0 794 -8 850 -29 204 -181 362 -380 394 -81 13 -1540 13 -1620 0z m816 -1035 l339 -396 3 71 c3 70 2 72 -38 120 l-40 48 2 274 3 274 132 3 c131 3 133 2 137 -20 3 -13 4 -257 3 -543 l-2 -520 -105 -3 -105 -2 -235 276 c-129 153 -281 331 -337 396 l-103 119 0 -75 c0 -73 1 -76 40 -121 l40 -47 -2 -271 -3 -272 -135 0 -135 0 -3 530 c-1 292 0 536 3 543 3 8 33 12 103 12 l98 0 340 -396z";
+const LoadingSplash = ({
+  title,
+  description,
+  loadingText = "Bağlanıyor...",
+  disableBackgroundEffects,
+}) => {
+  const LOGO_PATH =
+    "M470 2469 c-126 -21 -259 -116 -318 -227 -63 -119 -62 -98 -62 -952 0 -451 4 -800 10 -835 20 -127 120 -269 232 -330 102 -56 87 -55 954 -55 703 0 807 2 855 16 149 44 264 158 315 314 17 51 19 114 22 825 2 540 0 794 -8 850 -29 204 -181 362 -380 394 -81 13 -1540 13 -1620 0z m816 -1035 l339 -396 3 71 c3 70 2 72 -38 120 l-40 48 2 274 3 274 132 3 c131 3 133 2 137 -20 3 -13 4 -257 3 -543 l-2 -520 -105 -3 -105 -2 -235 276 c-129 153 -281 331 -337 396 l-103 119 0 -75 c0 -73 1 -76 40 -121 l40 -47 -2 -271 -3 -272 -135 0 -135 0 -3 530 c-1 292 0 536 3 543 3 8 33 12 103 12 l98 0 340 -396z";
   const strokeColor = "#a855f7";
 
   return (
     <div className="flex flex-col items-center justify-center h-full bg-[#0a0a0c] relative overflow-hidden z-50">
       <MemoizedBackground disableEffects={disableBackgroundEffects} />
-      
+
       {!disableBackgroundEffects && (
         <div className="absolute inset-0 pointer-events-none">
           <motion.div
-             animate={{ x: [0, 50, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
-             transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-             className="absolute top-[-20%] left-[-10%] w-[80%] h-[70%] rounded-full bg-indigo-600/15 blur-[120px]"
+            animate={{ x: [0, 50, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            className="absolute top-[-20%] left-[-10%] w-[80%] h-[70%] rounded-full bg-indigo-600/15 blur-[120px]"
           />
           <motion.div
-             animate={{ x: [0, -40, 0], y: [0, 60, 0], scale: [1.2, 1, 1.2] }}
-             transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-             className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/15 blur-[120px]"
+            animate={{ x: [0, -40, 0], y: [0, 60, 0], scale: [1.2, 1, 1.2] }}
+            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+            className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/15 blur-[120px]"
           />
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] contrast-150 brightness-150" />
         </div>
@@ -156,24 +165,47 @@ const LoadingSplash = ({ title, description, loadingText = "Bağlanıyor...", di
           <motion.div
             className="absolute inset-0 rounded-[35px]"
             style={{
-              width: 140, height: 140, left: -14, top: -14,
+              width: 140,
+              height: 140,
+              left: -14,
+              top: -14,
               border: `1px solid transparent`,
               background: `linear-gradient(45deg, ${strokeColor}20, transparent, ${strokeColor}10) border-box`,
               WebkitMask: `linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)`,
-              WebkitMaskComposite: 'xor', maskComposite: 'exclude',
+              WebkitMaskComposite: "xor",
+              maskComposite: "exclude",
             }}
             animate={{ rotate: 360 }}
-            transition={{ rotate: { duration: 12, repeat: Infinity, ease: "linear" } }}
+            transition={{
+              rotate: { duration: 12, repeat: Infinity, ease: "linear" },
+            }}
           />
-          <div className="absolute inset-0 rounded-[30px] border border-white/5" style={{ width: 120, height: 120, left: -4, top: -4 }} />
-          
-          <svg viewBox="0 0 2560 2560" className="relative z-10 w-full h-full" style={{ filter: `drop-shadow(0 0 15px ${strokeColor}40)` }}>
+          <div
+            className="absolute inset-0 rounded-[30px] border border-white/5"
+            style={{ width: 120, height: 120, left: -4, top: -4 }}
+          />
+
+          <svg
+            viewBox="0 0 2560 2560"
+            className="relative z-10 w-full h-full"
+            style={{ filter: `drop-shadow(0 0 15px ${strokeColor}40)` }}
+          >
             <g transform="translate(0, 2560) scale(1, -1)">
               <motion.path
-                d={LOGO_PATH} fill="transparent" stroke={strokeColor} strokeWidth={40} strokeLinecap="round" strokeLinejoin="round"
+                d={LOGO_PATH}
+                fill="transparent"
+                stroke={strokeColor}
+                strokeWidth={40}
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 initial={{ pathLength: 0, opacity: 0.5 }}
                 animate={{ pathLength: 1, opacity: 1 }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", repeatType: "reverse" }}
+                transition={{
+                  duration: 2.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  repeatType: "reverse",
+                }}
               />
               <path d={LOGO_PATH} fill="#a855f7" className="opacity-20" />
             </g>
@@ -195,14 +227,18 @@ const LoadingSplash = ({ title, description, loadingText = "Bağlanıyor...", di
         {/* Indeterminate Loading Bar */}
         <div className="flex flex-col items-center gap-4">
           <div className="relative w-48 h-[6px] bg-[#2a2b36] rounded-full overflow-hidden border border-white/20 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
-             <motion.div
+            <motion.div
               className="absolute top-0 left-0 h-full w-[40%] rounded-full z-10 bg-gradient-to-r from-transparent via-[#c084fc] to-transparent shadow-[0_0_15px_rgba(192,132,252,0.6)]"
-              animate={{ x: ['-150%', '350%'] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-             />
+              animate={{ x: ["-150%", "350%"] }}
+              transition={{
+                duration: 1.8,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
           </div>
           <span className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] text-center">
-             {loadingText}
+            {loadingText}
           </span>
         </div>
       </div>
@@ -225,17 +261,23 @@ export default function ActiveRoom({
     if (window.netrex) {
       // 🚀 Bağlantı başlangıcında Main Process'i yormamak için biraz beklet
       // Bu, WebRTC handshake'inin (bağlantı kurma) takılmadan tamamlanmasını sağlar
-      console.log("🎤 Global input dinleyicisi için bekleniyor (Handshake koruması)...");
+      console.log(
+        "🎤 Global input dinleyicisi için bekleniyor (Handshake koruması)...",
+      );
       timeoutId = setTimeout(() => {
-         console.log("🎤 Odaya girildi: Global input dinleyicisi başlatılıyor...");
-         window.netrex.startInputListener();
+        console.log(
+          "🎤 Odaya girildi: Global input dinleyicisi başlatılıyor...",
+        );
+        window.netrex.startInputListener();
       }, 1500);
     }
 
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
       if (window.netrex) {
-        console.log("👋 Odadan çıkıldı: Global input dinleyicisi durduruluyor...");
+        console.log(
+          "👋 Odadan çıkıldı: Global input dinleyicisi durduruluyor...",
+        );
         window.netrex.stopInputListener();
       }
     };
@@ -244,20 +286,20 @@ export default function ActiveRoom({
   const { user } = useAuthStore();
   const [token, setToken] = useState("");
   const [showSettingsLocal, setShowSettingsLocal] = useState(false);
-  
+
+  const serverId = useServerStore((state) => state.currentServer?.id);
+
   // Voice State and Settings Modal - Global Store'dan al
-  const isMuted = useSettingsStore(state => state.isMuted);
-  const isDeafened = useSettingsStore(state => state.isDeafened);
-  const toggleMute = useSettingsStore(state => state.toggleMute);
-  const toggleDeaf = useSettingsStore(state => state.toggleDeaf);
-  const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
-  const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
-  
-  // Settings modal: hem lokal state hem de store'dan açılabilir
-  const showSettings = showSettingsLocal || showSettingsModal;
+  const isMuted = useSettingsStore((state) => state.isMuted);
+  const isDeafened = useSettingsStore((state) => state.isDeafened);
+  const toggleMute = useSettingsStore((state) => state.toggleMute);
+  const toggleDeaf = useSettingsStore((state) => state.toggleDeaf);
+
+  // ✅ Sadece local state — global SettingsModal AppShell'de render ediliyor
+  // store'daki showSettingsModal'ı OKUMA — çift modal açılmasına sebep olur
+  const showSettings = showSettingsLocal;
   const setShowSettings = (value) => {
     setShowSettingsLocal(value);
-    if (!value) setSettingsOpen(false); // Kapatırken store'u da sıfırla
   };
 
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -287,23 +329,31 @@ export default function ActiveRoom({
   const [isRotatingSession, setIsRotatingSession] = useState(false); // Sunucu rotasyonu yapılıyor mu?
   const connectionTimeoutRef = useRef(null); // Bağlantı timeout'u
   const hasConnectedOnceRef = useRef(false); // Ref ile takip (timeout için)
-  
+
   // 🚀 v5.2: LiveKit Server Pool
-  const [serverUrl, setServerUrl] = useState(process.env.NEXT_PUBLIC_LIVEKIT_URL || '');
+  const [serverUrl, setServerUrl] = useState(
+    process.env.NEXT_PUBLIC_LIVEKIT_URL || "",
+  );
   const [serverIndex, setServerIndex] = useState(0);
   const [serverPoolMode, setServerPoolMode] = useState(false);
   const [serverCount, setServerCount] = useState(1);
   const rotationCountRef = useRef(0); // Sonsuz döngüyü önlemek için sayaç
   const MAX_ROTATIONS = 3; // Maksimum rotation sayısı
   const poolDocRef = useRef(null); // Firebase pool document reference
-  const serverIndexRef = useRef(serverIndex); 
+  const serverIndexRef = useRef(serverIndex);
   const serverCountRef = useRef(serverCount);
   const serverPoolModeRef = useRef(serverPoolMode);
-  
+
   // Ref'leri state ile senkronize tut
-  useEffect(() => { serverIndexRef.current = serverIndex; }, [serverIndex]);
-  useEffect(() => { serverCountRef.current = serverCount; }, [serverCount]);
-  useEffect(() => { serverPoolModeRef.current = serverPoolMode; }, [serverPoolMode]);
+  useEffect(() => {
+    serverIndexRef.current = serverIndex;
+  }, [serverIndex]);
+  useEffect(() => {
+    serverCountRef.current = serverCount;
+  }, [serverCount]);
+  useEffect(() => {
+    serverPoolModeRef.current = serverPoolMode;
+  }, [serverPoolMode]);
 
   // RESET STATE ON MOUNT/UPDATE
   // Odadan çıkıp tekrar girildiğinde veya key değiştiğinde state'in temiz olduğundan emin ol
@@ -315,71 +365,77 @@ export default function ActiveRoom({
     // Token'ı burda sıfırlama, alttaki useEffect token alacak
   }, [roomName]); // Oda ismi değiştiğinde (zaten key değişiyor ama yine de)
 
-
   // 🚀 v5.2: Firebase'den aktif sunucu indeksini dinle (tüm kullanıcılar senkronize olsun)
   useEffect(() => {
     if (!serverPoolMode) return;
-    
-    poolDocRef.current = doc(db, "system", "livekitPool");
-    
-    // Real-time listener
-    const unsubscribe = onSnapshot(poolDocRef.current, async (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const data = docSnapshot.data();
-        const firebaseIndex = data.activeServerIndex || 0;
-        
-        // Eğer Firebase'deki index farklıysa, değiştir (ref kullan - güncel değer için)
-        if (firebaseIndex !== serverIndexRef.current) {
-          try {
-            const serverInfo = await window.netrex.getLiveKitServerInfo(firebaseIndex);
-            if (serverInfo && serverInfo.url) {
-              const sanitizedIndex = serverInfo.serverIndex;
-              setServerIndex(sanitizedIndex);
-              setServerUrl(serverInfo.url);
-              
-              setIsRotatingSession(true);
-              setToken("");
-              setHasConnectedOnce(false);
-              hasConnectedOnceRef.current = false;
-              
-              if (connectionTimeoutRef.current) {
-                clearTimeout(connectionTimeoutRef.current);
-                connectionTimeoutRef.current = null;
-              }
 
-              setTimeout(() => {
-                setIsRotatingSession(false);
-              }, 5000);
-              
-              console.log(`🔄 Sunucu değişikliği senkronize edildi: ${sanitizedIndex}`);
-              
-              toast.error("Bağlantı limitine ulaşıldı!", {
-                description: `Sunucu kotası dolduğu için yeni bir odaya aktarılıyorsunuz (Server: ${sanitizedIndex + 1}).`,
-                duration: 6000,
-                position: "top-center",
-              });
+    poolDocRef.current = doc(db, "system", "livekitPool");
+
+    // Real-time listener
+    const unsubscribe = onSnapshot(
+      poolDocRef.current,
+      async (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          const firebaseIndex = data.activeServerIndex || 0;
+
+          // Eğer Firebase'deki index farklıysa, değiştir (ref kullan - güncel değer için)
+          if (firebaseIndex !== serverIndexRef.current) {
+            try {
+              const serverInfo =
+                await window.netrex.getLiveKitServerInfo(firebaseIndex);
+              if (serverInfo && serverInfo.url) {
+                const sanitizedIndex = serverInfo.serverIndex;
+                setServerIndex(sanitizedIndex);
+                setServerUrl(serverInfo.url);
+
+                setIsRotatingSession(true);
+                setToken("");
+                setHasConnectedOnce(false);
+                hasConnectedOnceRef.current = false;
+
+                if (connectionTimeoutRef.current) {
+                  clearTimeout(connectionTimeoutRef.current);
+                  connectionTimeoutRef.current = null;
+                }
+
+                setTimeout(() => {
+                  setIsRotatingSession(false);
+                }, 5000);
+
+                console.log(
+                  `🔄 Sunucu değişikliği senkronize edildi: ${sanitizedIndex}`,
+                );
+
+                toast.error("Bağlantı limitine ulaşıldı!", {
+                  description: `Sunucu kotası dolduğu için yeni bir odaya aktarılıyorsunuz (Server: ${sanitizedIndex + 1}).`,
+                  duration: 6000,
+                  position: "top-center",
+                });
+              }
+            } catch (e) {
+              console.error("Firebase sunucu değişikliği uygulanamadı:", e);
             }
-          } catch (e) {
-            console.error("Firebase sunucu değişikliği uygulanamadı:", e);
           }
         }
-      }
-    }, (error) => {
-      console.error("Firebase pool listener hatası:", error);
-    });
-    
+      },
+      (error) => {
+        console.error("Firebase pool listener hatası:", error);
+      },
+    );
+
     return () => unsubscribe();
   }, [serverPoolMode]); // serverIndex dependency'den kaldırıldı - ref kullanıyoruz
 
   // Firebase'de pool document'ı oluştur/güncelle (ilk bağlantıda)
   useEffect(() => {
     if (!serverPoolMode || serverCount <= 1) return;
-    
+
     const initializePoolDoc = async () => {
       try {
         const poolRef = doc(db, "system", "livekitPool");
         const poolDoc = await getDoc(poolRef);
-        
+
         if (!poolDoc.exists()) {
           // İlk kez oluştur
           await setDoc(poolRef, {
@@ -394,28 +450,31 @@ export default function ActiveRoom({
         console.error("Firebase pool init hatası:", e);
       }
     };
-    
+
     initializePoolDoc();
   }, [serverPoolMode, serverCount]);
 
-
-  const noiseSuppression = useSettingsStore(state => state.noiseSuppression);
-  const echoCancellation = useSettingsStore(state => state.echoCancellation);
-  const autoGainControl = useSettingsStore(state => state.autoGainControl);
-  const disableAnimations = useSettingsStore(state => state.disableAnimations);
-  const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
-  const videoCodec = useSettingsStore(state => state.videoCodec);
-  const videoResolution = useSettingsStore(state => state.videoResolution);
-  const videoFrameRate = useSettingsStore(state => state.videoFrameRate);
-  const enableCamera = useSettingsStore(state => state.enableCamera);
-  const videoId = useSettingsStore(state => state.videoId);
+  const noiseSuppression = useSettingsStore((state) => state.noiseSuppression);
+  const echoCancellation = useSettingsStore((state) => state.echoCancellation);
+  const autoGainControl = useSettingsStore((state) => state.autoGainControl);
+  const disableAnimations = useSettingsStore(
+    (state) => state.disableAnimations,
+  );
+  const disableBackgroundEffects = useSettingsStore(
+    (state) => state.disableBackgroundEffects,
+  );
+  const videoCodec = useSettingsStore((state) => state.videoCodec);
+  const videoResolution = useSettingsStore((state) => state.videoResolution);
+  const videoFrameRate = useSettingsStore((state) => state.videoFrameRate);
+  const enableCamera = useSettingsStore((state) => state.enableCamera);
+  const videoId = useSettingsStore((state) => state.videoId);
 
   // Inject Global Animation Disable Config
   useEffect(() => {
     if (disableAnimations) {
-      const styleId = 'disable-animations-global';
+      const styleId = "disable-animations-global";
       if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
+        const style = document.createElement("style");
         style.id = styleId;
         style.innerHTML = `
           *, *::before, *::after {
@@ -442,7 +501,7 @@ export default function ActiveRoom({
 
   const roomDisplayName = useMemo(() => {
     if (displayName) return displayName;
-    const channel = channels?.find(c => c.id === roomName);
+    const channel = channels?.find((c) => c.id === roomName);
     return channel?.name || roomName;
   }, [displayName, channels, roomName]);
 
@@ -473,7 +532,7 @@ export default function ActiveRoom({
 
   // settingsStore'dan mute/deafen durumlarını sıfırlamak için set fonksiyonunu al
   const settingsStore = useSettingsStore;
-  
+
   useEffect(() => {
     // Room değiştiğinde state'leri sıfırla (eski room'dan temiz çıkış için)
     setToken(""); // Token'ı sıfırla ki eski room'dan disconnect olsun
@@ -483,7 +542,7 @@ export default function ActiveRoom({
     hasConnectedOnceRef.current = false;
     setPinnedStreamIds([]); // Aktif yayınları sıfırla
     setIsCameraOn(false); // Kamera durumunu sıfırla
-    
+
     // ÖNEMLİ: Odaya her bağlanıldığında mute/deafen durumlarını sıfırla
     // Bu, önceki oturumdan kalan görsel durumun gerçek durumla senkronize olmasını sağlar
     settingsStore.setState({ isMuted: false, isDeafened: false });
@@ -501,57 +560,71 @@ export default function ActiveRoom({
     if (hasConnectedOnce || isRotatingSession) {
       return;
     }
-    
+
     (async () => {
       try {
         if (window.netrex) {
           // 🚀 v5.2: Server pool - önce sunucu bilgisini al
           let currentServerIndex = serverIndex;
           let currentServerUrl = serverUrl;
-          
+
           try {
             // V5.5 HIZLANDIRMA: Electron IPC ve Firebase Network çağrılarını Paralelleştir
-            const serverInfoPromise = window.netrex.getLiveKitServerInfo(currentServerIndex);
-            
+            const serverInfoPromise =
+              window.netrex.getLiveKitServerInfo(currentServerIndex);
+
             // Firebase sorgusunu önden başlat ki bağlantı süresinden tasarruf edelim (%30-50 hız artışı)
             const poolRef = doc(db, "system", "livekitPool");
             const poolDocPromise = getDoc(poolRef).catch((e) => {
               console.warn("Firebase pool ön yükleme hatası:", e);
               return null;
             });
-            
+
             // Sonuçları bekle
             const serverInfo = await serverInfoPromise;
-            
+
             if (serverInfo && serverInfo.poolMode) {
               setServerPoolMode(true);
               serverPoolModeRef.current = true; // ✅ Ref'i anında güncelle
-              
+
               setServerCount(serverInfo.serverCount || 1);
               serverCountRef.current = serverInfo.serverCount || 1; // ✅ Ref'i anında güncelle
-              
+
               // Pool modu aktif - Önden başlattığımız Firebase sonucunu al
               try {
                 const poolDoc = await poolDocPromise;
-                
+
                 if (poolDoc && poolDoc.exists()) {
                   const data = poolDoc.data();
-                  let firebaseIndex = typeof data.activeServerIndex === 'number' ? data.activeServerIndex : 0;
-                  
+                  let firebaseIndex =
+                    typeof data.activeServerIndex === "number"
+                      ? data.activeServerIndex
+                      : 0;
+
                   // 🔥 KRİTİK: Eğer Firebase index'i bozuksa (-1 vb.) otomatik düzelt
-                  if (firebaseIndex < 0 || firebaseIndex >= (serverInfo.serverCount || 1)) {
-                    console.warn(`📡 Firebase index geçersiz (${firebaseIndex}), repair başlatılıyor...`);
-                    await setDoc(poolRef, { 
-                      activeServerIndex: 0,
-                      lastRotation: serverTimestamp(),
-                      repairAction: 'invalid_index_boot_fix'
-                    }, { merge: true });
+                  if (
+                    firebaseIndex < 0 ||
+                    firebaseIndex >= (serverInfo.serverCount || 1)
+                  ) {
+                    console.warn(
+                      `📡 Firebase index geçersiz (${firebaseIndex}), repair başlatılıyor...`,
+                    );
+                    await setDoc(
+                      poolRef,
+                      {
+                        activeServerIndex: 0,
+                        lastRotation: serverTimestamp(),
+                        repairAction: "invalid_index_boot_fix",
+                      },
+                      { merge: true },
+                    );
                     firebaseIndex = 0;
                   }
 
                   console.log(`📡 Firebase aktif sunucu: ${firebaseIndex}`);
-                  
-                  const activeServerInfo = await window.netrex.getLiveKitServerInfo(firebaseIndex);
+
+                  const activeServerInfo =
+                    await window.netrex.getLiveKitServerInfo(firebaseIndex);
                   if (activeServerInfo && activeServerInfo.url) {
                     currentServerUrl = activeServerInfo.url;
                     currentServerIndex = activeServerInfo.serverIndex;
@@ -560,7 +633,10 @@ export default function ActiveRoom({
                   console.log("📡 Firebase pool dökümanı bulunamadı.");
                 }
               } catch (firebaseError) {
-                console.warn("Firebase pool okunamadı, varsayılan sunucu kullanılıyor:", firebaseError);
+                console.warn(
+                  "Firebase pool okunamadı, varsayılan sunucu kullanılıyor:",
+                  firebaseError,
+                );
               }
             } else if (serverInfo) {
               // Tek sunucu modu - serverInfo'dan URL al
@@ -569,30 +645,42 @@ export default function ActiveRoom({
               setServerPoolMode(false);
               serverPoolModeRef.current = false;
             }
-            
+
             setServerUrl(currentServerUrl);
             setServerIndex(currentServerIndex);
             serverIndexRef.current = currentServerIndex; // ✅ Ref'i anında güncelle
-            
+
             rotationCountRef.current = 0; // Başarılı bağlantıda sayacı sıfırla
-            console.log(`🔌 LiveKit server: ${currentServerUrl} (index: ${currentServerIndex}, pool: ${serverInfo?.poolMode}, count: ${serverInfo?.serverCount})`);
+            console.log(
+              `🔌 LiveKit server: ${currentServerUrl} (index: ${currentServerIndex}, pool: ${serverInfo?.poolMode}, count: ${serverInfo?.serverCount})`,
+            );
           } catch (serverInfoError) {
-            console.warn('⚠️ Server info alınamadı, default kullanılıyor:', serverInfoError);
+            console.warn(
+              "⚠️ Server info alınamadı, default kullanılıyor:",
+              serverInfoError,
+            );
           }
-          
+
           // Use userId directly as identity to prevent ghost participants
           // generateLiveKitIdentity adds device suffix which causes duplicates on refresh
           const identity = userId;
-          
+
           // Get token with stable identity, display name, and server index
-          const t = await window.netrex.getLiveKitToken(roomName, identity, username, currentServerIndex);
+          const t = await window.netrex.getLiveKitToken(
+            roomName,
+            identity,
+            username,
+            currentServerIndex,
+          );
           setToken(t);
 
           // 20 saniye içinde bağlantı kurulamazsa hata göster
           connectionTimeoutRef.current = setTimeout(() => {
             // Eğer hala bağlanmadıysa hata göster
             if (!hasConnectedOnceRef.current) {
-              setConnectionError(`Odaya bağlanılamadı (Timeout). URL: ${currentServerUrl}`);
+              setConnectionError(
+                `Odaya bağlanılamadı (Timeout). URL: ${currentServerUrl}`,
+              );
             }
           }, 20000); // 20 saniye
         }
@@ -618,10 +706,10 @@ export default function ActiveRoom({
       if (userId && roomName) {
         const presenceRef = doc(db, "room_presence", roomName);
         updateDoc(presenceRef, {
-          users: arrayRemove({ 
-            userId, 
+          users: arrayRemove({
+            userId,
             username,
-            photoURL: user?.photoURL || null
+            photoURL: user?.photoURL || null,
           }),
         }).catch((error) => {
           // Document yoksa veya zaten silinmişse sessizce devam et
@@ -641,10 +729,10 @@ export default function ActiveRoom({
       try {
         const presenceRef = doc(db, "room_presence", roomName);
         await updateDoc(presenceRef, {
-          users: arrayRemove({ 
-            userId, 
+          users: arrayRemove({
+            userId,
             username,
-            photoURL: user?.photoURL || null
+            photoURL: user?.photoURL || null,
           }),
         });
       } catch (error) {
@@ -673,10 +761,10 @@ export default function ActiveRoom({
       try {
         const presenceRef = doc(db, "room_presence", roomName);
         // photoURL'i de ekle
-        const userData = { 
-          userId, 
+        const userData = {
+          userId,
           username,
-          photoURL: user?.photoURL || null
+          photoURL: user?.photoURL || null,
         };
         await updateDoc(presenceRef, {
           users: arrayUnion(userData),
@@ -697,19 +785,19 @@ export default function ActiveRoom({
   // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
   const handleDisconnect = async (reason) => {
     console.log("LiveKit bağlantısı koptu:", reason);
-    
+
     // 🚀 v5.2: Disconnect reason'ı kontrol et - quota/limit hatası olabilir
     // LiveKit quota aşıldığında doğrudan disconnect eder, "error" event'i fırlatmaz
-    
+
     // Enum kontrolü (daha güvenli)
     const reasonNum = Number(reason);
-    
+
     // KESİNLİKLE ROTATION YAPILMAMASI GEREKEN DURUMLAR
     // 1: CLIENT_INITIATED (Kullanıcı kendi çıktı)
     // 2: DUPLICATE_IDENTITY (Başka yerden girdi)
     // 10: ROOM_CLOSED (Oda kapandı - normal kapanış)
     if (
-      reasonNum === DisconnectReason.CLIENT_INITIATED || 
+      reasonNum === DisconnectReason.CLIENT_INITIATED ||
       reasonNum === DisconnectReason.DUPLICATE_IDENTITY ||
       reasonNum === DisconnectReason.ROOM_CLOSED
     ) {
@@ -725,38 +813,43 @@ export default function ActiveRoom({
 
     // String kontrolü (EN ÖNEMLİ KISIM)
     // Kullanıcının belirttiği kesin "kota/limit" hataları buraya eklenmeli
-    const reasonStr = String(reason || '').toLowerCase();
+    const reasonStr = String(reason || "").toLowerCase();
     const quotaDisconnectReasons = [
-      'quota', 
-      'rate limit', 
-      'limit exceeded', 
-      'limit reached',
-      'resource exhausted', 
-      'too many requests', 
-      '429',
-      'connection limit', 
-      'participant limit',
-      'minutes limit',
-      'minutes exceeded',
-      'free tier',
-      'server_shutdown'
+      "quota",
+      "rate limit",
+      "limit exceeded",
+      "limit reached",
+      "resource exhausted",
+      "too many requests",
+      "429",
+      "connection limit",
+      "participant limit",
+      "minutes limit",
+      "minutes exceeded",
+      "free tier",
+      "server_shutdown",
     ];
-    
+
     // Sadece tam eşleşme varsa (veya server shutdown ise)
-    const isQuotaTextMatch = quotaDisconnectReasons.some(q => reasonStr.includes(q));
-    
+    const isQuotaTextMatch = quotaDisconnectReasons.some((q) =>
+      reasonStr.includes(q),
+    );
+
     if ((isCriticalDisconnect || isQuotaTextMatch) && serverPoolMode) {
-      console.warn(`⚠️ Critical Disconnect (${reason}) indicates STRICT quota error, triggering pool rotation...`);
-      
+      console.warn(
+        `⚠️ Critical Disconnect (${reason}) indicates STRICT quota error, triggering pool rotation...`,
+      );
+
       let errorDesc = `Disconnect: ${reason}`;
-      if (reasonNum === DisconnectReason.SERVER_SHUTDOWN) errorDesc += " (server_shutdown)";
+      if (reasonNum === DisconnectReason.SERVER_SHUTDOWN)
+        errorDesc += " (server_shutdown)";
       if (isQuotaTextMatch) errorDesc += " (quota_limit_detected)";
 
       // handleError quota kontrolünü ve rotation'ı yapacak
       await handleError(new Error(errorDesc));
-      return; 
+      return;
     }
-    
+
     // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
     if (hasConnectedOnce) {
       setIsReconnecting(true);
@@ -767,10 +860,10 @@ export default function ActiveRoom({
       try {
         const presenceRef = doc(db, "room_presence", roomName);
         await updateDoc(presenceRef, {
-          users: arrayRemove({ 
-            userId, 
+          users: arrayRemove({
+            userId,
             username,
-            photoURL: user?.photoURL || null
+            photoURL: user?.photoURL || null,
           }),
         });
       } catch (error) {
@@ -787,37 +880,43 @@ export default function ActiveRoom({
   // 🚀 v5.2: Server pool - hata durumunda sonraki sunucuya geç
   const handleError = async (error) => {
     console.error("LiveKit bağlantı hatası:", error);
-    
-    const errorMessage = error?.message || '';
-    
+
+    const errorMessage = error?.message || "";
+
     // Quota/limit hataları - server pool ile çözülebilir
     const quotaErrors = [
-      'quota',
-      'rate limit',
-      'limit exceeded',
-      'limit reached',
-      'resource exhausted',
-      'too many requests',
-      'connection limit',
-      'participant limit',
-      'minutes exceeded',
-      'free tier',
-      '429',
-      '503',
-      'server_shutdown',
+      "quota",
+      "rate limit",
+      "limit exceeded",
+      "limit reached",
+      "resource exhausted",
+      "too many requests",
+      "connection limit",
+      "participant limit",
+      "minutes exceeded",
+      "free tier",
+      "429",
+      "503",
+      "server_shutdown",
     ];
-    
-    const isQuotaError = quotaErrors.some(q => 
-      errorMessage.toLowerCase().includes(q.toLowerCase())
+
+    const isQuotaError = quotaErrors.some((q) =>
+      errorMessage.toLowerCase().includes(q.toLowerCase()),
     );
-    
+
     // Server pool modunda ve quota hatası aldıysak
     // NOT: isQuotaError false olsa bile, bağlantı hatası da rotation tetikleyebilir
-    const isConnectionFailure = !isQuotaError && [
-      'connection failed', 'could not connect', 'websocket error',
-      'timeout', 'network error', 'disconnect:',
-    ].some(c => errorMessage.toLowerCase().includes(c.toLowerCase()));
-    
+    const isConnectionFailure =
+      !isQuotaError &&
+      [
+        "connection failed",
+        "could not connect",
+        "websocket error",
+        "timeout",
+        "network error",
+        "disconnect:",
+      ].some((c) => errorMessage.toLowerCase().includes(c.toLowerCase()));
+
     // 🚀 v5.6: Ref bazlı kontrol (Stale closure koruması)
     const currentPoolMode = serverPoolModeRef.current;
     const currentLocalIndex = serverIndexRef.current;
@@ -826,69 +925,104 @@ export default function ActiveRoom({
     if (currentPoolMode && (isQuotaError || isConnectionFailure)) {
       // Sonsuz döngü koruması
       if (rotationCountRef.current >= MAX_ROTATIONS) {
-        console.error(`❌ Maksimum rotation sayısına ulaşıldı (${MAX_ROTATIONS}). Tüm sunucular dolu olabilir.`);
-        setConnectionError(`Tüm LiveKit sunucuları dolu. Lütfen daha sonra tekrar deneyin.`);
+        console.error(
+          `❌ Maksimum rotation sayısına ulaşıldı (${MAX_ROTATIONS}). Tüm sunucular dolu olabilir.`,
+        );
+        setConnectionError(
+          `Tüm LiveKit sunucuları dolu. Lütfen daha sonra tekrar deneyin.`,
+        );
         return;
       }
-      
+
       rotationCountRef.current++;
-      console.warn(`⚠️ LiveKit hatası algılandı, rotasyon denemesi ${rotationCountRef.current}/${MAX_ROTATIONS}`);
-      
+      console.warn(
+        `⚠️ LiveKit hatası algılandı, rotasyon denemesi ${rotationCountRef.current}/${MAX_ROTATIONS}`,
+      );
+
       try {
         const poolRef = doc(db, "system", "livekitPool");
         const poolDoc = await getDoc(poolRef);
-        
-        let targetIndex = (currentLocalIndex + 1) % Math.max(2, currentLocalCount);
+
+        let targetIndex =
+          (currentLocalIndex + 1) % Math.max(2, currentLocalCount);
         let firebaseActiveIndex = currentLocalIndex;
         let firebaseServerCount = currentLocalCount;
 
         if (poolDoc.exists()) {
           const data = poolDoc.data();
-          firebaseActiveIndex = typeof data.activeServerIndex === 'number' ? data.activeServerIndex : currentLocalIndex;
+          firebaseActiveIndex =
+            typeof data.activeServerIndex === "number"
+              ? data.activeServerIndex
+              : currentLocalIndex;
           firebaseServerCount = data.serverCount || currentLocalCount;
-          
-          // 🔥 KRİTİK CHECK: Eğer Firebase'deki index bozuksa (örn: -1) veya çok eskiyse, FORCE-REFRESH yapalım
-          const isInvalidInFirebase = firebaseActiveIndex < 0 || firebaseActiveIndex >= firebaseServerCount;
 
-          if (!isInvalidInFirebase && firebaseActiveIndex !== currentLocalIndex) {
-            console.log(`📡 Firebase zaten başkası tarafından güncellenmiş: ${currentLocalIndex} → ${firebaseActiveIndex}. Oraya yönleniliyor.`);
+          // 🔥 KRİTİK CHECK: Eğer Firebase'deki index bozuksa (örn: -1) veya çok eskiyse, FORCE-REFRESH yapalım
+          const isInvalidInFirebase =
+            firebaseActiveIndex < 0 ||
+            firebaseActiveIndex >= firebaseServerCount;
+
+          if (
+            !isInvalidInFirebase &&
+            firebaseActiveIndex !== currentLocalIndex
+          ) {
+            console.log(
+              `📡 Firebase zaten başkası tarafından güncellenmiş: ${currentLocalIndex} → ${firebaseActiveIndex}. Oraya yönleniliyor.`,
+            );
             targetIndex = firebaseActiveIndex;
           } else {
             // Eğer Firebase hâlâ bizim hatayı aldığımız bozuk sunucudaysa VEYA index bozuksa, bir sonrakine GEÇ ve YAZ
-            targetIndex = (Math.max(0, firebaseActiveIndex) + 1) % Math.max(2, firebaseServerCount);
-            console.log(`📡 Sunucu döndürme BAŞLIYOR... Write to Firebase: ${targetIndex} (Previous: ${firebaseActiveIndex})`);
-            
-            await setDoc(poolRef, {
-              activeServerIndex: targetIndex,
-              lastRotation: serverTimestamp(),
-              lastError: errorMessage,
-              lastErrorTime: serverTimestamp(),
-              serverCount: firebaseServerCount
-            }, { merge: true });
-            
-            console.log("✅ Firebase 'activeServerIndex' başarıyla güncellendi (WRITE SUCCESS).");
-            
+            targetIndex =
+              (Math.max(0, firebaseActiveIndex) + 1) %
+              Math.max(2, firebaseServerCount);
+            console.log(
+              `📡 Sunucu döndürme BAŞLIYOR... Write to Firebase: ${targetIndex} (Previous: ${firebaseActiveIndex})`,
+            );
+
+            await setDoc(
+              poolRef,
+              {
+                activeServerIndex: targetIndex,
+                lastRotation: serverTimestamp(),
+                lastError: errorMessage,
+                lastErrorTime: serverTimestamp(),
+                serverCount: firebaseServerCount,
+              },
+              { merge: true },
+            );
+
+            console.log(
+              "✅ Firebase 'activeServerIndex' başarıyla güncellendi (WRITE SUCCESS).",
+            );
+
             // Ekstra Doğrulama: Hemen Firebase'den geri oku
             const verifyDoc = await getDoc(poolRef);
-            console.log("🔍 Firebase Doğrulama (Re-read post-write):", verifyDoc.data()?.activeServerIndex);
+            console.log(
+              "🔍 Firebase Doğrulama (Re-read post-write):",
+              verifyDoc.data()?.activeServerIndex,
+            );
           }
         } else {
-           console.warn("⚠️ Firebase pool dökümanı bulunamadı, lokal rotasyon yapılıyor.");
+          console.warn(
+            "⚠️ Firebase pool dökümanı bulunamadı, lokal rotasyon yapılıyor.",
+          );
         }
 
-        const serverInfo = await window.netrex.getLiveKitServerInfo(targetIndex);
-        
+        const serverInfo =
+          await window.netrex.getLiveKitServerInfo(targetIndex);
+
         if (serverInfo && serverInfo.url) {
-          console.log(`🚀 Yeni sunucuya bağlanılıyor: ${serverInfo.url} (Index: ${targetIndex})`);
+          console.log(
+            `🚀 Yeni sunucuya bağlanılıyor: ${serverInfo.url} (Index: ${targetIndex})`,
+          );
           setServerIndex(targetIndex);
           setServerUrl(serverInfo.url);
-          setConnectionError(null); 
-          
-          setToken(""); 
+          setConnectionError(null);
+
+          setToken("");
           setHasConnectedOnce(false);
           hasConnectedOnceRef.current = false;
           setIsRotatingSession(true);
-          
+
           if (connectionTimeoutRef.current) {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
@@ -898,25 +1032,30 @@ export default function ActiveRoom({
             setIsRotatingSession(false);
           }, 5000);
           // --------------------------------------------
-          
+
           // Kullanıcıya bilgi verici Modal / Toast göster
           toast.warning("Sunucu Değiştiriliyor", {
-            description: "Mevcut sunucunun kapasitesi dolduğu için sizi yeni bir sunucuya aktarıyoruz. Lütfen bekleyin...",
+            description:
+              "Mevcut sunucunun kapasitesi dolduğu için sizi yeni bir sunucuya aktarıyoruz. Lütfen bekleyin...",
             duration: 8000,
             position: "top-center",
           });
 
-          console.log(`🔄 LiveKit server rotated: ${serverIndex} → ${serverInfo.serverIndex}`);
+          console.log(
+            `🔄 LiveKit server rotated: ${serverIndex} → ${serverInfo.serverIndex}`,
+          );
           return; // Hata gösterme, yeniden dene
         }
       } catch (rotationError) {
-        console.error('Server rotation hatası:', rotationError);
+        console.error("Server rotation hatası:", rotationError);
       }
     }
-    
+
     // Sadece başarılı bağlantıdan sonra hata olursa göster
     if (hasConnectedOnce) {
-      setConnectionError(`${errorMessage || "Bağlantı hatası oluştu."} (URL: ${serverUrl})`);
+      setConnectionError(
+        `${errorMessage || "Bağlantı hatası oluştu."} (URL: ${serverUrl})`,
+      );
     }
     // İlk bağlantı hatasında sadece timeout'ta hata göster
   };
@@ -944,24 +1083,36 @@ export default function ActiveRoom({
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-red-500/10 rounded-full blur-[120px] animate-pulse" />
         </div>
-        
+
         {/* Error Card */}
         <div className="relative z-10 w-full max-w-md">
           {/* Card glow */}
           <div className="absolute -inset-1 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-3xl blur-xl opacity-60" />
-          
+
           {/* Card */}
           <div className="relative bg-gradient-to-br from-[#1a1b1e]/95 to-[#111214]/95 backdrop-blur-xl rounded-2xl border border-red-500/20 p-6 sm:p-8 text-center">
             {/* Icon */}
             <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center border border-red-500/20">
-              <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <svg
+                className="w-8 h-8 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
               </svg>
             </div>
-            
-            <h2 className="text-xl font-bold mb-2 text-white">Bağlantı Hatası</h2>
+
+            <h2 className="text-xl font-bold mb-2 text-white">
+              Bağlantı Hatası
+            </h2>
             <p className="text-[#949ba4] mb-6 text-sm">{connectionError}</p>
-            
+
             <div className="flex gap-3 justify-center flex-wrap">
               <button
                 onClick={() => {
@@ -969,12 +1120,17 @@ export default function ActiveRoom({
                   setHasConnectedOnce(false);
                   hasConnectedOnceRef.current = false;
                   setToken(""); // Token'ı sıfırla ki yeniden fetch etsin
-                  
+
                   if (window.netrex) {
                     const identity = userId;
                     // Token alma işlemini yeniden başlat
                     window.netrex
-                      .getLiveKitToken(roomName, identity, username, serverIndex)
+                      .getLiveKitToken(
+                        roomName,
+                        identity,
+                        username,
+                        serverIndex,
+                      )
                       .then((t) => {
                         setToken(t);
                         if (connectionTimeoutRef.current) {
@@ -982,13 +1138,17 @@ export default function ActiveRoom({
                         }
                         connectionTimeoutRef.current = setTimeout(() => {
                           if (!hasConnectedOnceRef.current) {
-                            setConnectionError("Odaya bağlanılamadı. Lütfen tekrar deneyin.");
+                            setConnectionError(
+                              "Odaya bağlanılamadı. Lütfen tekrar deneyin.",
+                            );
                           }
                         }, 20000);
                       })
                       .catch((e) => {
                         console.error("Token hatası:", e);
-                        setConnectionError("Token alınamadı. Lütfen tekrar deneyin.");
+                        setConnectionError(
+                          "Token alınamadı. Lütfen tekrar deneyin.",
+                        );
                       });
                   }
                 }}
@@ -1014,7 +1174,14 @@ export default function ActiveRoom({
     return (
       <LoadingSplash
         title="Oda Sunucusu Değiştiriliyor"
-        description={<>Mevcut sunucunun tam doluluğa ulaşması sebebiyle kapasite aşıldı.<br/>Hemen arkada sizi çok daha rahat bir odaya aktarıyoruz, lütfen ayrılmayınız...</>}
+        description={
+          <>
+            Mevcut sunucunun tam doluluğa ulaşması sebebiyle kapasite aşıldı.
+            <br />
+            Hemen arkada sizi çok daha rahat bir odaya aktarıyoruz, lütfen
+            ayrılmayınız...
+          </>
+        }
         loadingText="Aktarılıyor..."
         disableBackgroundEffects={disableBackgroundEffects}
       />
@@ -1032,14 +1199,13 @@ export default function ActiveRoom({
     );
   }
 
-
   return (
     <LiveKitRoom
       // KEY: ONLY roomName changes should remount - serverIndex changes are handled by serverUrl prop
       key={roomName}
       // DÜZELTME: video={false} yapıyoruz ki otomatik yönetim manuel fonksiyonumuzla çakışmasın.
       video={false}
-      // DÜZELTME: audio={false} yapıyoruz ki her gelen ses (ekran paylaşımı vs) anında otomatik çalmaya başlamasın. 
+      // DÜZELTME: audio={false} yapıyoruz ki her gelen ses (ekran paylaşımı vs) anında otomatik çalmaya başlamasın.
       audio={false}
       token={token}
       // 🚀 v5.2: Server pool - dinamik URL
@@ -1047,8 +1213,8 @@ export default function ActiveRoom({
       data-lk-theme="default"
       className="flex-1 flex flex-col bg-gradient-to-b from-[#1a1b1f] to-[#0e0f12]"
       // Quota-Efficient Connection Options
-      connectOptions={{ 
-        autoSubscribe: true, 
+      connectOptions={{
+        autoSubscribe: true,
         // Adaptive streaming for lower bandwidth usage
         dynacast: true,
         // Faster participant timeout (seconds) - helps clear ghost participants quicker
@@ -1089,7 +1255,7 @@ export default function ActiveRoom({
         setShowChatPanel={setShowChatPanel}
       />
       <VoiceProcessorHandler />
-      <SettingsUpdater 
+      <SettingsUpdater
         isMuted={isMuted}
         serverMuted={serverMuted}
         isDeafened={isDeafened}
@@ -1104,9 +1270,9 @@ export default function ActiveRoom({
         userId={userId}
         username={username}
       />
- 
-      <ModerationHandler 
-        setServerMuted={setServerMuted} 
+
+      <ModerationHandler
+        setServerMuted={setServerMuted}
         setServerDeafened={setServerDeafened}
         setMutedBy={setMutedBy}
         setDeafenedBy={setDeafenedBy}
@@ -1131,9 +1297,9 @@ export default function ActiveRoom({
       )}
 
       {/* İlk bağlantı hatası (Artık yukarıda handle ediliyor, burası LiveKitRoom error'ları için) */}
-       {connectionError && !hasConnectedOnce && (
-         <div className="absolute inset-0 z-50 bg-transparent" />
-       )}
+      {connectionError && !hasConnectedOnce && (
+        <div className="absolute inset-0 z-50 bg-transparent" />
+      )}
 
       {/* Bağlantı koptu (başarılı bağlantıdan sonra) */}
       {isReconnecting && hasConnectedOnce && (
@@ -1142,22 +1308,36 @@ export default function ActiveRoom({
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-[120px] animate-pulse" />
           </div>
-          
+
           {/* Content */}
           <div className="relative z-10 flex flex-col items-center">
             {/* Pulsing icon */}
             <div className="relative mb-6">
               <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-2xl animate-pulse" />
               <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/10 flex items-center justify-center border border-amber-500/20 animate-pulse">
-                <svg className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="w-8 h-8 text-amber-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               </div>
             </div>
-            
-            <h2 className="text-xl font-bold text-white mb-2">Bağlantı Koptu</h2>
-            <p className="text-[#949ba4] mb-6 text-sm">Yeniden bağlanmaya çalışılıyor...</p>
-            
+
+            <h2 className="text-xl font-bold text-white mb-2">
+              Bağlantı Koptu
+            </h2>
+            <p className="text-[#949ba4] mb-6 text-sm">
+              Yeniden bağlanmaya çalışılıyor...
+            </p>
+
             <button
               onClick={handleManualLeave}
               className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 rounded-xl font-medium text-white text-sm hover:shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
@@ -1168,8 +1348,10 @@ export default function ActiveRoom({
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: styleInjection + criticalStyles }} />
- 
+      <style
+        dangerouslySetInnerHTML={{ __html: styleInjection + criticalStyles }}
+      />
+
       <DeafenManager isDeafened={isDeafened} serverDeafened={serverDeafened} />
       <SettingsModal
         isOpen={showSettings}
@@ -1181,7 +1363,7 @@ export default function ActiveRoom({
         {/* Premium gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b1f]/95 via-[#141518]/95 to-[#0e0f12]/95 backdrop-blur-xl" />
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
-        
+
         {/* Ambient glow */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-0 left-1/4 w-[200px] h-[80px] bg-indigo-500/[0.06] blur-[60px]" />
@@ -1190,7 +1372,7 @@ export default function ActiveRoom({
 
         {/* Top glow line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
-        
+
         {/* Bottom border */}
         <div className="absolute bottom-0 left-0 right-0 h-px">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -1273,6 +1455,8 @@ export default function ActiveRoom({
         renderBottomControls={(stopScreenShare) => (
           <BottomControls
             username={username}
+            serverId={serverId}
+            channelId={roomName}
             onLeave={handleManualLeave}
             onOpenSettings={() => setShowSettings(true)}
             isDeafened={isDeafened}
@@ -1304,6 +1488,10 @@ export default function ActiveRoom({
           roomName={contextMenu.roomName}
           onClose={() => setContextMenu(null)}
         />
+      )}
+
+      {serverId && (
+        <WatchPartyManager serverId={serverId} channelId={roomName} />
       )}
     </LiveKitRoom>
   );

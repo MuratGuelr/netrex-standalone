@@ -2,28 +2,24 @@
 
 /**
  * 👤 Avatar - User Avatar Component
- * NDS v2.0 - Netrex Design System
- * 
- * Features: sizes, status indicator, fallback initials, speaking state
+ * NDS v2.1 - border → box-shadow (dışa doğru, avatarı küçültmez)
  */
 
 import { forwardRef } from "react";
 
-// Avatar color palette based on user ID
 const AVATAR_COLORS = [
-  "#6366f1", // Indigo
-  "#a855f7", // Purple
-  "#ec4899", // Pink
-  "#22c55e", // Green
-  "#3b82f6", // Blue
-  "#f97316", // Orange
-  "#eab308", // Yellow
-  "#14b8a6", // Teal
-  "#ef4444", // Red
-  "#8b5cf6", // Violet
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
+  "#22c55e",
+  "#3b82f6",
+  "#f97316",
+  "#eab308",
+  "#14b8a6",
+  "#ef4444",
+  "#8b5cf6",
 ];
 
-// Generate consistent color from string
 const getColorFromString = (str) => {
   if (!str) return AVATAR_COLORS[0];
   let hash = 0;
@@ -33,48 +29,98 @@ const getColorFromString = (str) => {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-// Get initials from name
 const getInitials = (name, maxChars = 2) => {
   if (!name) return "?";
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) {
-    return parts[0].charAt(0).toUpperCase();
-  }
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return parts
     .slice(0, maxChars)
     .map((p) => p.charAt(0).toUpperCase())
     .join("");
 };
 
-const Avatar = forwardRef(function Avatar({
-  src,
-  alt,
-  name,
-  size = "md",
-  status,
-  speaking = false,
-  muted = false,
-  deafened = false,
-  color,
-  className = "",
-  ...props
-}, ref) {
+const Avatar = forwardRef(function Avatar(
+  {
+    src,
+    alt,
+    name,
+    size = "md",
+    status,
+    speaking = false,
+    muted = false,
+    deafened = false,
+    color,
+    borderColor,
+    className = "",
+    onImageLoad,
+    ...props
+  },
+  ref,
+) {
   const avatarColor = color || getColorFromString(name);
-  const initials = getInitials(name);
 
-  // Size configurations
-  const sizeConfig = {
-    xs: { avatar: "w-5 h-5", text: "text-[8px]", status: "w-2 h-2", statusRing: "w-2.5 h-2.5" },
-    sm: { avatar: "w-6 h-6", text: "text-[9px]", status: "w-2.5 h-2.5", statusRing: "w-3 h-3" },
-    md: { avatar: "w-8 h-8", text: "text-small", status: "w-2.5 h-2.5", statusRing: "w-3.5 h-3.5" },
-    lg: { avatar: "w-10 h-10", text: "text-body", status: "w-3 h-3", statusRing: "w-4 h-4" },
-    xl: { avatar: "w-16 h-16", text: "text-h4", status: "w-4 h-4", statusRing: "w-5 h-5" },
-    "2xl": { avatar: "w-24 h-24", text: "text-h2", status: "w-5 h-5", statusRing: "w-6 h-6" },
+  // Gradient → ilk hex rengi al
+  let effectiveBorderColor = borderColor;
+  if (effectiveBorderColor?.includes("gradient")) {
+    const match = effectiveBorderColor.match(/#[0-9a-fA-F]{6}/);
+    effectiveBorderColor = match ? match[0] : undefined;
+  }
+
+  // ✅ box-shadow ile DIŞA doğru border — avatarın boyutunu etkilemez
+  const toBorderShadow = (base) => {
+    if (!base) return `0 0 0 2.5px rgba(255,255,255,0.12)`;
+    if (base.startsWith("#")) {
+      const r = parseInt(base.slice(1, 3), 16);
+      const g = parseInt(base.slice(3, 5), 16);
+      const b = parseInt(base.slice(5, 7), 16);
+      return `0 0 0 2.5px rgba(${r},${g},${b},0.55)`;
+    }
+    return `0 0 0 2.5px rgba(255,255,255,0.12)`;
   };
 
-  const config = sizeConfig[size];
+  const initials = getInitials(name);
 
-  // Status color
+  const sizeConfig = {
+    xs: {
+      avatar: "w-5 h-5",
+      text: "text-[8px]",
+      status: "w-2 h-2",
+      statusRing: "w-2.5 h-2.5",
+    },
+    sm: {
+      avatar: "w-6 h-6",
+      text: "text-[9px]",
+      status: "w-2.5 h-2.5",
+      statusRing: "w-3 h-3",
+    },
+    md: {
+      avatar: "w-8 h-8",
+      text: "text-small",
+      status: "w-2.5 h-2.5",
+      statusRing: "w-3.5 h-3.5",
+    },
+    lg: {
+      avatar: "w-10 h-10",
+      text: "text-body",
+      status: "w-3 h-3",
+      statusRing: "w-4 h-4",
+    },
+    xl: {
+      avatar: "w-16 h-16",
+      text: "text-h4",
+      status: "w-4 h-4",
+      statusRing: "w-5 h-5",
+    },
+    "2xl": {
+      avatar: "w-24 h-24",
+      text: "text-h2",
+      status: "w-5 h-5",
+      statusRing: "w-6 h-6",
+    },
+  };
+
+  const config = sizeConfig[size] || sizeConfig.md;
+
   const getStatusColor = () => {
     if (status === "online") return "bg-nds-online";
     if (status === "offline") return "bg-nds-offline";
@@ -87,14 +133,7 @@ const Avatar = forwardRef(function Avatar({
   const statusColor = getStatusColor();
 
   return (
-    <div 
-      ref={ref}
-      className={`
-        relative inline-flex
-        ${className}
-      `}
-      {...props}
-    >
+    <div ref={ref} className={`relative inline-flex ${className}`} {...props}>
       {/* Avatar Container */}
       <div
         className={`
@@ -105,12 +144,14 @@ const Avatar = forwardRef(function Avatar({
           flex-shrink-0
           font-semibold text-white
           transition-all duration-normal
-          
           ${speaking ? "ring-2 ring-nds-success animate-nds-speaking" : ""}
           ${muted || deafened ? "opacity-50 grayscale" : ""}
-          ${className.includes("ring-") ? className.split(" ").filter(c => c.includes("ring")).join(" ") : ""}
         `}
-        style={{ backgroundColor: !src ? avatarColor : undefined }}
+        style={{
+          background: !src ? avatarColor : undefined,
+          // ✅ box-shadow dışa doğru — border yerine
+          boxShadow: toBorderShadow(effectiveBorderColor || avatarColor),
+        }}
       >
         {src ? (
           <img
@@ -118,20 +159,18 @@ const Avatar = forwardRef(function Avatar({
             alt={alt || name}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
+            onLoad={onImageLoad}
             onError={(e) => {
               e.target.style.display = "none";
-              e.target.parentNode.querySelector(".avatar-fallback")?.classList.remove("hidden");
+              e.target.parentNode
+                .querySelector(".avatar-fallback")
+                ?.classList.remove("hidden");
             }}
           />
         ) : null}
-        
-        {/* Fallback Initials */}
-        <span 
-          className={`
-            avatar-fallback
-            ${config.text}
-            ${src ? "hidden" : ""}
-          `}
+
+        <span
+          className={`avatar-fallback ${config.text} ${src ? "hidden" : ""}`}
         >
           {initials}
         </span>
@@ -139,7 +178,7 @@ const Avatar = forwardRef(function Avatar({
 
       {/* Status Indicator */}
       {statusColor && (
-        <div 
+        <div
           className={`
             absolute -bottom-0.5 -right-0.5
             ${config.statusRing}
@@ -148,19 +187,13 @@ const Avatar = forwardRef(function Avatar({
             flex items-center justify-center
           `}
         >
-          <div 
-            className={`
-              ${config.status}
-              rounded-full
-              ${statusColor}
-            `}
-          />
+          <div className={`${config.status} rounded-full ${statusColor}`} />
         </div>
       )}
 
-      {/* Speaking Ring Animation */}
+      {/* Speaking Ring */}
       {speaking && (
-        <div 
+        <div
           className={`
             absolute inset-0
             rounded-lg
@@ -176,9 +209,7 @@ const Avatar = forwardRef(function Avatar({
 
 export default Avatar;
 
-/**
- * 👥 AvatarGroup - Stack of avatars with overflow indicator
- */
+// ── AvatarGroup ──────────────────────────────────────────────────────────────
 export function AvatarGroup({
   avatars = [],
   max = 4,
@@ -202,10 +233,7 @@ export function AvatarGroup({
       {visible.map((avatar, index) => (
         <div
           key={avatar.id || index}
-          className={`
-            ${index > 0 ? offsetStyles[size] : ""}
-            ring-2 ring-nds-bg-primary rounded-lg
-          `}
+          className={`${index > 0 ? offsetStyles[size] : ""} ring-2 ring-nds-bg-primary rounded-lg`}
         >
           <Avatar
             src={avatar.src}
@@ -215,25 +243,22 @@ export function AvatarGroup({
           />
         </div>
       ))}
-      
       {remaining > 0 && (
-        <div 
-          className={`
-            ${offsetStyles[size]}
-            ring-2 ring-nds-bg-primary
-          `}
-        >
-          <div 
+        <div className={offsetStyles[size]}>
+          <div
             className={`
-              ${size === "xs" ? "w-5 h-5 text-[8px]" : 
-                size === "sm" ? "w-6 h-6 text-[9px]" :
-                size === "md" ? "w-8 h-8 text-small" :
-                size === "lg" ? "w-10 h-10 text-body" : "w-16 h-16 text-h4"}
-              rounded-lg
-              bg-nds-bg-elevated
-              flex items-center justify-center
-              text-nds-text-tertiary
-              font-medium
+              ${
+                size === "xs"
+                  ? "w-5 h-5 text-[8px]"
+                  : size === "sm"
+                    ? "w-6 h-6 text-[9px]"
+                    : size === "md"
+                      ? "w-8 h-8 text-small"
+                      : size === "lg"
+                        ? "w-10 h-10 text-body"
+                        : "w-16 h-16 text-h4"
+              }
+              rounded-lg bg-nds-bg-elevated flex items-center justify-center text-nds-text-tertiary font-medium
             `}
           >
             +{remaining}

@@ -13,11 +13,16 @@ import {
   MonitorOff,
   PhoneOff,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Music
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useChatStore } from "@/src/store/chatStore";
+import { useWatchPartyStore } from "@/src/store/watchPartyStore";
+import { useWatchPartyPermission } from "@/src/hooks/useWatchPartyPermission";
+import { useAuthStore } from "@/src/store/authStore";
+import { startWatchParty, endWatchParty } from "@/src/services/watchPartyService";
 import { toastOnce } from "@/src/utils/toast";
 import ScreenShareModal from "../ScreenShareModal";
 
@@ -68,6 +73,8 @@ function ControlButton({
 
 export default function BottomControls({
   username,
+  serverId,
+  channelId,
   onLeave,
   onOpenSettings,
   isDeafened,
@@ -103,11 +110,21 @@ export default function BottomControls({
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);
   const screenShareButtonRef = useRef(null);
+  
+  const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
+  const watchPartyMenuRef = useRef(null);
+  const watchPartyButtonRef = useRef(null);
+
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
   
   const quickStatus = useSettingsStore(state => state.quickStatus);
   const toggleLastQuickStatus = useSettingsStore(state => state.toggleLastQuickStatus);
+
+  // Watch Party
+  const wpActive = useWatchPartyStore((state) => state.isActive);
+  const currentUser = useAuthStore((s) => s.user);
+  const wpPermissions = useWatchPartyPermission(serverId);
 
   const stateRef = useRef({
     isMuted,
@@ -893,7 +910,7 @@ export default function BottomControls({
     };
   }, [toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus]);
 
-  // Ekran paylaşımı menüsü için dışarı tıklama kontrolü
+  // Ekran paylaşımı ve Watch Party menüleri için dışarı tıklama kontrolü
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
@@ -905,10 +922,20 @@ export default function BottomControls({
       ) {
         setShowScreenShareMenu(false);
       }
+      
+      if (
+        showWatchPartyMenu &&
+        watchPartyMenuRef.current &&
+        watchPartyButtonRef.current &&
+        !watchPartyMenuRef.current.contains(e.target) &&
+        !watchPartyButtonRef.current.contains(e.target)
+      ) {
+        setShowWatchPartyMenu(false);
+      }
     };
     window.addEventListener("mousedown", handleClickOutside);
     return () => window.removeEventListener("mousedown", handleClickOutside);
-  }, [showScreenShareMenu]);
+  }, [showScreenShareMenu, showWatchPartyMenu]);
 
   return (
     <>
@@ -1070,6 +1097,82 @@ export default function BottomControls({
             </div>
           </div>
           
+          {/* Watch Party Butonu */}
+          {serverId && useSettingsStore(s => s.watchPartyEnabled) && (
+            <div className="relative flex items-center" ref={watchPartyButtonRef}>
+              <div className="w-px h-8 bg-white/10 mx-1"></div>
+              <button
+                onClick={() => {
+                  if (!wpActive) {
+                    if (wpPermissions.canStartParty) {
+                      startWatchParty(serverId, channelId, currentUser?.uid);
+                    } else {
+                      toastOnce("Bu kanalda Watch Party başlatma yetkin yok.", "error");
+                    }
+                  } else {
+                    setShowWatchPartyMenu(!showWatchPartyMenu);
+                  }
+                }}
+                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+                  wpActive 
+                    ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95"
+                    : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
+                }`}
+                title={wpActive ? "Watch Party Seçenekleri" : "Watch Party Başlat"}
+              >
+                <div className="relative z-10">
+                  <Music size={20} className="sm:w-5 sm:h-5" />
+                </div>
+              </button>
+
+              {/* Watch Party Menüsü */}
+              {showWatchPartyMenu && wpActive && (
+                <div
+                  ref={watchPartyMenuRef}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-[99999] w-64 animate-scaleIn origin-bottom bg-[#111214] border border-white/10 overflow-hidden"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <div className="p-1.5 space-y-1">
+                    <div className="px-3 py-2 flex items-center gap-2 mb-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-white/90">Watch Party Aktif</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setShowWatchPartyMenu(false);
+                        useWatchPartyStore.getState().setLocalPref('showPlayer', true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
+                    >
+                      <Music size={16} />
+                      Oynatıcıyı Göster
+                    </button>
+
+                    {wpPermissions.canControl && (
+                      <button
+                        onClick={() => {
+                          setShowWatchPartyMenu(false);
+                          endWatchParty(serverId, channelId);
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
+                      >
+                        <PhoneOff size={16} />
+                        Watch Party'yi Kapat
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Ayırıcı */}
           <div className="w-px h-8 bg-white/10 mx-1"></div>
           

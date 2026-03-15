@@ -215,13 +215,33 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   // ✅ CSP HEADER - Cached String
   // ============================================
   session.defaultSession.webRequest.onHeadersReceived((d, c) => {
-    c({
-      responseHeaders: {
-        ...d.responseHeaders,
-        "Content-Security-Policy": [CSP_HEADER],
-      },
-    });
+    const headers = { ...d.responseHeaders };
+
+    // CSP
+    headers["Content-Security-Policy"] = [CSP_HEADER];
+
+    // Permissions-Policy: tüm sayfalara ekle (YouTube iframe'leri için gerekli)
+    headers['Permissions-Policy'] = [
+      'autoplay=*, encrypted-media=*, accelerometer=*, gyroscope=*, picture-in-picture=*, clipboard-write=*'
+    ];
+
+    c({ responseHeaders: headers });
   });
+
+  // ✅ YouTube Error 153/152 Fix: Inject Referer for file:// origin
+  // YouTube rejects embeds without a valid 3rd-party referer.
+  // Only inject when referer is missing (file:// has no referer).
+  // Do NOT set Origin header — embed requests shouldn't have one.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.youtube.com/embed/*', '*://*.youtube-nocookie.com/embed/*'] },
+    (details, callback) => {
+      const currentReferer = details.requestHeaders['Referer'] || details.requestHeaders['referer'] || '';
+      if (!currentReferer || currentReferer.startsWith('file://') || currentReferer.startsWith('app://')) {
+        details.requestHeaders['Referer'] = 'https://netrex.app';
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
 
   // Context menu (Admin only)
   mainWindow.webContents.on("context-menu", (event, params) => {

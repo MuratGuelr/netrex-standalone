@@ -18,7 +18,7 @@ export default function MessageBubble({
   className = "",
 }) {
   const [showActions, setShowActions] = useState(false);
-  const displayName = message?.user?.displayName || "Kullanıcı";
+  const displayName = message?.user?.displayName || message?.username || "Kullanıcı";
   const timestamp = message?.timestamp ? new Date(message.timestamp).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
 
   return (
@@ -28,7 +28,12 @@ export default function MessageBubble({
       onMouseLeave={() => setShowActions(false)}
     >
       {showAvatar && (
-        <Avatar src={message?.user?.photoURL} name={displayName} size="sm" />
+        <Avatar
+          src={message?.user?.photoURL || message?.user?.avatarUrl || message?.avatarUrl}
+          name={displayName}
+          size="sm"
+          borderColor={message?.user?.profileColor || message?.profileColor}
+        />
       )}
 
       <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>

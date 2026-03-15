@@ -33,40 +33,40 @@ import { useUpdateStore } from "@/src/store/updateStore";
 const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
   loading: () => <LoadingScreen message="Oda yükleniyor..." />,
 });
-const StandaloneChatView = dynamic(() => import("@/src/components/StandaloneChatView"), {
-  loading: () => <LoadingScreen message="Sohbet yükleniyor..." />,
-});
+const StandaloneChatView = dynamic(
+  () => import("@/src/components/StandaloneChatView"),
+  {
+    loading: () => <LoadingScreen message="Sohbet yükleniyor..." />,
+  },
+);
 
-import SettingsModal from "@/src/components/SettingsModal";
+// ✅ SettingsModal KALDIRILDI — AppShell global olarak render ediyor
 import UpdateNotification from "@/src/components/UpdateNotification";
 import InfoModal from "@/src/components/InfoModal";
 import VoiceChannelSwitchModal from "@/src/components/VoiceChannelSwitchModal";
-const InstallUpdateSplash = dynamic(() => import("@/src/components/InstallUpdateSplash"));
+const InstallUpdateSplash = dynamic(
+  () => import("@/src/components/InstallUpdateSplash"),
+);
 
 import ServerMemberList from "@/src/components/server/ServerMemberList";
 
 export default function Home() {
-  const {
-    user,
-    isAuth,
-    isLoading,
-    initializeAuth,
-    loginAnonymously,
-  } = useAuthStore();
+  const { user, isAuth, isLoading, initializeAuth, loginAnonymously } =
+    useAuthStore();
   const { currentServer, servers } = useServerStore();
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
-  
-  // ✅ Global Chat State (Local state replaced with Store)
-  const showChatPanel = useChatStore(state => state.showChatPanel);
-  const setShowChatPanel = useChatStore(state => state.setShowChatPanel);
-  
+
+  // ✅ Global Chat State
+  const showChatPanel = useChatStore((state) => state.showChatPanel);
+  const setShowChatPanel = useChatStore((state) => state.setShowChatPanel);
+
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true);
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
-  
+
   // ✅ Voice channel switch confirmation modal
   const [voiceChannelSwitch, setVoiceChannelSwitch] = useState({
     isOpen: false,
@@ -74,10 +74,10 @@ export default function Home() {
     targetChannel: null,
   });
 
-  // ✅ currentRoom null olduğunda modal'ı kapat (disconnect sonrası)
+  // currentRoom null olduğunda modal'ı kapat
   useEffect(() => {
     if (!currentRoom) {
-      setVoiceChannelSwitch(prev => {
+      setVoiceChannelSwitch((prev) => {
         if (prev.isOpen) {
           return { isOpen: false, currentChannel: null, targetChannel: null };
         }
@@ -86,92 +86,55 @@ export default function Home() {
     }
   }, [currentRoom]);
 
-  // --- GRACEFUL EXIT LOGIC (NATIVE) ---
+  // --- GRACEFUL EXIT LOGIC ---
   useEffect(() => {
-    // ============================================
-    // 🚀 APP-WILL-QUIT HANDLER (Full Cleanup)
-    // ============================================
     if (window.netrex && window.netrex.onAppWillQuit) {
       window.netrex.onAppWillQuit(async () => {
         console.log("🧹 Starting graceful shutdown...");
-        
         try {
-          // 1. Firebase Cleanup: User offline
           if (user?.uid) {
-            console.log("🔄 Setting user offline...");
-            await updateDoc(doc(db, 'users', user.uid), {
-              presence: 'offline',
+            await updateDoc(doc(db, "users", user.uid), {
+              presence: "offline",
               lastSeen: serverTimestamp(),
               gameActivity: null,
-              currentRoom: null // ✅ Clear current room
+              currentRoom: null,
             });
-            console.log("✅ User set offline");
           }
-
-          // 2. Server Cleanup: Leave all voice channels (bağlantı kesilmesi için)
-          if (currentRoom) {
-            console.log("🔊 Disconnecting from voice channel...");
-            // ActiveRoom component unmount olacağı için LiveKit disconnect otomatik olacak
-            // Ama yine de temizlik için:
-            setCurrentRoom(null);
-          }
-
-          // 3. Text chat cleanup
+          if (currentRoom) setCurrentRoom(null);
           if (currentTextChannel) {
-            console.log("💬 Clearing text channel...");
             setCurrentTextChannel(null);
             useChatStore.getState().clearCurrentChannel();
           }
-
-          // 4. Server state cleanup
-          if (currentServer) {
-            console.log("🏢 Clearing server state...");
-            useServerStore.getState().clearCurrentServer();
-          }
-
+          if (currentServer) useServerStore.getState().clearCurrentServer();
           console.log("✅ Graceful shutdown completed");
         } catch (e) {
           console.error("❌ Cleanup error:", e);
         }
-
-        // ✅ Notify main process that cleanup is done
         if (window.netrex?.notifyCleanupComplete) {
           window.netrex.notifyCleanupComplete();
         }
       });
     }
 
-    // ============================================
-    // REQUEST-EXIT HANDLER (Lightweight - UI only)
-    // ============================================
     if (window.netrex && window.netrex.onRequestExit) {
       window.netrex.onRequestExit(async () => {
-        // Bu sadece UI görünürlük kontrolü için
-        // Asıl cleanup app-will-quit'te yapılıyor
         if (window.netrex && window.netrex.forceQuitApp) {
           window.netrex.forceQuitApp();
         }
       });
     }
 
-    // ============================================
-    // UPDATE RESTART HANDLERS
-    // ============================================
     if (window.netrex && window.netrex.onUpdateRestarting) {
-        window.netrex.onUpdateRestarting(() => {
-            setShowInstallUpdateSplash(true);
-        });
-
-        window.netrex.onUpdateRestartFailed((error) => {
-            setShowInstallUpdateSplash(false);
-            useUpdateStore.getState().reset();
-            if (error) toast.info(error);
-        });
+      window.netrex.onUpdateRestarting(() => {
+        setShowInstallUpdateSplash(true);
+      });
+      window.netrex.onUpdateRestartFailed((error) => {
+        setShowInstallUpdateSplash(false);
+        useUpdateStore.getState().reset();
+        if (error) toast.info(error);
+      });
     }
   }, [user?.uid, currentRoom, currentTextChannel, currentServer]);
-
-  const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
-  const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
 
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -181,7 +144,8 @@ export default function Home() {
 
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [showJoinServerModal, setShowJoinServerModal] = useState(false);
-  const [showAddServerSelectionModal, setShowAddServerSelectionModal] = useState(false);
+  const [showAddServerSelectionModal, setShowAddServerSelectionModal] =
+    useState(false);
 
   useEffect(() => {
     initializeAuth();
@@ -195,22 +159,16 @@ export default function Home() {
     }
   }, [isLoading, showSplash]);
 
-  // ✅ Server değiştiğinde sadece text channel temizle, voice room'u KORU!
+  // Server değiştiğinde text channel temizle, voice room'u KORU
   useEffect(() => {
-    // setCurrentRoom(null); // ❌ KALDIRILDI - Voice bağlantısı korunuyor!
     setCurrentTextChannel(null);
     setShowChatPanel(false);
     setViewMode("voice");
     useChatStore.getState().clearCurrentChannel();
   }, [currentServer?.id]);
 
-  if (showInstallUpdateSplash) {
-      return <InstallUpdateSplash />;
-  }
-
-  if (isLoading || showSplash) {
-    return <SplashScreen />;
-  }
+  if (showInstallUpdateSplash) return <InstallUpdateSplash />;
+  if (isLoading || showSplash) return <SplashScreen />;
 
   if (!isAuth) {
     return (
@@ -224,7 +182,9 @@ export default function Home() {
               toast.error("Google ile giriş başarısız oldu");
             }
           } else {
-            toast.error("Bu özellik sadece masaüstü uygulamasında kullanılabilir");
+            toast.error(
+              "Bu özellik sadece masaüstü uygulamasında kullanılabilir",
+            );
           }
         }}
         onAnonymousLogin={async (username) => {
@@ -243,14 +203,14 @@ export default function Home() {
   return (
     <AppShell
       serverRail={
-        <ServerRail 
+        <ServerRail
           onOpenCreateModal={() => setShowAddServerSelectionModal(true)}
           isRoomActive={!!currentRoom}
         />
       }
       rightSidebar={
         currentServer ? (
-            <ServerMemberList onClose={() => setShowMemberList(false)} />
+          <ServerMemberList onClose={() => setShowMemberList(false)} />
         ) : null
       }
       showRightSidebar={showMemberList}
@@ -258,82 +218,83 @@ export default function Home() {
       hasRightSidebarContent={!!currentServer}
       sidebar={
         currentServer ? (
-          <ServerSidebar 
+          <ServerSidebar
             key={currentServer.id}
             activeTextChannelId={currentTextChannel}
-             onJoinChannel={(channel) => {
-               console.log("🎤 onJoinChannel called:", channel.name);
-               
-               if (channel.type === 'voice') {
-                 // Voice logic remains the same
-                 if (currentRoom && currentRoom.id !== channel.id) {
-                   const currentRoomServer = servers.find(s => s.id === currentRoom._serverId);
-                                       setVoiceChannelSwitch({
-                      isOpen: true,
-                      currentChannel: {
-                        name: currentRoom.name,
-                        serverName: currentRoomServer?.name || "Bilinmeyen Sunucu",
-                        serverIcon: currentRoomServer?.iconUrl || null,
-                      },
-                      targetChannel: {
-                        name: channel.name,
-                        serverName: currentServer?.name || "Bilinmeyen Sunucu",
-                        serverIcon: currentServer?.iconUrl || null,
-                      },
-                      onConfirm: () => {
-                        const roomWithSession = { 
-                          ...channel, 
-                          _sessionStart: Date.now(),
-                          _serverId: currentServer?.id,
-                          _serverName: currentServer?.name,
-                          _serverIcon: currentServer?.iconUrl,
-                        };
-                        setCurrentRoom(roomWithSession);
-                        setCurrentTextChannel(null);
-                        useChatStore.getState().clearCurrentChannel();
-                        setViewMode("voice");
-                        setVoiceChannelSwitch({ isOpen: false, currentChannel: null, targetChannel: null });
-                      },
-                    });
-                   return;
-                 }
-                
-                 const roomWithSession = { 
-                   ...channel, 
-                   _sessionStart: Date.now(),
-                   _serverId: currentServer?.id,
-                   _serverName: currentServer?.name,
-                   _serverIcon: currentServer?.iconUrl,
-                 };
-                 setCurrentRoom(roomWithSession);
-                 setCurrentTextChannel(null);
-                 useChatStore.getState().clearCurrentChannel();
-                 setViewMode("voice");
-               } else {
-                 // ✅ Text Channel Toggle Logic (Synchronous & Robust)
-                 if (currentTextChannel === channel.id) {
-                   if (showChatPanel) {
-                     // Open -> Close
-                     console.log("🔽 Closing active channel");
-                     setShowChatPanel(false);
-                     setCurrentTextChannel(null);
-                     useChatStore.getState().clearCurrentChannel();
-                     setViewMode("voice");
-                   } else {
-                     // Closed -> Open (Recovery or intentionally opening hidden channel)
-                     console.log("🔼 Opening hidden active channel");
-                     setShowChatPanel(true);
-                     setViewMode("chat");
-                   }
-                 } else {
-                   // Switch to new channel
-                   console.log("➡️ Switching text channel");
-                   setCurrentTextChannel(channel.id);
-                   setShowChatPanel(true);
-                   setViewMode("chat");
-                   useChatStore.getState().loadChannelMessages(channel.id, currentServer?.id);
-                 }
-               }
+            onJoinChannel={(channel) => {
+              console.log("🎤 onJoinChannel called:", channel.name);
+
+              if (channel.type === "voice") {
+                if (currentRoom && currentRoom.id !== channel.id) {
+                  const currentRoomServer = servers.find(
+                    (s) => s.id === currentRoom._serverId,
+                  );
+                  setVoiceChannelSwitch({
+                    isOpen: true,
+                    currentChannel: {
+                      name: currentRoom.name,
+                      serverName:
+                        currentRoomServer?.name || "Bilinmeyen Sunucu",
+                      serverIcon: currentRoomServer?.iconUrl || null,
+                    },
+                    targetChannel: {
+                      name: channel.name,
+                      serverName: currentServer?.name || "Bilinmeyen Sunucu",
+                      serverIcon: currentServer?.iconUrl || null,
+                    },
+                    onConfirm: () => {
+                      const roomWithSession = {
+                        ...channel,
+                        _sessionStart: Date.now(),
+                        _serverId: currentServer?.id,
+                        _serverName: currentServer?.name,
+                        _serverIcon: currentServer?.iconUrl,
+                      };
+                      setCurrentRoom(roomWithSession);
+                      setCurrentTextChannel(null);
+                      useChatStore.getState().clearCurrentChannel();
+                      setViewMode("voice");
+                      setVoiceChannelSwitch({
+                        isOpen: false,
+                        currentChannel: null,
+                        targetChannel: null,
+                      });
+                    },
+                  });
+                  return;
+                }
+
+                const roomWithSession = {
+                  ...channel,
+                  _sessionStart: Date.now(),
+                  _serverId: currentServer?.id,
+                  _serverName: currentServer?.name,
+                  _serverIcon: currentServer?.iconUrl,
+                };
+                setCurrentRoom(roomWithSession);
+                setCurrentTextChannel(null);
+                useChatStore.getState().clearCurrentChannel();
+                setViewMode("voice");
+              } else {
+                if (currentTextChannel === channel.id) {
+                  if (showChatPanel) {
+                    setShowChatPanel(false);
+                    setCurrentTextChannel(null);
+                    useChatStore.getState().clearCurrentChannel();
+                    setViewMode("voice");
+                  } else {
+                    setShowChatPanel(true);
+                    setViewMode("chat");
+                  }
+                } else {
+                  setCurrentTextChannel(channel.id);
+                  setShowChatPanel(true);
+                  setViewMode("chat");
+                  useChatStore
+                    .getState()
+                    .loadChannelMessages(channel.id, currentServer?.id);
+                }
+              }
             }}
             onToggleMemberList={() => setShowMemberList(!showMemberList)}
             showMemberList={showMemberList}
@@ -342,10 +303,8 @@ export default function Home() {
       }
     >
       <UpdateNotification />
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setSettingsOpen(false)}
-      />
+
+      {/* ✅ SettingsModal yok — AppShell'deki global instance kullanılıyor */}
 
       <InfoModal
         isOpen={infoModal.isOpen}
@@ -358,24 +317,30 @@ export default function Home() {
         isOpen={voiceChannelSwitch.isOpen}
         currentChannel={voiceChannelSwitch.currentChannel}
         targetChannel={voiceChannelSwitch.targetChannel}
-        onClose={() => setVoiceChannelSwitch({ isOpen: false, currentChannel: null, targetChannel: null })}
+        onClose={() =>
+          setVoiceChannelSwitch({
+            isOpen: false,
+            currentChannel: null,
+            targetChannel: null,
+          })
+        }
         onConfirm={voiceChannelSwitch.onConfirm}
       />
 
-      <AddServerSelectionModal 
+      <AddServerSelectionModal
         isOpen={showAddServerSelectionModal}
         onClose={() => setShowAddServerSelectionModal(false)}
         onCreateClick={() => {
-            setShowAddServerSelectionModal(false);
-            setShowCreateServerModal(true);
+          setShowAddServerSelectionModal(false);
+          setShowCreateServerModal(true);
         }}
         onJoinClick={() => {
-            setShowAddServerSelectionModal(false);
-            setShowJoinServerModal(true);
+          setShowAddServerSelectionModal(false);
+          setShowJoinServerModal(true);
         }}
       />
 
-      <CreateServerModal 
+      <CreateServerModal
         isOpen={showCreateServerModal}
         onClose={() => setShowCreateServerModal(false)}
         onJoinClick={() => {
@@ -384,21 +349,20 @@ export default function Home() {
         }}
       />
 
-      <JoinServerModal 
+      <JoinServerModal
         isOpen={showJoinServerModal}
         onClose={() => setShowJoinServerModal(false)}
         onCreateClick={() => {
-            setShowJoinServerModal(false);
-            setShowCreateServerModal(true);
+          setShowJoinServerModal(false);
+          setShowCreateServerModal(true);
         }}
       />
 
       <div className="flex-1 flex flex-col relative overflow-hidden h-full">
-        {/* ✅ ActiveRoom her zaman mount, sadece visibility değişiyor */}
-        {/* Bu sayede anasayfaya dönünce LiveKit disconnect olmuyor */}
-        <div 
-          className={`absolute inset-0 ${currentRoom ? 'z-10 opacity-100' : 'z-0 opacity-0 pointer-events-none'}`}
-          style={{ transition: 'opacity 0.2s' }}
+        {/* ActiveRoom her zaman mount, sadece visibility değişiyor */}
+        <div
+          className={`absolute inset-0 ${currentRoom ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"}`}
+          style={{ transition: "opacity 0.2s" }}
         >
           {currentRoom && (
             <ActiveRoom
@@ -420,10 +384,10 @@ export default function Home() {
           )}
         </div>
 
-        {/* ✅ Welcome/Chat screen - ActiveRoom olmadığında göster */}
-        <div 
-          className={`absolute inset-0 ${!currentRoom ? 'z-10 opacity-100' : 'z-0 opacity-0 pointer-events-none'}`}
-          style={{ transition: 'opacity 0.2s' }}
+        {/* Welcome/Chat screen */}
+        <div
+          className={`absolute inset-0 ${!currentRoom ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"}`}
+          style={{ transition: "opacity 0.2s" }}
         >
           <AnimatePresence mode="wait">
             {!showChatPanel ? (
@@ -443,9 +407,9 @@ export default function Home() {
             ) : (
               <motion.div
                 key="chat"
-                initial={{ x: '-20%', opacity: 0 }}
+                initial={{ x: "-20%", opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                exit={{ x: '-20%', opacity: 0 }}
+                exit={{ x: "-20%", opacity: 0 }}
                 transition={{ duration: 0.3 }}
                 className="absolute inset-0"
               >

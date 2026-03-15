@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
+import Avatar from "@/src/components/ui/Avatar";
 
 const MessageItem = memo(({ 
   message, 
@@ -50,9 +51,12 @@ const MessageItem = memo(({
         {/* SOL TARA: AVATAR VEYA SAAT */}
         <div className="absolute left-4 w-[50px] flex justify-start select-none">
           {!isSequence || showDateSeparator ? (
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-lg shadow-sm group-hover:scale-105 transition-transform">
-              {message.username?.charAt(0).toUpperCase()}
-            </div>
+            <Avatar
+              src={message.member?.photoURL || null}
+              name={message.member?.displayName || message.username}
+              size="md"
+              borderColor={message.member?.profileColor || message.member?.color}
+            />
           ) : (
             <span className="text-[10px] text-[#949ba4] hidden group-hover:inline-block w-full text-left pl-2 mt-1.5 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
               {formatTime(message.timestamp)}

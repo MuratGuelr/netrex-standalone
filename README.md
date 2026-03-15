@@ -1005,6 +1005,6 @@ Sorularınız veya önerileriniz için:
 
 ---
 
-**Son Güncelleme**: 2024
+**Son Güncelleme**: 2026
 
-**Versiyon**: 1.0.0
+**Versiyon**: 7.2.0
