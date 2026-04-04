@@ -2,36 +2,42 @@
 import { useEffect, useRef } from 'react';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
 import {
-  DRIFT_THRESHOLD_SECONDS,
+  DRIFT_THRESHOLD_SEC,
   DRIFT_CHECK_INTERVAL_MS,
 } from '@/src/constants/watchPartyConstants';
 
 export function useWatchPartyDrift(playerRef) {
-  const playbackState = useWatchPartyStore((s) => s.playbackState);
-  const isListening   = useWatchPartyStore((s) => s.localPreferences.isListening);
-  const intervalRef   = useRef(null);
+  const intervalRef = useRef(null);
 
   useEffect(() => {
-    if (!isListening) return;
-
     intervalRef.current = setInterval(() => {
+      const { playbackState } = useWatchPartyStore.getState();
+
+      // Oynatılmıyor ya da startedAt yoksa kontrol etme
       if (!playbackState.isPlaying || !playbackState.startedAt) return;
       if (!playerRef.current?.getCurrentTime) return;
 
-      const expected = (Date.now() - playbackState.startedAt) / 1000;
-      const actual   = playerRef.current.getCurrentTime();
-      const drift    = Math.abs(expected - actual);
+      // Beklenen pozisyon: (şu an - başlangıç) / 1000
+      const expectedSec = (Date.now() - playbackState.startedAt) / 1000;
+      const actualSec   = playerRef.current.getCurrentTime();
 
-      if (drift > DRIFT_THRESHOLD_SECONDS) {
-        console.warn(`[WatchParty] Drift: ${drift.toFixed(2)}s → düzeltiliyor`);
-        // seekTo doğrudan çağrılır — AbortError riski yok
-        playerRef.current.seekTo(expected, 'seconds');
+      const drift = Math.abs(expectedSec - actualSec);
+
+      if (drift > DRIFT_THRESHOLD_SEC) {
+        console.log(`[WatchPartyDrift] ${drift.toFixed(1)}s kayma tespit edildi, düzeltiliyor...`);
+        try {
+          // YouTube için seekTo(seconds, true), diğerleri için seekTo(seconds, 'seconds')
+          const seekFn = playerRef.current.seekTo;
+          if (seekFn) seekFn.call(playerRef.current, expectedSec, 'seconds');
+        } catch {}
       }
     }, DRIFT_CHECK_INTERVAL_MS);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [playbackState.isPlaying, playbackState.startedAt,
-      isListening, playerRef]);
+  }, [playerRef]);
 }

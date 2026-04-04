@@ -24,18 +24,8 @@ const CONFIG = {
 // ============================================
 // ✅ MODULE-LEVEL CACHE (tüm instance'lar paylaşıyor)
 // ============================================
-let rnnoiseModulePromise = null;
 let cachedResourcesPath = null;
 let globalSharedAudioContext = null;
-let globalRNNoiseNode = null;
-let isRNNoiseRegistering = false;
-
-const getRNNoiseModule = () => {
-  if (!rnnoiseModulePromise) {
-    rnnoiseModulePromise = import("simple-rnnoise-wasm");
-  }
-  return rnnoiseModulePromise;
-};
 
 // ✅ Resources path cache (Electron IPC call eliminate)
 const initResourcesPath = async () => {
@@ -83,7 +73,8 @@ export function useVoiceProcessor() {
   useEffect(() => {
     if (noiseSuppressionMode === "krisp" && !aiNoiseSuppression) {
       console.log("⚠️ Krisp modu aktif ama aiNoiseSuppression false, düzeltiliyor...");
-      useSettingsStore.getState().setNoiseSuppressionMode("krisp");
+      // Sadece aiNoiseSuppression'ı düzelt, modu tekrar set etme (sonsuz döngü riski)
+      useSettingsStore.getState().toggleAiNoiseSuppression();
     }
   }, [noiseSuppressionMode, aiNoiseSuppression]);
 
@@ -99,7 +90,6 @@ export function useVoiceProcessor() {
   const notchFilterRef = useRef(null);
   const compressorRef = useRef(null);
   const gainNodeRef = useRef(null);
-  const antiSilenceOscRef = useRef(null);
   
   // ✅ YENİ: Track replacement refs
   const destinationNodeRef = useRef(null);
@@ -112,6 +102,12 @@ export function useVoiceProcessor() {
   const impactBlockTimestampRef = useRef(0);
   const lastUISpeakingTimeRef = useRef(0);
   const currentUISpeakingRef = useRef(false);
+  
+  // ✅ Mic enabled ref (to avoid stale closures in message handler)
+  const isMicEnabledRef = useRef(isMicrophoneEnabled);
+  useEffect(() => {
+    isMicEnabledRef.current = isMicrophoneEnabled;
+  }, [isMicrophoneEnabled]);
   
   // ✅ THRESHOLD CACHE
   const cachedThresholdRef = useRef(CONFIG.MIN_RMS);
@@ -161,24 +157,13 @@ export function useVoiceProcessor() {
       rnnoiseNodeRef, destinationNodeRef, gateGainNodeRef
     ];
     
-    // Anti-silence oscillator
-    if (antiSilenceOscRef.current) {
-      try { antiSilenceOscRef.current.stop(); } catch(e) {}
-      try { antiSilenceOscRef.current.disconnect(); } catch(e) {}
-      antiSilenceOscRef.current = null;
-    }
-    
     nodesToClean.forEach(ref => {
       if (ref.current) {
         try {
-          if (ref === rnnoiseNodeRef) {
-             ref.current.disconnect(); 
-          } else {
-             ref.current.disconnect();
-             if (ref.current.port) {
-               ref.current.port.close?.();
-               ref.current.port.onmessage = null;
-             }
+          ref.current.disconnect();
+          if (ref.current.port) {
+            ref.current.port.close?.();
+            ref.current.port.onmessage = null;
           }
         } catch (e) {}
         ref.current = null;
@@ -189,8 +174,30 @@ export function useVoiceProcessor() {
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       audioContextRef.current.close().catch(() => {});
     }
+
+    // ✅ Global'i de temizle
+    if (globalSharedAudioContext && globalSharedAudioContext.state !== "closed") {
+      globalSharedAudioContext.close().catch(() => {});
+      globalSharedAudioContext = null;
+    }
     audioContextRef.current = null;
   }, [setLocalIsSpeaking]);
+
+  // ✅ Effect 2: Sadece gate kontrolü (mute/unmute için)
+  // Bu sayede mute basınca bütün audio graph yeniden kurulmaz, sadece ses kesilir.
+  useEffect(() => {
+    const gateNode = gateGainNodeRef.current;
+    const ctx = audioContextRef.current;
+    
+    if (!gateNode || !ctx || ctx.state === 'closed') return;
+    
+    if (!isMicrophoneEnabled) {
+      // Mute: gate'i kapat (audio graph yeniden kurulmasın!)
+      gateNode.gain.cancelScheduledValues(ctx.currentTime);
+      gateNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+    }
+    // Unmute: VAD handler zaten gate'i açacak
+  }, [isMicrophoneEnabled]);
 
   // ========== ANA EFFECT ==========
   useEffect(() => {
@@ -199,7 +206,6 @@ export function useVoiceProcessor() {
     isCleaningUpRef.current = false;
     let originalStreamTrack = null;
     let retryTimer = null;
-    let lastTrackEnabled = null;
 
     const setupProcessor = async () => {
       cleanup();
@@ -250,53 +256,32 @@ export function useVoiceProcessor() {
       // Bu node, threshold altındaki sesleri bastırmak için
       // ============================================
       const gateGain = ctx.createGain();
-      gateGain.gain.value = 1.0; // Başlangıçta açık
+      gateGain.gain.value = isMicEnabledRef.current ? 1.0 : 0.0; // Mute kontrolü
       gateGainNodeRef.current = gateGain;
 
       // ============================================
-      // ✅ RNNoise Setup (GERÇEK SES İŞLEME!)
+      // ✅ RNNoise Setup (@timephy/rnnoise-wasm)
+      // Self-contained worklet with inline WASM - no separate file loading
       // ============================================
       if (noiseSuppressionMode === "krisp") {
         try {
           if (!ctx || ctx.state === "closed") {
             console.warn("⚠️ AudioContext closed, RNNoise atlanıyor");
           } else {
-            if (!globalRNNoiseNode && !isRNNoiseRegistering) {
-              isRNNoiseRegistering = true;
-              const rnnoiseModule = await getRNNoiseModule();
-              const { RNNoiseNode, rnnoise_loadAssets } = rnnoiseModule;
-              
-              const workletUrl = getResourcePath('rnnoise.worklet.js');
-              const wasmUrl = getResourcePath('rnnoise.wasm');
-              
-              const assets = await rnnoise_loadAssets({ scriptSrc: workletUrl, moduleSrc: wasmUrl });
-              
-              if (ctx.state !== "closed") {
-                 await RNNoiseNode.register(ctx, assets);
-                 globalRNNoiseNode = new RNNoiseNode(ctx);
-                 console.log("✅ RNNoise initialized (Globally created)");
-              }
-              isRNNoiseRegistering = false;
+            // Load the bundled worklet (polyfills + WASM + processor all-in-one)
+            const workletPath = getResourcePath('rnnoise-suppressor.worklet.js');
+            try {
+              await ctx.audioWorklet.addModule(workletPath);
+            } catch(e) {
+              // Worklet already registered on this context - that's OK
             }
-
-            // Wait if it's currently downloading/compiling
-            while (isRNNoiseRegistering) {
-              await new Promise(r => setTimeout(r, 50));
-            }
-
-            if (globalRNNoiseNode) {
-              // ✅ RNNOISE CRASH FIX: anti-silence oscillator
-              const antiSilenceOsc = ctx.createOscillator();
-              const antiSilenceGain = ctx.createGain();
-              antiSilenceGain.gain.value = 1e-10;
-              antiSilenceOsc.connect(antiSilenceGain);
-              antiSilenceGain.connect(globalRNNoiseNode);
-              antiSilenceOsc.start();
-              antiSilenceOscRef.current = antiSilenceOsc;
-
-              currentNode.connect(globalRNNoiseNode);
-              currentNode = globalRNNoiseNode;
-              rnnoiseNodeRef.current = globalRNNoiseNode;
+            
+            if (ctx.state !== "closed" && !isCleaningUpRef.current) {
+              const rnnoiseNode = new AudioWorkletNode(ctx, 'NoiseSuppressorWorklet');
+              currentNode.connect(rnnoiseNode);
+              currentNode = rnnoiseNode;
+              rnnoiseNodeRef.current = rnnoiseNode;
+              console.log("✅ RNNoise initialized (@timephy/rnnoise-wasm)");
             }
           }
         } catch(e) {
@@ -445,56 +430,49 @@ export function useVoiceProcessor() {
         processorNode.port.onmessage = (event) => {
           if (isCleaningUpRef.current || !originalStreamTrack) return;
           
+          // Mute ise VAD UI güncellemelerini durdurabiliriz ama analiz devam edebilir
+          // Ancak gate kontrolü isMicrophoneEnabled'a bağlı olmalı
           const { 
             type, 
             rms,
             isTransient,
             isSustainedVoice,
-            hasPotentialVoice,
-            isWhisper
+            hasPotentialVoice
           } = event.data;
           
           if (type !== 'metrics') return;
           
           const now = Date.now();
           const threshold = cachedThresholdRef.current;
-          
           const isKrisp = noiseSuppressionMode === "krisp";
           const isStandard = noiseSuppressionMode === "standard";
           
           let isSpeaking = false;
-          
           if (isKrisp) {
-            // ✅ Krisp: RNNoise arkaplan gürültüsünü zaten siliyor
-            // Sadece noise gate threshold'u kontrol et
             isSpeaking = rms > threshold && !isTransient;
           } else if (isStandard) {
             isSpeaking = rms > threshold && (isSustainedVoice || hasPotentialVoice);
           } else {
-            // None modu: sadece threshold
             isSpeaking = rms > threshold;
           }
           
           // ============================================
-          // ✅ NOISE GATE: Gerçek sesi de kontrol et
-          // Gate gain'i smooth şekilde aç/kapat
+          // ✅ NOISE GATE: Sadece mic açıksa gate'i kontrol et
           // ============================================
           const gateNode = gateGainNodeRef.current;
-          if (gateNode && gateNode.gain) {
+          if (gateNode && gateNode.gain && isMicEnabledRef.current) {
             const currentTime = ctx.currentTime;
             if (isSpeaking) {
-              // Konuşma var → gate AÇ (hızlı attack)
               gateNode.gain.cancelScheduledValues(currentTime);
               gateNode.gain.setTargetAtTime(1.0, currentTime, CONFIG.GATE_ATTACK);
             } else {
-              // Konuşma yok → gate KAPAT (yumuşak release)
               gateNode.gain.cancelScheduledValues(currentTime);
               gateNode.gain.setTargetAtTime(0.0, currentTime, CONFIG.GATE_RELEASE);
             }
           }
           
-          // ✅ UI indikatörü güncelle
-          if (isSpeaking) {
+          // ✅ UI indikatörü güncelle (Sadece mic açıksa)
+          if (isSpeaking && isMicEnabledRef.current) {
             lastSpeakingTimeRef.current = now;
             lastUISpeakingTimeRef.current = now;
             if (!currentUISpeakingRef.current && room.state === ConnectionState.Connected) {
@@ -525,21 +503,18 @@ export function useVoiceProcessor() {
       checkConnection();
     } else if (!hasRegisteredConnection) {
       hasRegisteredConnection = true;
-      console.log("✅ Registering voice processor connection listener (ONCE)");
       room.on(RoomEvent.ConnectionStateChanged, checkConnection);
     }
 
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
       if (hasRegisteredConnection) {
-        console.log("🧹 Cleaning up voice processor connection listener");
         room.off(RoomEvent.ConnectionStateChanged, checkConnection);
       }
       cleanup();
     };
   }, [
     localParticipant,
-    isMicrophoneEnabled,
     room,
     noiseSuppressionMode,
     advancedNoiseReduction,

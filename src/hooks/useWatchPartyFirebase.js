@@ -1,27 +1,38 @@
 // src/hooks/useWatchPartyFirebase.js
-import { useEffect } from 'react';
-import { subscribeToWatchParty } from '@/src/services/watchPartyService';
+import { useEffect, useRef } from 'react';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
+import { subscribeToWatchParty } from '@/src/services/watchPartyService';
 
 export function useWatchPartyFirebase(serverId, channelId) {
-  const setRemoteState   = useWatchPartyStore((s) => s.setRemoteState);
-  const resetWatchParty  = useWatchPartyStore((s) => s.resetWatchParty);
+  const setRemoteState  = useWatchPartyStore((s) => s.setRemoteState);
+  const resetWatchParty = useWatchPartyStore((s) => s.resetWatchParty);
+  const unsubRef = useRef(null);
 
   useEffect(() => {
     if (!serverId || !channelId) return;
 
-    const unsubscribe = subscribeToWatchParty(
-      serverId,
-      channelId,
-      (data) => {
-        if (data) {
-          setRemoteState(data);
-        } else {
-          resetWatchParty();
-        }
-      }
-    );
+    // Önceki listener'ı temizle
+    if (unsubRef.current) {
+      unsubRef.current();
+      unsubRef.current = null;
+    }
 
-    return () => unsubscribe();
+    unsubRef.current = subscribeToWatchParty(serverId, channelId, (data) => {
+      if (!data) {
+        // Döküman silinmiş → party bitti
+        resetWatchParty();
+        return;
+      }
+      // Store'daki setRemoteState shallow compare yapıyor,
+      // gerçekten değişen alanlar varsa set() çağrılır
+      setRemoteState(data);
+    });
+
+    return () => {
+      if (unsubRef.current) {
+        unsubRef.current();
+        unsubRef.current = null;
+      }
+    };
   }, [serverId, channelId, setRemoteState, resetWatchParty]);
 }

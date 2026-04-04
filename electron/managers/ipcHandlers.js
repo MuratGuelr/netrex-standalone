@@ -149,8 +149,10 @@ function getLogoData() {
 let loginHtmlCache = null;
 let successHtmlCache = null;
 
-const getLoginHtmlCached = (apiKey, authDomain) => {
+const getLoginHtmlCached = () => {
     if (!loginHtmlCache) {
+        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+        const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
         loginHtmlCache = getLoginHtml(apiKey, authDomain);
     }
     return loginHtmlCache;
@@ -178,9 +180,7 @@ const startLocalAuthServer = (mainWindow) => {
             
             if (parsedUrl.pathname === "/login") {
                 res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-                const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-                const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-                res.end(getLoginHtmlCached(apiKey, authDomain));
+                res.end(getLoginHtmlCached());
             } 
             else if (parsedUrl.pathname === "/logo.png") {
                 // ✅ Cached logo
@@ -274,6 +274,9 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQu
 
     ipcMain.handle("set-recording-mode", (e, en) => {
         isRecordingMode = en;
+        if (inputManager?.setRecordingMode) {
+            inputManager.setRecordingMode(en);
+        }
         return { success: true };
     });
 

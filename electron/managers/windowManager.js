@@ -212,20 +212,19 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
   if (app.isPackaged) mainWindow.setMenu(null);
   
   // ============================================
-  // ✅ CSP HEADER - Cached String
+  // ✅ STATIC HEADERS - Avoid spread/array creation in every request
   // ============================================
-  session.defaultSession.webRequest.onHeadersReceived((d, c) => {
-    const headers = { ...d.responseHeaders };
-
-    // CSP
-    headers["Content-Security-Policy"] = [CSP_HEADER];
-
-    // Permissions-Policy: tüm sayfalara ekle (YouTube iframe'leri için gerekli)
-    headers['Permissions-Policy'] = [
+  const STATIC_HEADERS = {
+    "Content-Security-Policy": [CSP_HEADER],
+    "Permissions-Policy": [
       'autoplay=*, encrypted-media=*, accelerometer=*, gyroscope=*, picture-in-picture=*, clipboard-write=*'
-    ];
+    ]
+  };
 
-    c({ responseHeaders: headers });
+  session.defaultSession.webRequest.onHeadersReceived((d, c) => {
+    c({ 
+      responseHeaders: Object.assign(d.responseHeaders, STATIC_HEADERS)
+    });
   });
 
   // ✅ YouTube Error 153/152 Fix: Inject Referer for file:// origin

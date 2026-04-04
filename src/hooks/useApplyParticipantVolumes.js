@@ -20,6 +20,9 @@ export function useApplyParticipantVolumes() {
   // identity → { source: MediaElementSourceNode, gainNode: GainNode, audioEl: HTMLElement }
   const gainNodesRef = useRef({});
 
+  // ✅ Önceki volume değerlerini cache'le (gereksiz setVolume çağrılarını önle)
+  const appliedVolumesRef = useRef({});
+
   useEffect(() => {
     if (!participants || participants.length === 0) return;
 
@@ -28,11 +31,22 @@ export function useApplyParticipantVolumes() {
 
       try {
         const micPub = participant.getTrackPublication(Track.Source.Microphone);
-        if (!micPub?.track) return;
-        if (micPub.track.kind !== 'audio') return;
+        if (!micPub?.track || micPub.track.kind !== 'audio') return;
 
         const volume = volumes[participant.identity] ?? 1.0;
         const identity = participant.identity;
+
+        // ✅ Volume değişmediyse hiçbir şey yapma!
+        if (appliedVolumesRef.current[identity] === volume) {
+          // Eğer track attached elements değişmişse ama volume aynıysa,
+          // Boost modunda element kontrolü gerekebilir. 
+          // Ancak standart setVolume için kesinlikle gerek yok.
+          if (volume <= 1.0) return;
+          // Boost modunda ise node zaten varsa return, yoksa devam (re-attach durumu)
+          if (gainNodesRef.current[identity]) return;
+        }
+
+        appliedVolumesRef.current[identity] = volume;
 
         if (volume <= 1.0) {
           // ─── Standart mod: LiveKit native API (0–1) ───
@@ -49,10 +63,7 @@ export function useApplyParticipantVolumes() {
         } else {
           // ─── Boost mod: GainNode ile 100%+ ses ───
           const audioEl = micPub.track.attachedElements?.[0];
-          if (!audioEl) {
-            // Henüz element yok, sonraki render'da tekrar denenecek
-            return;
-          }
+          if (!audioEl) return;
 
           // AudioContext yarat
           if (!gainContextRef.current || gainContextRef.current.state === 'closed') {
@@ -62,7 +73,6 @@ export function useApplyParticipantVolumes() {
           if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
           if (!gainNodesRef.current[identity]) {
-            // MediaElementSource yalnızca bir kez oluşturulabilir
             try {
               const source = ctx.createMediaElementSource(audioEl);
               const gainNode = ctx.createGain();
@@ -70,7 +80,6 @@ export function useApplyParticipantVolumes() {
               source.connect(gainNode);
               gainNode.connect(ctx.destination);
               gainNodesRef.current[identity] = { source, gainNode, audioEl };
-              // HTML element artık GainNode üzerinden çalışıyor, native volume 1'de bırak
               audioEl.volume = 1.0;
             } catch(e) {
               if (process.env.NODE_ENV === 'development') {
@@ -78,7 +87,6 @@ export function useApplyParticipantVolumes() {
               }
             }
           } else {
-            // Sadece gain değerini güncelle
             gainNodesRef.current[identity].gainNode.gain.value = volume;
           }
         }
@@ -89,6 +97,16 @@ export function useApplyParticipantVolumes() {
       }
     });
   }, [participants, volumes]);
+
+  // ✅ Katılımcı ayrıldığında cache'den sil
+  useEffect(() => {
+    const identities = new Set(participants.map(p => p.identity));
+    Object.keys(appliedVolumesRef.current).forEach(identity => {
+      if (!identities.has(identity)) {
+        delete appliedVolumesRef.current[identity];
+      }
+    });
+  }, [participants]);
 
   // Cleanup
   useEffect(() => {

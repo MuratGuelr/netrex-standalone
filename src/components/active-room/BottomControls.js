@@ -105,6 +105,7 @@ export default function BottomControls({
   const videoCodec = useSettingsStore(state => state.videoCodec);
   const controlBarHidden = useSettingsStore(state => state.controlBarHidden);
   const toggleControlBarHidden = useSettingsStore(state => state.toggleControlBarHidden);
+  const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
   const { showChatPanel } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
@@ -872,15 +873,30 @@ export default function BottomControls({
         });
 
         videoTrack.onended = () => {
-          localParticipant.unpublishTrack(videoTrack);
+          // 🔥 FIX: Track'i DURDUR - yoksa MediaStreamTrack capture etmeye devam eder (CPU leak)
+          videoTrack.stop();
+          localParticipant.unpublishTrack(videoTrack).catch(() => {});
           if (audioTrack) {
             audioTrack.stop();
-            localParticipant.unpublishTrack(audioTrack);
+            localParticipant.unpublishTrack(audioTrack).catch(() => {});
           }
+          // Stream'deki tüm track'leri de durdur (garbage collection için)
+          stream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+          // PinnedStreamIds'den kaldır ki StageManager video element'i render etmesin
+          setPinnedStreamIds(prev => prev.filter(id => id !== `${localParticipant.identity}:screen` && id !== localParticipant.identity));
         };
       } else {
+        // Audio yoksa sadece video ve kullanılmayan audio'ları durdur
+        if (audioTrack) audioTrack.stop(); // Kullanılmayan audio track'i hemen durdur
+        
         videoTrack.onended = () => {
-          localParticipant.unpublishTrack(videoTrack);
+          // 🔥 FIX: Track'i DURDUR
+          videoTrack.stop();
+          localParticipant.unpublishTrack(videoTrack).catch(() => {});
+          // Stream'deki tüm track'leri de durdur
+          stream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+          // PinnedStreamIds'den kaldır
+          setPinnedStreamIds(prev => prev.filter(id => id !== `${localParticipant.identity}:screen` && id !== localParticipant.identity));
         };
       }
 
@@ -1098,7 +1114,7 @@ export default function BottomControls({
           </div>
           
           {/* Watch Party Butonu */}
-          {serverId && useSettingsStore(s => s.watchPartyEnabled) && (
+          {serverId && watchPartyEnabled && (
             <div className="relative flex items-center" ref={watchPartyButtonRef}>
               <div className="w-px h-8 bg-white/10 mx-1"></div>
               <button

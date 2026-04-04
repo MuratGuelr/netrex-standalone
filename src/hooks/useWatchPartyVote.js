@@ -1,38 +1,37 @@
 // src/hooks/useWatchPartyVote.js
 import { useCallback } from 'react';
-import { useAuthStore } from '@/src/store/authStore';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
+import { useAuthStore } from '@/src/store/authStore';
 import { voteTrack } from '@/src/services/watchPartyService';
 import { VOTE_UP, VOTE_DOWN, VOTE_NONE } from '@/src/constants/watchPartyConstants';
 
 export function useWatchPartyVote(serverId, channelId) {
-  const currentUser    = useAuthStore((s) => s.user);
-  const votes          = useWatchPartyStore((s) => s.votes);
-  const getTrackScore  = useWatchPartyStore((s) => s.getTrackVoteScore);
-  const getUserVote    = useWatchPartyStore((s) => s.getUserVote);
+  const user = useAuthStore((s) => s.user);
 
-  const toggleUpvote = useCallback(async (trackId) => {
-    if (!currentUser?.uid) return;
-    const current = getUserVote(trackId, currentUser.uid);
-    const newVote = current === VOTE_UP ? VOTE_NONE : VOTE_UP;
-    await voteTrack(serverId, channelId, trackId, currentUser.uid, newVote);
-  }, [currentUser?.uid, serverId, channelId, getUserVote]);
-
-  const toggleDownvote = useCallback(async (trackId) => {
-    if (!currentUser?.uid) return;
-    const current = getUserVote(trackId, currentUser.uid);
-    const newVote = current === VOTE_DOWN ? VOTE_NONE : VOTE_DOWN;
-    await voteTrack(serverId, channelId, trackId, currentUser.uid, newVote);
-  }, [currentUser?.uid, serverId, channelId, getUserVote]);
-
-  const getScore = useCallback((trackId) => {
-    return getTrackScore(trackId);
-  }, [getTrackScore]);
+  // Store'daki hesaplama metodlarını kullan
+  const getScore  = useCallback((trackId) => {
+    return useWatchPartyStore.getState().getTrackVoteScore(trackId);
+  }, []);
 
   const getMyVote = useCallback((trackId) => {
-    if (!currentUser?.uid) return 0;
-    return getUserVote(trackId, currentUser.uid);
-  }, [currentUser?.uid, getUserVote]);
+    if (!user?.uid) return VOTE_NONE;
+    return useWatchPartyStore.getState().getUserVote(trackId, user.uid);
+  }, [user?.uid]);
 
-  return { toggleUpvote, toggleDownvote, getScore, getMyVote };
+  const toggleUpvote = useCallback(async (trackId) => {
+    if (!user?.uid) return;
+    const current = useWatchPartyStore.getState().getUserVote(trackId, user.uid);
+    // Zaten upvote varsa kaldır, yoksa ekle
+    const next = current === VOTE_UP ? VOTE_NONE : VOTE_UP;
+    await voteTrack(serverId, channelId, trackId, user.uid, next);
+  }, [user?.uid, serverId, channelId]);
+
+  const toggleDownvote = useCallback(async (trackId) => {
+    if (!user?.uid) return;
+    const current = useWatchPartyStore.getState().getUserVote(trackId, user.uid);
+    const next = current === VOTE_DOWN ? VOTE_NONE : VOTE_DOWN;
+    await voteTrack(serverId, channelId, trackId, user.uid, next);
+  }, [user?.uid, serverId, channelId]);
+
+  return { getScore, getMyVote, toggleUpvote, toggleDownvote };
 }

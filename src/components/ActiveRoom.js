@@ -343,6 +343,7 @@ export default function ActiveRoom({
   const serverIndexRef = useRef(serverIndex);
   const serverCountRef = useRef(serverCount);
   const serverPoolModeRef = useRef(serverPoolMode);
+  const isLocalRotationRef = useRef(false); // 🔥 FIX: Kendi rotation'ımızı onSnapshot'ın tekrar tetiklemesini önle
 
   // Ref'leri state ile senkronize tut
   useEffect(() => {
@@ -370,6 +371,7 @@ export default function ActiveRoom({
     if (!serverPoolMode) return;
 
     poolDocRef.current = doc(db, "system", "livekitPool");
+    let isInitialSnapshot = true; // 🔥 FIX: İlk snapshot'ı atla (token fetch zaten hallediyor)
 
     // Real-time listener
     const unsubscribe = onSnapshot(
@@ -379,14 +381,34 @@ export default function ActiveRoom({
           const data = docSnapshot.data();
           const firebaseIndex = data.activeServerIndex || 0;
 
-          // Eğer Firebase'deki index farklıysa, değiştir (ref kullan - güncel değer için)
+          // 🔥 FIX: İlk snapshot'ta sadece ref'i senkronize et, rotation tetikleme
+          // Token fetch zaten Firebase'den doğru index'i okuyor ve sunucuyu ayarlıyor
+          if (isInitialSnapshot) {
+            isInitialSnapshot = false;
+            serverIndexRef.current = firebaseIndex;
+            console.log(`📡 onSnapshot: İlk yükleme, ref senkronize: ${firebaseIndex}`);
+            return;
+          }
+
+          // 🔥 FIX: Kendi rotation'ımızın sonucuysa, sadece ref'i güncelle ve atla
+          if (isLocalRotationRef.current) {
+            console.log(`📡 onSnapshot: Kendi rotation'ımız algılandı (index: ${firebaseIndex}), çift tetikleme önlendi.`);
+            serverIndexRef.current = firebaseIndex;
+            return;
+          }
+
+          // Eğer Firebase'deki index farklıysa (BAŞKA biri tarafından değiştirildi), senkronize ol
           if (firebaseIndex !== serverIndexRef.current) {
+            console.log(`📡 onSnapshot: Başka client sunucu değiştirdi: ${serverIndexRef.current} → ${firebaseIndex}`);
+            // Ref'i HEMEN güncelle ki tekrar tetiklenmesin
+            serverIndexRef.current = firebaseIndex;
             try {
               const serverInfo =
                 await window.netrex.getLiveKitServerInfo(firebaseIndex);
               if (serverInfo && serverInfo.url) {
                 const sanitizedIndex = serverInfo.serverIndex;
                 setServerIndex(sanitizedIndex);
+                serverIndexRef.current = sanitizedIndex;
                 setServerUrl(serverInfo.url);
 
                 setIsRotatingSession(true);
@@ -940,6 +962,9 @@ export default function ActiveRoom({
       );
 
       try {
+        // 🔥 FIX: Kendi rotation'ımızı işaretle - onSnapshot'ın çift tetiklemesini önle
+        isLocalRotationRef.current = true;
+
         const poolRef = doc(db, "system", "livekitPool");
         const poolDoc = await getDoc(poolRef);
 
@@ -978,6 +1003,9 @@ export default function ActiveRoom({
               `📡 Sunucu döndürme BAŞLIYOR... Write to Firebase: ${targetIndex} (Previous: ${firebaseActiveIndex})`,
             );
 
+            // 🔥 FIX: Ref'i YAZMA'DAN ÖNCE güncelle ki onSnapshot çift tetiklemesin
+            serverIndexRef.current = targetIndex;
+
             await setDoc(
               poolRef,
               {
@@ -991,14 +1019,8 @@ export default function ActiveRoom({
             );
 
             console.log(
-              "✅ Firebase 'activeServerIndex' başarıyla güncellendi (WRITE SUCCESS).",
-            );
-
-            // Ekstra Doğrulama: Hemen Firebase'den geri oku
-            const verifyDoc = await getDoc(poolRef);
-            console.log(
-              "🔍 Firebase Doğrulama (Re-read post-write):",
-              verifyDoc.data()?.activeServerIndex,
+              "✅ Firebase 'activeServerIndex' başarıyla güncellendi:",
+              targetIndex,
             );
           }
         } else {
@@ -1015,6 +1037,7 @@ export default function ActiveRoom({
             `🚀 Yeni sunucuya bağlanılıyor: ${serverInfo.url} (Index: ${targetIndex})`,
           );
           setServerIndex(targetIndex);
+          serverIndexRef.current = targetIndex; // 🔥 FIX: Ref'i anında güncelle
           setServerUrl(serverInfo.url);
           setConnectionError(null);
 
@@ -1030,6 +1053,7 @@ export default function ActiveRoom({
 
           setTimeout(() => {
             setIsRotatingSession(false);
+            isLocalRotationRef.current = false; // 🔥 FIX: Rotation bitti, onSnapshot tekrar dinleyebilir
           }, 5000);
           // --------------------------------------------
 

@@ -12,12 +12,13 @@ export const useSoundManagerStore = create((set, get) => ({
   cachedBuffers: {},
   isLoaded: false,
   _isInitializing: false,
+  _pendingQueue: [],
 
   init: async () => {
     const state = get();
     if (state.isLoaded || state.audioContext || state._isInitializing) return;
     
-    set({ _isInitializing: true });
+    set({ _isInitializing: true, _pendingQueue: [] });
     
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -57,19 +58,32 @@ export const useSoundManagerStore = create((set, get) => ({
       if (loadedCount > 0) {
         set({ audioContext: ctx, cachedBuffers: cache, isLoaded: true, _isInitializing: false });
         console.log(`✅ ${loadedCount}/${sounds.length} sistem sesi RAM'e yüklendi`);
+        
+        // ✅ Init tamamlandıktan sonra bekleyen sesleri çal
+        const pending = get()._pendingQueue;
+        if (pending.length > 0) {
+          set({ _pendingQueue: [] });
+          pending.forEach(({ name, volume }) => get().play(name, volume));
+        }
       } else {
         throw new Error('No sounds loaded');
       }
     } catch (e) {
       console.error("❌ SoundManager başlatılamadı:", e);
-      set({ _isInitializing: false });
+      set({ _isInitializing: false, _pendingQueue: [] });
     }
   },
 
   play: (name, volume = 0.5) => {
     const safeVolume = Math.max(0, Math.min(1, volume));
-    const { audioContext, cachedBuffers } = get();
+    const { audioContext, cachedBuffers, _isInitializing, isLoaded, _pendingQueue } = get();
     
+    // ✅ Eğer yükleniyorsa queue'ya ekle ve çık (new Audio fallback'i önler)
+    if (_isInitializing && !isLoaded) {
+      set({ _pendingQueue: [..._pendingQueue, { name, volume: safeVolume }] });
+      return;
+    }
+
     if (!audioContext || !cachedBuffers[name]) {
       const audio = new Audio(`./sounds/${name}.mp3`);
       audio.volume = safeVolume;

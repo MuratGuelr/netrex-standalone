@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
+const { uIOhook } = require("uiohook-napi");
 
 // ============================================
 // 🚀 OPTIMIZED MAIN.JS v2.0
@@ -209,11 +210,13 @@ let isExitInProgress = false;
 let cleanupCompleted = false;
 
 app.on("before-quit", async (event) => {
-  if (cleanupCompleted) return;
+  if (cleanupCompleted || isExitInProgress) {
+    if (cleanupCompleted) return;
+    event.preventDefault();
+    return;
+  }
   
   event.preventDefault();
-  
-  if (isExitInProgress) return;
   isExitInProgress = true;
   
   const mainWindow = getMainWindow();
@@ -258,7 +261,6 @@ app.on("before-quit", async (event) => {
 });
 
 app.on("will-quit", () => {
-   const { uIOhook } = require("uiohook-napi");
    uIOhook.stop();
 });
 

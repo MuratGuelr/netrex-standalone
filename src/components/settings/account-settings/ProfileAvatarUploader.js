@@ -112,36 +112,46 @@ export default function ProfileAvatarUploader() {
         await deleteImageFromCloudinary(user.photoURL);
       }
 
+      // 🔥 FIX: Google hesabıysa provider photo'suna geri dön, null'a değil
+      const googleProvider = auth.currentUser?.providerData?.find(
+        (p) => p.providerId === "google.com"
+      );
+      const fallbackPhotoURL = googleProvider?.photoURL || null;
+
       // 1) Firestore users dokümanı — kaynak of truth
       await updateDoc(doc(db, "users", user.uid), {
-        photoURL: null,
-        photoURL_override: true, // authStore'a "Firestore'u esas al" sinyali
+        photoURL: fallbackPhotoURL,
         updatedAt: serverTimestamp(),
       });
 
-      // 2) Firebase Auth — null yerine "" kullan (null provider data'yı silmiyor)
+      // 2) Firebase Auth güncelle
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { photoURL: "" }).catch(() => {});
+        await updateProfile(auth.currentUser, { 
+          photoURL: fallbackPhotoURL || "" 
+        }).catch(() => {});
       }
 
       // 3) Tüm sunucu member dokümanları
       if (Array.isArray(servers) && servers.length > 0) {
         const tasks = servers.map((s) =>
           updateDoc(doc(db, "servers", s.id, "members", user.uid), {
-            photoURL: null,
+            photoURL: fallbackPhotoURL,
           }).catch(() => {}),
         );
         await Promise.all(tasks);
       }
 
-      // 4) authStore'u manuel güncelle — onAuthStateChanged ezmesin diye flag koy
+      // 4) authStore'u güncelle
       useAuthStore.setState((prev) => ({
         ...prev,
-        user: { ...prev.user, photoURL: null },
-        _photoOverride: null, // override aktif, auth listener bu değeri korusun
+        user: { ...prev.user, photoURL: fallbackPhotoURL },
       }));
 
-      toast.success("Profil resmin kaldırıldı.");
+      if (fallbackPhotoURL) {
+        toast.success("Özel resim kaldırıldı, Google profil resmine dönüldü.");
+      } else {
+        toast.success("Profil resmin kaldırıldı.");
+      }
     } catch (error) {
       console.error("Error removing avatar:", error);
       toast.error("Profil resmi kaldırılamadı: " + error.message);

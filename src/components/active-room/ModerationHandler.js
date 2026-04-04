@@ -24,10 +24,11 @@ export default function ModerationHandler({
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
 
-  // ✅ FIX v2.0: Sync Lock + Debounce for race condition prevention
+  // ✅ FIX v3.0: Sync Lock + Debounce + Pending State for race condition prevention
   const syncLockRef = useRef(false);
   const syncTimerRef = useRef(null);
   const lastDesiredStateRef = useRef(null);
+  const pendingStateRef = useRef(null); // 🔥 FIX: Lock sırasında gelen state kaybolmasın
 
   // Mikrofon ve Hoparlör durumunu hem manuel hem de sunucu kısıtlamalarına göre senkronize et
   useEffect(() => {
@@ -42,21 +43,22 @@ export default function ModerationHandler({
     }
     lastDesiredStateRef.current = shouldEnableMic;
 
-    // ✅ Debounce: Hızlı art arda değişimlerde sadece son durumu uygula (50ms)
+    // ✅ Debounce: Hızlı art arda değişimlerde sadece son durumu uygula (120ms)
     if (syncTimerRef.current) {
       clearTimeout(syncTimerRef.current);
     }
 
     syncTimerRef.current = setTimeout(async () => {
-      // ✅ Sync Lock: Aynı anda birden fazla çağrı olmasın
-      if (syncLockRef.current) {
-        console.log("⏳ syncMicState atlandı (lock aktif)");
-        return;
-      }
-
       // Asıl istenen durumu tekrar kontrol et (debounce sırasında değişmiş olabilir)
       const currentDesiredState = !(isMuted || serverMuted || isDeafened || serverDeafened);
       
+      // 🔥 FIX: Lock aktifse state'i kaybet değil, KAYDET ve sonra uygula
+      if (syncLockRef.current) {
+        console.log("⏳ syncMicState: Lock aktif, pending state kaydedildi:", currentDesiredState);
+        pendingStateRef.current = currentDesiredState;
+        return;
+      }
+
       // Döngü koruması: Mevcut durum zaten istenen gibiyse işlem yapma
       if (localParticipant.isMicrophoneEnabled === currentDesiredState) {
         return;
@@ -66,17 +68,27 @@ export default function ModerationHandler({
 
       try {
         await localParticipant.setMicrophoneEnabled(currentDesiredState);
-        // ✅ FIX: Force-mute kaldırıldı!
-        // Eski kodda pub.setMuted(true), track.enabled = false, mediaStreamTrack.enabled = false
-        // yapıyorduk. Bu LiveKit'in dahili audio mixing mekanizmasıyla çatışıyordu ve
-        // diğer kullanıcıların seslerinin bastırılmasına (ducking) yol açıyordu.
-        // LiveKit'in setMicrophoneEnabled() zaten track state'ini yönetiyor.
       } catch (error) {
         console.error("Microphone state sync error:", error);
       } finally {
         syncLockRef.current = false;
+        
+        // 🔥 FIX: Lock sırasında bekleyen state varsa hemen uygula
+        if (pendingStateRef.current !== null) {
+          const nextState = pendingStateRef.current;
+          pendingStateRef.current = null;
+          
+          if (localParticipant.isMicrophoneEnabled !== nextState) {
+            try {
+              await localParticipant.setMicrophoneEnabled(nextState);
+              console.log("✅ Pending mic state uygulandı:", nextState);
+            } catch (e) {
+              console.error("Pending mic state hatası:", e);
+            }
+          }
+        }
       }
-    }, 50); // 50ms debounce - hızlı toggle'ları birleştirir
+    }, 120); // 120ms debounce - hızlı toggle'ı birleştirir, 50ms'de race condition oluyordu
 
     return () => {
       if (syncTimerRef.current) {

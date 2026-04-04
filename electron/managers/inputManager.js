@@ -36,6 +36,23 @@ const mouseEventPool = {
 function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingModeFn) {
   
   // ============================================
+  // ✅ WINDOW & MODE CACHE
+  // ============================================
+  let cachedMainWindow = null;
+  let cachedRecordingMode = getIsRecordingModeFn();
+  
+  const getWindow = () => {
+    if (!cachedMainWindow || cachedMainWindow.isDestroyed()) {
+      cachedMainWindow = getMainWindowFn();
+    }
+    return cachedMainWindow;
+  };
+
+  const setRecordingMode = (val) => {
+    cachedRecordingMode = val;
+  };
+
+  // ============================================
   // ✅ HOTKEYS CACHE (dışarıda tutuluyor)
   // ============================================
   let cachedHotkeys = null;
@@ -79,14 +96,12 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
   // ✅ OPTIMIZED: handleInputEvent
   // ============================================
   function handleInputEvent(event, type) {
-    // ✅ Erken mainWindow kontrolü
-    const mainWindow = getMainWindowFn();
+    // ✅ Erken mainWindow kontrolü (Cached)
+    const mainWindow = getWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     
-    const isRecordingMode = getIsRecordingModeFn();
-    
-    // Recording mode: Object pooling kullan
-    if (isRecordingMode) {
+    // ✅ Recording mode: Object pooling kullan (Cached bool)
+    if (cachedRecordingMode) {
       if (type === "keyboard") {
         // ✅ Object pooling - yeni object yaratma
         keyboardEventPool.keycode = event.keycode;
@@ -143,7 +158,7 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
   };
   
   // ✅ Cache refresh metodu expose et
-  return { start, stop, refreshCache };
+  return { start, stop, refreshCache, setRecordingMode };
 }
 
 module.exports = { setupInputListeners };

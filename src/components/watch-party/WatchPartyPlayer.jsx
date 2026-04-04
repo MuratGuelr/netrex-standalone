@@ -1,199 +1,175 @@
 // src/components/watch-party/WatchPartyPlayer.jsx
-'use client';
+"use client";
 
-import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import ReactPlayer from 'react-player';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useRoomContext } from '@livekit/components-react';
-import { useWatchPartyStore } from '@/src/store/watchPartyStore';
-import { useWatchPartySync } from '@/src/hooks/useWatchPartySync';
-import { useWatchPartyDrift } from '@/src/hooks/useWatchPartyDrift';
-import { useWatchPartyPermission } from '@/src/hooks/useWatchPartyPermission';
-import { WatchPartyControls } from './WatchPartyControls';
-import { WatchPartyPlaylist } from './WatchPartyPlaylist';
-import { WatchPartyUserPrefs } from './WatchPartyUserPrefs';
-import { WatchPartyCoHostManager } from './WatchPartyCoHostManager';
-import { formatTime } from '@/src/utils/formatTime';
-import { Minimize, Maximize, X } from 'lucide-react';
+import React, {
+  useRef, useState, useCallback, useEffect, useMemo,
+} from "react";
+import { createPortal } from "react-dom";
+import ReactPlayer from "react-player";
+import { motion, AnimatePresence } from "framer-motion";
+import { useMaybeRoomContext } from "@livekit/components-react";
+import { useWatchPartyStore } from "@/src/store/watchPartyStore";
+import { useWatchPartySync } from "@/src/hooks/useWatchPartySync";
+import { useWatchPartyDrift } from "@/src/hooks/useWatchPartyDrift";
+import { useWatchPartyPermission } from "@/src/hooks/useWatchPartyPermission";
+import { WatchPartyControls } from "./WatchPartyControls";
+import { WatchPartyPlaylist } from "./WatchPartyPlaylist";
+import { WatchPartyUserPrefs } from "./WatchPartyUserPrefs";
+import { formatTime } from "@/src/utils/formatTime";
+import {
+  Minimize, Music, MonitorPlay,
+  Play, Pause, SkipForward, SkipBack,
+} from "lucide-react";
 
+// ─── Yardımcı ───
 function getYouTubeId(url) {
   if (!url) return null;
-  const match = url.match(
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&?\s#\/]+)/
+  const m = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&?\s#/]+)/
   );
-  return match?.[1] || null;
+  return m?.[1] || null;
 }
 
-// ═══════════════════════════════════════════════════════════
-// SOUNDCLOUD PLAYER — postMessage API
-//
-// SC Widget iframe'i postMessage ile kontrol edilir.
-// Önce event'lere subscribe olunmalı (addEventListener),
-// sonra widget otomatik olarak playProgress gönderir.
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// SoundCloud Player
+// ════════════════════════════════════════════════════════════
 function SoundCloudPlayer({
-  trackUrl,
-  shouldPlay,
-  effectiveVolume,
-  videoMode,
-  videoFS,
-  playerApiRef,
-  onDuration,
-  onProgress,
-  onEnded,
-  onReady,
+  trackUrl, shouldPlay, effectiveVolume,
+  videoMode, videoFS, playerApiRef,
+  onDuration, onProgress, onEnded, onReady,
 }) {
-  const iframeRef = useRef(null);
-  const isReadyRef = useRef(false);
-  const durationRef = useRef(0);
+  const iframeRef    = useRef(null);
+  const isReadyRef   = useRef(false);
+  const durationRef  = useRef(0);
   const currentTimeRef = useRef(0);
-  const shouldPlayRef = useRef(shouldPlay);
-  shouldPlayRef.current = shouldPlay;
+  const shouldPlayRef  = useRef(shouldPlay);
+  const volumeRef      = useRef(effectiveVolume);
+  // Duration polling timer ref - leak önlemi
+  const durationTimerRef = useRef(null);
 
-  // Widget'a komut gönder
+  shouldPlayRef.current = shouldPlay;
+  volumeRef.current     = effectiveVolume;
+
   const post = useCallback((method, value) => {
     try {
       const msg = value !== undefined ? { method, value } : { method };
-      // '*' kullan — Electron'da origin kısıtlaması sorun çıkarıyor
-      iframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), '*');
+      iframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), "*");
     } catch {}
   }, []);
 
-  const volumeRef = useRef(effectiveVolume);
-  useEffect(() => { volumeRef.current = effectiveVolume; }, [effectiveVolume]);
-
-  // iframe yüklendiğinde event'lere abone ol
-  const handleIframeLoad = useCallback(() => {
-    console.log('[WatchParty] SC iframe loaded');
-
-    // Widget'ın initialize olması için kısa bekle
-    setTimeout(() => {
-      // Event subscription — BU OLMADAN playProgress gelmez
-      post('addEventListener', 'ready');
-      post('addEventListener', 'playProgress');
-      post('addEventListener', 'play');
-      post('addEventListener', 'pause');
-      post('addEventListener', 'finish');
-
-      // Duration iste
-      post('getDuration');
-    }, 800);
-  }, [post]);
-
-  // Widget'tan gelen mesajları dinle
+  // Message handler
   useEffect(() => {
     const handler = (event) => {
-      if (!event.origin?.includes('soundcloud.com')) return;
-
+      if (!event.origin?.includes("soundcloud.com")) return;
       let data;
       try {
-        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        data = typeof event.data === "string"
+          ? JSON.parse(event.data) : event.data;
       } catch { return; }
       if (!data?.method) return;
 
       switch (data.method) {
-        case 'ready':
-          console.log('[WatchParty] ✅ SoundCloud Widget READY');
+        case "ready":
           isReadyRef.current = true;
-
-          // Tekrar subscribe (ready'den sonra garantile)
-          post('addEventListener', 'playProgress');
-          post('addEventListener', 'finish');
-          post('getDuration');
-          post('setVolume', effectiveVolume * 100);
-
-          // playerRef arayüzü
+          post("addEventListener", "playProgress");
+          post("addEventListener", "finish");
+          post("getDuration");
+          post("setVolume", volumeRef.current * 100);
           playerApiRef.current = {
-            seekTo: (secs) => post('seekTo', secs * 1000),
+            seekTo: (s) => post("seekTo", s * 1000),
             getCurrentTime: () => currentTimeRef.current,
             getDuration: () => durationRef.current,
           };
-
-          if (shouldPlayRef.current) {
-            setTimeout(() => post('play'), 500);
-          }
-
+          if (shouldPlayRef.current) setTimeout(() => post("play"), 500);
           onReady();
           break;
 
-        case 'getDuration':
-          if (data.value && data.value > 0) {
-            const dur = data.value / 1000;
-            console.log('[WatchParty] SC Duration:', dur.toFixed(1));
-            durationRef.current = dur;
-            onDuration(dur);
-          }
-          break;
-
-        case 'playProgress':
-          if (data.value) {
-            const currentMs = data.value.currentPosition || 0;
-            const relative  = data.value.relativePosition || 0;
-            const current   = currentMs / 1000;
-            currentTimeRef.current = current;
-
-            onProgress({
-              played: relative,
-              playedSeconds: current,
-            });
-
-            // Duration henüz alınmadıysa hesapla
-            if (durationRef.current === 0 && relative > 0 && current > 0) {
-              const estimated = current / relative;
-              durationRef.current = estimated;
-              onDuration(estimated);
+        case "getDuration":
+          if (data.value > 0) {
+            durationRef.current = data.value / 1000;
+            onDuration(durationRef.current);
+            // Duration alındı, timer'ı durdur
+            if (durationTimerRef.current) {
+              clearInterval(durationTimerRef.current);
+              durationTimerRef.current = null;
             }
           }
           break;
 
-        case 'finish':
-          console.log('[WatchParty] SC: ENDED');
+        case "playProgress": {
+          const ms  = data.value?.currentPosition || 0;
+          const rel = data.value?.relativePosition || 0;
+          currentTimeRef.current = ms / 1000;
+          onProgress({ played: rel, playedSeconds: currentTimeRef.current });
+          if (durationRef.current === 0 && rel > 0 && currentTimeRef.current > 0) {
+            const est = currentTimeRef.current / rel;
+            durationRef.current = est;
+            onDuration(est);
+          }
+          break;
+        }
+
+        case "finish":
           onEnded();
           break;
 
-        case 'play':
-          // Çalmaya başladı — duration'ı tekrar iste (bazen ready'de 0 geliyor)
-          if (durationRef.current === 0) {
-            post('getDuration');
-          }
-          // Tekrar volume gönder ki SC bazen cookie volume veriyor
-          post('setVolume', volumeRef.current * 100);
+        case "play":
+          post("setVolume", volumeRef.current * 100);
+          if (durationRef.current === 0) post("getDuration");
           break;
       }
     };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, [post, playerApiRef, onReady, onProgress, onDuration, onEnded]);
 
-  // Play/Pause senkronizasyonu
+  // shouldPlay değişince play/pause
   useEffect(() => {
     if (!isReadyRef.current) return;
-    post(shouldPlay ? 'play' : 'pause');
+    post(shouldPlay ? "play" : "pause");
   }, [shouldPlay, post]);
 
-  // Volume senkronizasyonu
+  // Volume değişince set
   useEffect(() => {
     if (!isReadyRef.current) return;
-    post('setVolume', effectiveVolume * 100);
+    post("setVolume", effectiveVolume * 100);
   }, [effectiveVolume, post]);
 
-  // Duration fallback polling (widget bazen ilk seferde 0 döndürüyor)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (durationRef.current > 0) { clearInterval(timer); return; }
-      if (isReadyRef.current) post('getDuration');
-    }, 2000);
-    return () => clearInterval(timer);
+  // Duration polling (ready olduğunda, henüz duration 0 ise)
+  const handleIframeLoad = useCallback(() => {
+    setTimeout(() => {
+      post("addEventListener", "ready");
+      post("addEventListener", "playProgress");
+      post("addEventListener", "play");
+      post("addEventListener", "pause");
+      post("addEventListener", "finish");
+      post("getDuration");
+
+      // ✅ Cleanup'lı polling
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+      durationTimerRef.current = setInterval(() => {
+        if (durationRef.current > 0) {
+          clearInterval(durationTimerRef.current);
+          durationTimerRef.current = null;
+          return;
+        }
+        if (isReadyRef.current) post("getDuration");
+      }, 2000);
+    }, 800);
   }, [post]);
 
-  // iframe URL
-  const cleanUrl = trackUrl.split('?')[0];
-  // NOT: visual paramını sadece fullscreen'e göre ayarla ki
-  // mini player'da monitor ikonuna basmak iframe'i yeniden yükleyip
-  // şarkıyı durdurmasın.
-  const src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(cleanUrl)}&color=%2350c878&auto_play=false&hide_related=true&show_comments=false&show_user=false&show_reposts=false&show_teaser=false&visual=${videoFS ? 'true' : 'false'}`;
+  // Unmount temizliği
+  useEffect(() => {
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const cleanUrl = trackUrl.split("?")[0];
+  const src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(cleanUrl)}&color=%2350c878&auto_play=false&hide_related=true&show_comments=false&show_user=false&show_reposts=false&show_teaser=false&visual=${videoFS ? "true" : "false"}`;
 
   return (
     <iframe
@@ -201,124 +177,139 @@ function SoundCloudPlayer({
       src={src}
       onLoad={handleIframeLoad}
       width="100%"
-      height={videoFS ? '100%' : videoMode ? 220 : 166}
-      scrolling="no"
       frameBorder="no"
       allow="autoplay"
-      className={videoFS ? 'absolute inset-0 w-full h-full z-0' : ''}
+      title="SoundCloud Player"
+      className={videoFS ? "absolute inset-0 w-full h-full z-0" : ""}
       style={
-        videoFS ? { height: '100%' } : videoMode
-          ? {}
-          : { height: 1, opacity: 0, pointerEvents: 'none', position: 'absolute' }
+        videoFS
+          ? { height: "100%" }
+          : videoMode
+            ? { height: 166 }
+            : { height: 1, opacity: 0, pointerEvents: "none", position: "absolute" }
       }
     />
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// YouTube Wrapper Component
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// YouTube Player
+// ════════════════════════════════════════════════════════════
 function YouTubePlayer({
-  videoId, shouldPlay, effectiveVolume, videoMode, videoFS, ytQuality,
-  onReady, onStateChange, onError,
-  playerApiRef, ytPlayerRef,
+  videoId, shouldPlay, effectiveVolume,
+  videoMode, videoFS, ytQuality,
+  onReady, onStateChange, onError, playerApiRef, ytPlayerRef,
 }) {
-  const wrapperRef = useRef(null);
-  const targetRef = useRef(null);
-  const [apiLoaded, setApiLoaded] = useState(!!window.YT?.Player);
+  const wrapperRef       = useRef(null);
+  const mountTargetRef   = useRef(null);
+  const isReadyRef       = useRef(false);
   const currentVideoIdRef = useRef(null);
-  const isReadyRef = useRef(false);
-  const volumeRef = useRef(effectiveVolume);
+  const volumeRef        = useRef(effectiveVolume);
+  const progressTimerRef = useRef(null); // ✅ leak önlemi
 
-  useEffect(() => { volumeRef.current = effectiveVolume; }, [effectiveVolume]);
+  volumeRef.current = effectiveVolume;
 
+  // YT API yükle
+  const [apiLoaded, setApiLoaded] = useState(() => !!window.YT?.Player);
   useEffect(() => {
     if (window.YT?.Player) { setApiLoaded(true); return; }
     if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
       document.head.appendChild(tag);
     }
-    const checker = setInterval(() => {
-      if (window.YT?.Player) { setApiLoaded(true); clearInterval(checker); }
+    const id = setInterval(() => {
+      if (window.YT?.Player) { setApiLoaded(true); clearInterval(id); }
     }, 300);
-    return () => clearInterval(checker);
+    return () => clearInterval(id);
   }, []);
 
+  // Player oluştur / videoId değişince loadVideoById
   useEffect(() => {
     if (!apiLoaded || !videoId || !wrapperRef.current) return;
-    if (currentVideoIdRef.current === videoId && isReadyRef.current) return;
 
-    if (ytPlayerRef.current && isReadyRef.current) {
-      currentVideoIdRef.current = videoId;
+    // Aynı video, player hazır → loadVideoById yeterli
+    if (currentVideoIdRef.current === videoId && isReadyRef.current && ytPlayerRef.current) {
       try { ytPlayerRef.current.loadVideoById({ videoId, startSeconds: 0 }); } catch {}
       return;
     }
 
-    if (targetRef.current) {
-      try { wrapperRef.current.removeChild(targetRef.current); } catch {}
+    // Önceki DOM node'unu kaldır
+    if (mountTargetRef.current && wrapperRef.current.contains(mountTargetRef.current)) {
+      try { wrapperRef.current.removeChild(mountTargetRef.current); } catch {}
     }
 
-    const target = document.createElement('div');
-    target.id = `yt-target-${Date.now()}`;
+    const target = document.createElement("div");
     wrapperRef.current.appendChild(target);
-    targetRef.current = target;
+    mountTargetRef.current  = target;
     currentVideoIdRef.current = videoId;
-    isReadyRef.current = false;
+    isReadyRef.current      = false;
+
+    const playerVars = {
+      autoplay: 0, controls: 0, modestbranding: 1, rel: 0,
+      playsinline: 1, iv_load_policy: 3, enablejsapi: 1,
+      vq: ytQuality || "auto",
+    };
+    const isFile = window.location.protocol.startsWith("file");
+    if (!isFile) playerVars.origin = window.location.origin;
 
     try {
-      const isFileProtocol = window.location.protocol.includes('file') || window.location.protocol.includes('app');
-
-      const playerVars = {
-        autoplay: 0, controls: 0, modestbranding: 1, rel: 0,
-        playsinline: 1, iv_load_policy: 3, enablejsapi: 1,
-        vq: ytQuality || 'auto',
-      };
-      // Only set origin for http(s) — file:// can't match any origin
-      // and YouTube silently rejects postMessage if origin doesn't match
-      if (!isFileProtocol) {
-        playerVars.origin = window.location.origin;
-      }
-
       ytPlayerRef.current = new window.YT.Player(target, {
-        videoId, width: '100%', height: '100%',
+        videoId,
+        width: "100%",
+        height: "100%",
         playerVars,
         events: {
-          onReady: (event) => {
+          onReady: (e) => {
             isReadyRef.current = true;
             try {
-              const iframe = event.target.getIframe();
+              const iframe = e.target.getIframe();
               if (iframe) {
-                iframe.style.width = '100%'; iframe.style.height = '100%'; iframe.style.border = 'none';
-                iframe.setAttribute('allow', 'autoplay; encrypted-media; accelerometer; gyroscope; picture-in-picture; clipboard-write');
-                iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+                iframe.style.cssText = "width:100%;height:100%;border:none;";
+                iframe.setAttribute("allow",
+                  "autoplay; encrypted-media; accelerometer; gyroscope; picture-in-picture");
+                iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
               }
               const vol = Math.round(volumeRef.current * 100);
-              event.target.setVolume(vol);
-              if (vol === 0) event.target.mute(); else event.target.unMute();
+              e.target.setVolume(vol);
+              if (vol === 0) e.target.mute(); else e.target.unMute();
             } catch {}
-            onReady(event);
+
+            // playerRef'i doldur
+            playerApiRef.current = {
+              seekTo: (s) => { try { ytPlayerRef.current?.seekTo(s, true); } catch {} },
+              getCurrentTime: () => { try { return ytPlayerRef.current?.getCurrentTime() || 0; } catch { return 0; } },
+              getDuration: () => { try { return ytPlayerRef.current?.getDuration() || 0; } catch { return 0; } },
+            };
+
+            onReady(e);
           },
-          onStateChange: (event) => {
-            if (event.data === window.YT?.PlayerState?.PLAYING) {
+          onStateChange: (e) => {
+            if (e.data === window.YT?.PlayerState?.PLAYING) {
               const vol = Math.round(volumeRef.current * 100);
-              event.target.setVolume(vol);
-              if (vol === 0) event.target.mute(); else event.target.unMute();
+              try { e.target.setVolume(vol); if (vol === 0) e.target.mute(); else e.target.unMute(); } catch {}
             }
-            onStateChange(event);
+            onStateChange(e);
           },
-          onError: (event) => onError(event),
+          onError: onError,
         },
       });
-    } catch (e) { console.error('[WatchParty] YT create error:', e); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    } catch (err) {
+      console.error("[WatchParty] YT create error:", err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiLoaded, videoId]);
 
+  // shouldPlay değişince play/pause
   useEffect(() => {
     if (!isReadyRef.current || !ytPlayerRef.current) return;
-    try { if (shouldPlay) ytPlayerRef.current.playVideo(); else ytPlayerRef.current.pauseVideo(); } catch {}
+    try {
+      if (shouldPlay) ytPlayerRef.current.playVideo();
+      else ytPlayerRef.current.pauseVideo();
+    } catch {}
   }, [shouldPlay, ytPlayerRef]);
 
+  // Volume
   useEffect(() => {
     if (!isReadyRef.current || !ytPlayerRef.current) return;
     try {
@@ -328,133 +319,144 @@ function YouTubePlayer({
     } catch {}
   }, [effectiveVolume, ytPlayerRef]);
 
+  // Quality
   useEffect(() => {
     if (!isReadyRef.current || !ytPlayerRef.current) return;
-    try {
-      ytPlayerRef.current.setPlaybackQuality(ytQuality || 'auto');
-    } catch {}
+    try { ytPlayerRef.current.setPlaybackQuality(ytQuality || "auto"); } catch {}
   }, [ytQuality, ytPlayerRef]);
 
+  // ✅ Cleanup
   useEffect(() => {
     return () => {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
       isReadyRef.current = false;
       currentVideoIdRef.current = null;
       try { ytPlayerRef.current?.destroy(); } catch {}
       ytPlayerRef.current = null;
     };
-  }, [ytPlayerRef]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div 
-      ref={wrapperRef} 
-      className={`w-full bg-black pointer-events-none select-none ${videoFS ? 'absolute inset-0 h-full z-0' : ''}`} 
-      style={videoFS ? { height: '100%' } : { height: videoMode ? 220 : 0 }} 
+    <div
+      ref={wrapperRef}
+      className={`w-full bg-black pointer-events-none select-none
+        ${videoFS ? "absolute inset-0 h-full z-0" : ""}`}
+      style={videoFS ? { height: "100%" } : { height: videoMode ? 190 : 0 }}
     />
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// ANA PLAYER
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// Ana Player
+// ════════════════════════════════════════════════════════════
 export function WatchPartyPlayer({ serverId, channelId }) {
-  const room = useRoomContext();
-  const playerRef = useRef(null);
+  const room        = useMaybeRoomContext();
+  const playerRef   = useRef(null);
   const ytPlayerRef = useRef(null);
-  const seekingRef = useRef(false);
+  const lastSeekTimeRef = useRef(0);
+  const seekingRef  = useRef(false);
 
   const [progress, setProgress] = useState({ played: 0, playedSeconds: 0 });
-  const [duration, setDuration] = useState(0);
+  const [duration,  setDuration]  = useState(0);
   const [buffering, setBuffering] = useState(false);
-  const [activePanel, setActivePanel] = useState(null);
-  
+  const [activePanel, setActivePanel] = useState(null); // 'playlist' | 'prefs' | null
   const [isMouseIdle, setIsMouseIdle] = useState(false);
-  const idleTimeoutRef = useRef(null);
+  const idleTimerRef = useRef(null);
+  // SSR guard
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  const handleTogglePanel = useCallback((panel) => {
-    setActivePanel((prev) => (prev === panel ? null : panel));
-  }, []);
+  // ─── Store ───
+  const currentTrack  = useWatchPartyStore((s) => s.currentTrack);
+  const isPlaying     = useWatchPartyStore((s) => s.playbackState.isPlaying);
+  const isMuted       = useWatchPartyStore((s) => s.localPreferences.isMuted);
+  const localVolume   = useWatchPartyStore((s) => s.localPreferences.volume);
+  const videoMode     = useWatchPartyStore((s) => s.localPreferences.videoMode);
+  const videoFS       = useWatchPartyStore((s) => s.localPreferences.videoFullscreen);
+  const showPlayer    = useWatchPartyStore((s) => s.localPreferences.showPlayer);
+  const ytQuality     = useWatchPartyStore((s) => s.localPreferences.videoQuality) || "auto";
+  const playlist      = useWatchPartyStore((s) => s.playlist);
+  const toggleFS      = useWatchPartyStore((s) => s.toggleFullscreen);
+  const setLocalPref  = useWatchPartyStore((s) => s.setLocalPref);
 
-  const currentTrack = useWatchPartyStore((s) => s.currentTrack);
-  const isPlaying    = useWatchPartyStore((s) => s.playbackState.isPlaying);
-  const startedAt    = useWatchPartyStore((s) => s.playbackState.startedAt);
-  const isListening  = useWatchPartyStore((s) => s.localPreferences.isListening);
-  const isMuted      = useWatchPartyStore((s) => s.localPreferences.isMuted);
-  const localVolume  = useWatchPartyStore((s) => s.localPreferences.volume);
-  const videoMode    = useWatchPartyStore((s) => s.localPreferences.videoMode);
-  const videoFS      = useWatchPartyStore((s) => s.localPreferences.videoFullscreen);
-  const showPlayer   = useWatchPartyStore((s) => s.localPreferences.showPlayer);
-  const ytQuality    = useWatchPartyStore((s) => s.localPreferences.videoQuality) || 'auto';
-  const playlist     = useWatchPartyStore((s) => s.playlist);
-  const toggleFS     = useWatchPartyStore((s) => s.toggleFullscreen);
-  const toggleVideo  = useWatchPartyStore((s) => s.toggleVideoMode);
-  const setLocalPref = useWatchPartyStore((s) => s.setLocalPref);
+  const effectiveVolume = isMuted ? 0 : localVolume / 100;
+  const shouldPlay      = isPlaying;
 
-  const effectiveVolume = (!isListening || isMuted) ? 0 : localVolume / 100;
-  const shouldPlay = isPlaying;
-
-  const videoId = useMemo(() => getYouTubeId(currentTrack?.url), [currentTrack?.url]);
-  const isYouTube = !!videoId;
-  const isSoundCloud = !!currentTrack?.url?.includes('soundcloud.com');
-  const isGeneric = !isYouTube && !isSoundCloud && !!currentTrack?.url;
+  const videoId      = useMemo(() => getYouTubeId(currentTrack?.url), [currentTrack?.url]);
+  const isYouTube    = !!videoId;
+  const isSoundCloud = !isYouTube && !!currentTrack?.url?.includes("soundcloud.com");
+  const isGeneric    = !isYouTube && !isSoundCloud && !!currentTrack?.url;
 
   const permissions = useWatchPartyPermission(serverId);
   const { hostPlay, hostPause, hostSeek, hostSkip, autoAdvance } =
     useWatchPartySync(room, playerRef, serverId, channelId);
   useWatchPartyDrift(playerRef);
 
-  // ═══ YouTube Callbacks ═══
+  const handleTogglePanel = useCallback(
+    (panel) => setActivePanel((p) => (p === panel ? null : panel)),
+    []
+  );
+
+  // ─── YouTube ilerleme polling (cleanup'lı) ───
+  const ytProgressTimerRef = useRef(null);
+  useEffect(() => {
+    if (!isYouTube) return;
+    ytProgressTimerRef.current = setInterval(() => {
+      try {
+        if (!ytPlayerRef.current?.getCurrentTime) return;
+        const t = ytPlayerRef.current.getCurrentTime() || 0;
+        const d = ytPlayerRef.current.getDuration()    || 0;
+        if (d > 0 && duration === 0) setDuration(d);
+        if (!seekingRef.current && Date.now() - lastSeekTimeRef.current > 1000)
+          setProgress({ played: d > 0 ? t / d : 0, playedSeconds: t });
+      } catch {}
+    }, 500);
+    return () => {
+      if (ytProgressTimerRef.current) {
+        clearInterval(ytProgressTimerRef.current);
+        ytProgressTimerRef.current = null;
+      }
+    };
+  }, [isYouTube, duration]);
+
+  // ─── YouTube callbacks ───
   const handleYTReady = useCallback(() => {
     setBuffering(false);
-    playerRef.current = {
-      seekTo: (s) => { try { ytPlayerRef.current?.seekTo(s, true); } catch {} },
-      getCurrentTime: () => { try { return ytPlayerRef.current?.getCurrentTime() || 0; } catch { return 0; } },
-      getDuration: () => { try { return ytPlayerRef.current?.getDuration() || 0; } catch { return 0; } },
-    };
-    try { const d = ytPlayerRef.current?.getDuration(); if (d > 0) setDuration(d); } catch {}
-
-    const store = useWatchPartyStore.getState();
-    if (store.playbackState.isPlaying) {
-      if (store.playbackState.startedAt) {
-        const pos = (Date.now() - store.playbackState.startedAt) / 1000;
-        try { ytPlayerRef.current?.seekTo(pos, true); } catch {}
-      }
+    try {
+      const d = ytPlayerRef.current?.getDuration();
+      if (d > 0) setDuration(d);
+    } catch {}
+    const { playbackState } = useWatchPartyStore.getState();
+    if (playbackState.isPlaying && playbackState.startedAt) {
+      const pos = (Date.now() - playbackState.startedAt) / 1000;
+      try { ytPlayerRef.current?.seekTo(pos, true); } catch {}
       try { ytPlayerRef.current?.playVideo(); } catch {}
     }
   }, []);
 
   const handleYTState = useCallback((event) => {
     const s = event.data;
-    if (s === window.YT?.PlayerState?.ENDED && permissions.canControl) autoAdvance();
-    if (s === window.YT?.PlayerState?.BUFFERING) setBuffering(true);
-    if (s === window.YT?.PlayerState?.PLAYING) {
+    const YTState = window.YT?.PlayerState;
+    if (s === YTState?.ENDED && permissions.canControl) autoAdvance();
+    if (s === YTState?.BUFFERING) setBuffering(true);
+    if (s === YTState?.PLAYING) {
       setBuffering(false);
-      try { const d = ytPlayerRef.current?.getDuration(); if (d > 0 && duration === 0) setDuration(d); } catch {}
+      try {
+        const d = ytPlayerRef.current?.getDuration();
+        if (d > 0 && duration === 0) setDuration(d);
+      } catch {}
     }
-    if (s === window.YT?.PlayerState?.PAUSED) setBuffering(false);
+    if (s === YTState?.PAUSED) setBuffering(false);
   }, [permissions.canControl, autoAdvance, duration]);
 
-  // ═══ YouTube Progress ═══
-  useEffect(() => {
-    if (!isYouTube) return;
-    const timer = setInterval(() => {
-      try {
-        if (!ytPlayerRef.current?.getCurrentTime) return;
-        const t = ytPlayerRef.current.getCurrentTime() || 0;
-        const d = ytPlayerRef.current.getDuration() || 0;
-        if (d > 0 && duration === 0) setDuration(d);
-        if (!seekingRef.current) setProgress({ played: d > 0 ? t / d : 0, playedSeconds: t });
-      } catch {}
-    }, 500);
-    return () => clearInterval(timer);
-  }, [isYouTube, duration]);
-
-  // ═══ SoundCloud Callbacks ═══
+  // ─── SoundCloud callbacks ───
   const handleSCReady = useCallback(() => {
     setBuffering(false);
-    const store = useWatchPartyStore.getState();
-    if (store.playbackState.isPlaying && store.playbackState.startedAt) {
-      const pos = (Date.now() - store.playbackState.startedAt) / 1000;
-      setTimeout(() => { try { playerRef.current?.seekTo(pos); } catch {} }, 300);
+    const { playbackState } = useWatchPartyStore.getState();
+    if (playbackState.isPlaying && playbackState.startedAt) {
+      const pos = (Date.now() - playbackState.startedAt) / 1000;
+      setTimeout(() => { try { playerRef.current?.seekTo?.(pos); } catch {} }, 300);
     }
   }, []);
 
@@ -463,51 +465,30 @@ export function WatchPartyPlayer({ serverId, channelId }) {
   }, []);
 
   const handleSCProgress = useCallback((state) => {
-    if (!seekingRef.current) setProgress(state);
+    if (!seekingRef.current && Date.now() - lastSeekTimeRef.current > 1000) setProgress(state);
   }, []);
 
   const handleSCEnded = useCallback(() => {
     if (permissions.canControl) autoAdvance();
   }, [permissions.canControl, autoAdvance]);
 
-  // ═══ Track Reset ═══
-  const prevTrackRef = useRef(null);
-  useEffect(() => {
-    const url = currentTrack?.url;
-    if (!url || url === prevTrackRef.current) return;
-    prevTrackRef.current = url;
-    setBuffering(true);
-    setProgress({ played: 0, playedSeconds: 0 });
-    setDuration(0);
-    
-    // Otomatik olarak videoyu (monitoru) aç
-    setLocalPref('videoMode', true);
-  }, [currentTrack?.url, setLocalPref]);
-
-  // Parça tamamen kaldırıldığında video modunu da kapat
-  useEffect(() => {
-    if (!currentTrack) {
-      setLocalPref('videoMode', false);
-    }
-  }, [currentTrack, setLocalPref]);
-
-  // ═══ Generic ReactPlayer ═══
+  // ─── Generic ReactPlayer callbacks ───
   const handleRPReady = useCallback(() => {
     setBuffering(false);
     const d = playerRef.current?.getDuration?.();
-    if (d && d > 0) setDuration(d);
-    const store = useWatchPartyStore.getState();
-    if (store.playbackState.isPlaying && store.playbackState.startedAt) {
-      const pos = (Date.now() - store.playbackState.startedAt) / 1000;
-      playerRef.current?.seekTo?.(Math.max(0, pos), 'seconds');
+    if (d > 0) setDuration(d);
+    const { playbackState } = useWatchPartyStore.getState();
+    if (playbackState.isPlaying && playbackState.startedAt) {
+      const pos = (Date.now() - playbackState.startedAt) / 1000;
+      playerRef.current?.seekTo?.(Math.max(0, pos), "seconds");
     }
   }, []);
 
   const handleRPProgress = useCallback((state) => {
-    if (!seekingRef.current) setProgress(state);
+    if (!seekingRef.current && Date.now() - lastSeekTimeRef.current > 1000) setProgress(state);
     if (duration === 0 && playerRef.current?.getDuration) {
       const d = playerRef.current.getDuration();
-      if (d && d > 0 && isFinite(d)) setDuration(d);
+      if (d > 0 && isFinite(d)) setDuration(d);
     }
   }, [duration]);
 
@@ -515,50 +496,81 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     if (permissions.canControl) autoAdvance();
   }, [permissions.canControl, autoAdvance]);
 
-  const handleRPError = useCallback((error) => {
+  const handleRPError = useCallback((err) => {
     setBuffering(false);
-    if (!error) return;
-    const msg = error?.message || String(error) || '';
-    if (msg.includes('AbortError') || msg.includes('interrupted')) return;
-    console.warn('[WatchParty] ReactPlayer error:', error);
+    const msg = err?.message || String(err || "");
+    if (msg.includes("AbortError") || msg.includes("interrupted")) return;
+    console.warn("[WatchParty] ReactPlayer error:", err);
   }, []);
 
-  // Generic duration polling
+  // ─── Generic duration polling (cleanup'lı) ───
+  const genericDurTimerRef = useRef(null);
   useEffect(() => {
     if (isYouTube || isSoundCloud || !currentTrack?.url || duration > 0) return;
-    const p = setInterval(() => {
+    genericDurTimerRef.current = setInterval(() => {
       if (playerRef.current?.getDuration) {
         const d = playerRef.current.getDuration();
-        if (d && d > 0 && isFinite(d)) { setDuration(d); clearInterval(p); }
+        if (d > 0 && isFinite(d)) {
+          setDuration(d);
+          clearInterval(genericDurTimerRef.current);
+          genericDurTimerRef.current = null;
+        }
       }
     }, 1000);
-    return () => clearInterval(p);
+    return () => {
+      if (genericDurTimerRef.current) {
+        clearInterval(genericDurTimerRef.current);
+        genericDurTimerRef.current = null;
+      }
+    };
   }, [currentTrack?.url, duration, isYouTube, isSoundCloud]);
 
-  // ═══ Kontrol ═══
+  // ─── Track sıfırla ───
+  const prevTrackUrlRef = useRef(null);
+  useEffect(() => {
+    const url = currentTrack?.url;
+    if (!url || url === prevTrackUrlRef.current) return;
+    prevTrackUrlRef.current = url;
+    setBuffering(true);
+    setProgress({ played: 0, playedSeconds: 0 });
+    setDuration(0);
+    setLocalPref("videoMode", true);
+  }, [currentTrack?.url, setLocalPref]);
+
+  useEffect(() => {
+    if (!currentTrack) setLocalPref("videoMode", false);
+  }, [currentTrack, setLocalPref]);
+
+  // ─── Kontrol handlers ───
   const handleSeekChange = useCallback((e) => {
     if (!permissions.canControl) return;
-    setProgress({ played: parseFloat(e.target.value), playedSeconds: parseFloat(e.target.value) * duration });
+    const val = parseFloat(e.target.value);
+    setProgress({ played: val, playedSeconds: val * duration });
   }, [permissions.canControl, duration]);
 
-  const handleSeekStart = useCallback(() => { if (permissions.canControl) seekingRef.current = true; }, [permissions.canControl]);
+  const handleSeekStart = useCallback(() => {
+    if (permissions.canControl) seekingRef.current = true;
+  }, [permissions.canControl]);
 
   const handleSeekCommit = useCallback((e) => {
     if (!permissions.canControl) return;
     seekingRef.current = false;
+    lastSeekTimeRef.current = Date.now();
     hostSeek(parseFloat(e.target.value) * duration);
   }, [permissions.canControl, duration, hostSeek]);
 
   const handlePlayPause = useCallback(() => {
     if (!permissions.canControl) return;
-    if (isPlaying) hostPause(); else hostPlay(currentTrack, progress.playedSeconds);
+    if (isPlaying) hostPause();
+    else hostPlay(currentTrack, progress.playedSeconds);
   }, [permissions.canControl, isPlaying, hostPause, hostPlay, currentTrack, progress.playedSeconds]);
 
   const handleSkipNext = useCallback(() => {
     if (!permissions.canControl) return;
     const sorted = useWatchPartyStore.getState().getSortedPlaylist();
-    const remaining = sorted.filter((t) => t.id !== currentTrack?.id);
-    if (remaining.length > 0) hostSkip(remaining[0]);
+    const idx    = sorted.findIndex((t) => t.id === currentTrack?.id);
+    const next   = sorted[idx + 1] || sorted[0];
+    if (next && next.id !== currentTrack?.id) hostSkip(next);
   }, [permissions.canControl, currentTrack, hostSkip]);
 
   const handleSkipPrev = useCallback(() => {
@@ -567,263 +579,370 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     if (idx > 0) hostSkip(playlist[idx - 1]);
   }, [permissions.canControl, playlist, currentTrack, hostSkip]);
 
-  // Fullscreen
+  // ─── Fullscreen ───
   useEffect(() => {
-    const h = () => { const fs = !!document.fullscreenElement; const s = useWatchPartyStore.getState(); if (s.localPreferences.videoFullscreen !== fs) s.setLocalPref('videoFullscreen', fs); };
-    document.addEventListener('fullscreenchange', h);
-    return () => document.removeEventListener('fullscreenchange', h);
+    const h = () => {
+      const fs = !!document.fullscreenElement;
+      const { localPreferences, setLocalPref: set } = useWatchPartyStore.getState();
+      if (localPreferences.videoFullscreen !== fs) set("videoFullscreen", fs);
+    };
+    document.addEventListener("fullscreenchange", h);
+    return () => document.removeEventListener("fullscreenchange", h);
   }, []);
 
   useEffect(() => {
-    const el = document.getElementById('wp-player-root');
+    const el = document.getElementById("wp-player-root");
     if (!el) return;
-    if (videoFS && !document.fullscreenElement) el.requestFullscreen?.().catch(() => {});
-    else if (!videoFS && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    if (videoFS && !document.fullscreenElement)
+      el.requestFullscreen?.().catch(() => {});
+    else if (!videoFS && document.fullscreenElement)
+      document.exitFullscreen?.().catch(() => {});
   }, [videoFS]);
 
   useEffect(() => {
     if (!videoFS) return;
-    const h = (e) => { if (e.key === 'Escape' && !document.fullscreenElement) toggleFS(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    const h = (e) => {
+      if (e.key === "Escape" && !document.fullscreenElement) toggleFS();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [videoFS, toggleFS]);
 
-  // Mouse Idle for Fullscreen
+  // ─── Mouse idle (fullscreen'de kontrolleri gizle) ───
   useEffect(() => {
-    if (!videoFS) {
-      setIsMouseIdle(false);
-      return;
-    }
+    if (!videoFS) { setIsMouseIdle(false); return; }
 
-    const resetIdleTimer = () => {
+    const reset = () => {
       setIsMouseIdle(false);
-      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = setTimeout(() => {
-        setIsMouseIdle(true);
-      }, 3000);
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => setIsMouseIdle(true), 3000);
     };
-
-    resetIdleTimer();
-    window.addEventListener('mousemove', resetIdleTimer);
-    window.addEventListener('mousedown', resetIdleTimer);
-    window.addEventListener('keydown', resetIdleTimer);
-
+    reset();
+    window.addEventListener("mousemove", reset);
+    window.addEventListener("mousedown", reset);
+    window.addEventListener("keydown",   reset);
     return () => {
-      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
-      window.removeEventListener('mousemove', resetIdleTimer);
-      window.removeEventListener('mousedown', resetIdleTimer);
-      window.removeEventListener('keydown', resetIdleTimer);
+      clearTimeout(idleTimerRef.current);
+      window.removeEventListener("mousemove", reset);
+      window.removeEventListener("mousedown", reset);
+      window.removeEventListener("keydown",   reset);
     };
   }, [videoFS]);
 
-  const videoHeight = videoFS ? '100%' : videoMode ? 220 : 0;
+  // ═══════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════
+  if (!mounted) return null;
 
-  const playerContent = (
-    <>
-      <motion.div
-        id="wp-player-root"
-        key="wp-player-card"
-        initial={{ y: 20, opacity: 0, scale: 0.95 }}
-        animate={showPlayer ? { y: 0, opacity: 1, scale: 1 } : { y: 20, opacity: 0, scale: 0.95 }}
-        exit={{ y: 20, opacity: 0, scale: 0.95 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className={videoFS
-          ? 'fixed inset-0 z-[200] flex flex-col bg-black'
-          : `fixed top-24 right-6 w-[360px] max-w-[calc(100vw-32px)] ${showPlayer ? 'z-[100] pointer-events-auto' : 'z-[-1] pointer-events-none'}`
-        }
+  const videoAreaHeight = videoFS ? "100%" : videoMode ? 190 : 0;
+
+  const content = (
+    <motion.div
+      id="wp-player-root"
+      initial={false}
+      animate={
+        showPlayer
+          ? { opacity: 1, y: 0, scale: 1, pointerEvents: "auto" }
+          : { opacity: 0, y: 16, scale: 0.97, pointerEvents: "none" }
+      }
+      transition={{ type: "spring", damping: 28, stiffness: 320 }}
+      className={
+        videoFS
+          ? "fixed inset-0 z-[200] flex bg-black"
+          : "fixed top-16 right-4 z-[100] flex flex-row-reverse items-start gap-3"
+      }
+    >
+      {/* ── ANA OYNATICI KARTI ── */}
+      <div
+        className={`relative flex pointer-events-auto transition-all duration-300
+          ${videoFS
+            ? "flex-col w-full h-full"
+            : "flex-col w-[340px] bg-zinc-900/95 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-2xl"
+          }`}
       >
-        <div id="wp-player-container"
-          className={`relative flex flex-col group/fs transition-all duration-300
-            ${videoFS ? `w-full h-full flex-1 ${isMouseIdle ? 'cursor-none' : ''}` : ''}`}
+        {/* Arka plan görseli (sadece normal modda) */}
+        {!videoFS && currentTrack?.thumbnail && (
+          <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+            <img
+              src={currentTrack.thumbnail}
+              alt=""
+              className="w-full h-full object-cover blur-2xl scale-125 opacity-15"
+            />
+          </div>
+        )}
+
+        {/* ══ VİDEO ALANI ══ */}
+        <div
+          className={`relative transition-all duration-300 bg-black
+            ${videoFS ? "absolute inset-0 w-full h-full z-0" : "w-full rounded-t-2xl overflow-hidden"}`}
+          style={{ height: videoAreaHeight }}
         >
-          {/* AYRIK ARKA PLAN (KIRPMA EFEKTİ İÇİN) */}
+          {/* Küçült butonu */}
           {!videoFS && (
-            <div className="absolute inset-0 z-0 rounded-2xl border border-white/[0.08] bg-zinc-900/95 backdrop-blur-3xl shadow-2xl shadow-black/60 pointer-events-none overflow-hidden" />
+            <button
+              onClick={() => useWatchPartyStore.getState().togglePlayer()}
+              className="absolute top-2.5 right-2.5 z-[50] p-1.5
+                         bg-black/50 hover:bg-black/70 backdrop-blur-sm
+                         rounded-lg border border-white/10 text-white/50 hover:text-white
+                         transition-all active:scale-90 shadow-lg"
+              title="Küçült"
+            >
+              <Minimize size={13} strokeWidth={2.5} />
+            </button>
           )}
 
-          {/* ═══ PLAYER ALANI ═══ */}
-          <div className={`transition-all duration-300 ${videoFS ? 'absolute inset-0 w-full h-full z-0' : 'relative rounded-t-2xl overflow-hidden z-10'}`}
-               style={videoFS ? { height: '100%' } : { height: videoHeight }}>
-
-            {isYouTube && videoId && (
-              <YouTubePlayer videoId={videoId} shouldPlay={shouldPlay} effectiveVolume={effectiveVolume}
-                videoMode={videoMode} videoFS={videoFS} ytQuality={ytQuality}
-                onReady={handleYTReady} onStateChange={handleYTState}
-                onError={(e) => console.warn('[WatchParty] YT error:', e.data)}
-                playerApiRef={playerRef} ytPlayerRef={ytPlayerRef} />
-            )}
-
-            {isSoundCloud && currentTrack?.url && (
-              <SoundCloudPlayer
-                key={currentTrack.url}
-                trackUrl={currentTrack.url}
-                shouldPlay={shouldPlay}
-                effectiveVolume={effectiveVolume}
-                videoMode={videoMode}
-                videoFS={videoFS}
-                playerApiRef={playerRef}
-                onReady={handleSCReady}
-                onDuration={handleSCDuration}
-                onProgress={handleSCProgress}
-                onEnded={handleSCEnded}
-              />
-            )}
-
-            {isGeneric && (
-              <div className={videoFS ? "absolute inset-0 w-full h-full" : "w-full h-full"}>
-                <ReactPlayer ref={playerRef} url={currentTrack.url} playing={shouldPlay}
-                  volume={effectiveVolume} muted={effectiveVolume === 0}
-                  onReady={handleRPReady} onProgress={handleRPProgress}
-                  onEnded={handleRPEnded} onError={handleRPError}
-                  progressInterval={500} width="100%" height="100%"
-                  config={{ file: { attributes: { crossOrigin: 'anonymous', preload: 'auto' } } }} />
-              </div>
-            )}
-
-            {(videoMode || videoFS) && (
-              <div className={`absolute top-4 right-4 flex items-center gap-3 z-[250] transition-opacity duration-300
-                ${videoFS 
-                  ? (isMouseIdle ? 'opacity-0 pointer-events-none' : 'opacity-100')
-                  : 'opacity-0 group-hover/fs:opacity-100'}`}
-              >
-                <button onClick={toggleFS}
-                  className="p-2.5 rounded-xl bg-black/60 hover:bg-black/90 text-white/70 hover:text-white backdrop-blur-md transition-all border border-white/10 hover:border-white/30 hover:scale-105"
-                  title={videoFS ? 'Küçült' : 'Tam Ekran'}>
-                  {videoFS ? <Minimize size={18} /> : <Maximize size={18} />}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ═══ KONTROL PANELİ ═══ */}
-          <div className={`flex flex-col transition-all duration-500 z-[150]
-            ${videoFS
-              ? `absolute bottom-0 left-0 right-0 pt-32 pb-8 px-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent gap-6 ${isMouseIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`
-              : 'relative p-3 bg-zinc-900/80 gap-3 border-t border-white/5'}`}>
-
-            {!videoFS && (
-              <button 
-                onClick={() => useWatchPartyStore.getState().togglePlayer()}
-                className="absolute top-3 right-3 p-1.5 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg z-[300] transition-colors"
-                title="Mini rozete küçült"
-              >
-                <X size={14} strokeWidth={2.5} />
-              </button>
-            )}
-
-            <div className={`flex items-center gap-3 ${videoFS ? '' : 'pr-8'}`}>
-              <div className={`relative shrink-0 rounded-lg overflow-hidden shadow-lg border border-white/10 bg-zinc-800/50 ${videoFS ? 'w-24 h-24 rounded-xl' : 'w-12 h-12'}`}>
-                {currentTrack?.thumbnail
-                  ? <img src={currentTrack.thumbnail} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-white/5 flex items-center justify-center text-white/20 text-xl">🎵</div>}
-                {buffering && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                    <div className="w-4 h-4 border-2 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin" />
-                  </div>
-                )}
-                {!isListening && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                    <span className={`${videoFS ? 'text-2xl' : 'text-xs'}`}>🔇</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <div className="flex items-center gap-2">
-                  <p className={`font-bold text-white truncate drop-shadow-sm ${videoFS ? 'text-2xl' : 'text-sm'}`}>
-                    {currentTrack?.title || 'Parça seçilmedi'}
-                  </p>
-                  {!isListening && <span className="shrink-0 text-[9px] font-bold bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-md border border-red-500/30">SES KAPALI</span>}
-                </div>
-                
-                {currentTrack?.addedByName && (
-                  <p className={`text-white/50 truncate flex items-center gap-1.5 font-medium ${videoFS ? 'text-sm mt-1' : 'text-xs mt-0.5'}`}>
-                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[8px] font-bold border border-emerald-500/30">
-                      {currentTrack.addedByName[0]?.toUpperCase()}
-                    </span>
-                    {currentTrack.addedByName}
-                    {isGeneric && <span className="ml-1 text-[9px] bg-white/10 px-1 py-0.5 rounded text-white/40">URL</span>}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {currentTrack && permissions.canControl && (
-              <div className="flex items-center gap-2 px-1">
-                <span className={`tabular-nums font-medium font-mono text-right opacity-50 ${videoFS ? 'text-sm w-[45px]' : 'text-[10px] w-[32px]'}`}>
-                  {formatTime(progress.playedSeconds)}
-                </span>
-                <div className="flex-1 relative group/seek py-1.5 flex items-center cursor-pointer"
-                     onMouseDown={handleSeekStart} onTouchStart={handleSeekStart}
-                     onMouseUp={handleSeekCommit} onTouchEnd={handleSeekCommit}
-                     onMouseMove={(e) => {
-                       if (seekingRef.current) handleSeekChange(e);
-                     }}
+          {/* ── Player Container (Always Mounted if track exists) ── */}
+          <div className="w-full h-full relative">
+            <AnimatePresence>
+              {(!currentTrack || (!videoMode && !videoFS)) && (
+                <motion.div
+                  key="placeholder"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 flex flex-col items-center justify-center
+                             text-white/20 bg-zinc-900 z-10"
                 >
-                  <input type="range" min={0} max={1} step={0.0001}
-                    value={progress.played || 0}
-                    onChange={handleSeekChange}
-                    disabled={!permissions.canControl}
-                    className={`w-full appearance-none bg-white/10 rounded-full transition-all duration-200 shadow-inner
-                      ${videoFS ? 'h-1.5 group-hover/seek:h-2' : 'h-1 group-hover/seek:h-1.5'}
-                      [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:h-0 [&::-webkit-slider-thumb]:appearance-none
-                      group-hover/seek:[&::-webkit-slider-thumb]:w-3 group-hover/seek:[&::-webkit-slider-thumb]:h-3
-                      group-hover/seek:[&::-webkit-slider-thumb]:rounded-full group-hover/seek:[&::-webkit-slider-thumb]:bg-emerald-400
-                      group-hover/seek:[&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(52,211,153,0.8)]
-                      ${permissions.canControl ? 'cursor-pointer' : 'cursor-default pointer-events-none'}`}
-                    style={{ background: `linear-gradient(to right, rgb(52 211 153) ${progress.played * 100}%, rgba(255,255,255,0.1) ${progress.played * 100}%)` }}
+                  <MonitorPlay size={40} className="mb-2 opacity-40" />
+                  <span className="text-xs font-medium">
+                    {!currentTrack ? "Video bekleniyor..." : "Video gizli"}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {currentTrack && (
+              <div
+                className="w-full h-full transition-opacity duration-300"
+                style={{
+                  opacity: (videoMode || videoFS) ? 1 : 0,
+                  pointerEvents: (videoMode || videoFS) ? "auto" : "none"
+                }}
+              >
+                {isYouTube && (
+                  <YouTubePlayer
+                    videoId={videoId}
+                    shouldPlay={shouldPlay}
+                    effectiveVolume={effectiveVolume}
+                    videoMode={videoMode}
+                    videoFS={videoFS}
+                    ytQuality={ytQuality}
+                    onReady={handleYTReady}
+                    onStateChange={handleYTState}
+                    onError={(e) => console.warn("[WatchParty] YT error:", e?.data)}
+                    playerApiRef={playerRef}
+                    ytPlayerRef={ytPlayerRef}
                   />
-                </div>
-                <span className={`tabular-nums font-medium font-mono opacity-50 ${videoFS ? 'text-sm w-[45px]' : 'text-[10px] w-[32px]'}`}>
-                  {formatTime(duration)}
-                </span>
+                )}
+                {isSoundCloud && (
+                  <SoundCloudPlayer
+                    key={currentTrack.url}
+                    trackUrl={currentTrack.url}
+                    shouldPlay={shouldPlay}
+                    effectiveVolume={effectiveVolume}
+                    videoMode={videoMode}
+                    videoFS={videoFS}
+                    playerApiRef={playerRef}
+                    onReady={handleSCReady}
+                    onDuration={handleSCDuration}
+                    onProgress={handleSCProgress}
+                    onEnded={handleSCEnded}
+                  />
+                )}
+                {isGeneric && (
+                  <div className="w-full h-full">
+                    <ReactPlayer
+                      ref={playerRef}
+                      url={currentTrack.url}
+                      playing={shouldPlay}
+                      volume={effectiveVolume}
+                      muted={effectiveVolume === 0}
+                      onReady={handleRPReady}
+                      onProgress={handleRPProgress}
+                      onEnded={handleRPEnded}
+                      onError={handleRPError}
+                      progressInterval={500}
+                      width="100%"
+                      height="100%"
+                      config={{
+                        file: { attributes: { crossOrigin: "anonymous", preload: "auto" } },
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
-
-            <div className={`flex items-center justify-between w-full`}>
-              <WatchPartyControls permissions={permissions} isPlaying={isPlaying}
-                videoFS={videoFS}
-                hasVideo={!!currentTrack}
-                onPlayPause={handlePlayPause} onSkipNext={handleSkipNext} onSkipPrev={handleSkipPrev}
-                onTogglePlaylist={() => handleTogglePanel('playlist')}
-                onTogglePrefs={() => handleTogglePanel('prefs')}
-                onToggleCoHost={() => handleTogglePanel('cohost')}
-                activePanel={activePanel} />
-            </div>
           </div>
         </div>
 
-        {/* Panel açıkken dışarı tıklayınca kapansın diye tam ekran şeffaf katman */}
-        <AnimatePresence>
-          {activePanel && (
-            <motion.div
-              key="wp-panel-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[140] bg-transparent"
-              onClick={() => setActivePanel(null)}
-            />
-          )}
-        </AnimatePresence>
+        {/* ══ KONTROL PANELİ ══ */}
+        <div
+          className={`flex flex-col z-[150] transition-all duration-500
+            ${videoFS
+              ? `absolute bottom-0 left-0 right-0 px-10 pt-8 pb-8
+                 bg-gradient-to-t from-black/90 via-black/60 to-transparent
+                 ${isMouseIdle ? "opacity-0 pointer-events-none" : "opacity-100"}`
+              : "relative p-4 gap-3"
+            }`}
+        >
+          <div className={`flex items-center gap-3 ${videoFS ? "mb-4" : ""}`}>
+            <div className={`relative rounded-xl overflow-hidden shrink-0 border border-white/10
+              ${videoFS ? "w-16 h-16" : "w-12 h-12"}`}>
+              {currentTrack?.thumbnail ? (
+                <img src={currentTrack.thumbnail} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                  <Music size={18} className="text-white/20" />
+                </div>
+              )}
+              {buffering && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                  <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
 
-        <AnimatePresence>
-          {activePanel === 'playlist' && (
-            <WatchPartyPlaylist key="wp-panel-playlist" serverId={serverId} channelId={channelId}
-              permissions={permissions} videoFS={videoFS}
-              onPlayTrack={(t) => { if (permissions.canControl) hostSkip(t); setActivePanel(null); }}
-              onClose={() => setActivePanel(null)} />
+            <div className="flex-1 min-w-0">
+              <p className={`font-bold text-white truncate ${videoFS ? "text-xl" : "text-sm"}`}>
+                {currentTrack?.title || "Parça seçilmedi"}
+              </p>
+              {currentTrack?.addedByName && (
+                <p className={`text-white/50 truncate mt-0.5 ${videoFS ? "text-sm" : "text-xs"}`}>
+                  {currentTrack.addedByName}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {currentTrack && (
+            <div className="flex flex-col gap-1">
+              <div
+                className="relative group/seek h-5 flex items-center cursor-pointer"
+                onMouseDown={handleSeekStart}
+                onTouchStart={handleSeekStart}
+                onMouseUp={handleSeekCommit}
+                onTouchEnd={handleSeekCommit}
+                onMouseMove={(e) => { if (seekingRef.current) handleSeekChange(e); }}
+              >
+                <div className="absolute inset-x-0 h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 rounded-full transition-all duration-75"
+                    style={{ width: `${(progress.played || 0) * 100}%` }}
+                  />
+                </div>
+                <input
+                  type="range" min={0} max={1} step={0.0001}
+                  value={progress.played || 0}
+                  onChange={handleSeekChange}
+                  disabled={!permissions.canControl}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default"
+                />
+                <div
+                  className="absolute w-3 h-3 bg-white rounded-full shadow-md
+                             opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+                  style={{ left: `calc(${(progress.played || 0) * 100}% - 6px)` }}
+                />
+              </div>
+
+              <div className="flex justify-between px-0.5">
+                <span className="text-[11px] tabular-nums font-mono text-white/40">
+                  {formatTime(progress.playedSeconds)}
+                </span>
+                <span className="text-[11px] tabular-nums font-mono text-white/40">
+                  {formatTime(duration)}
+                </span>
+              </div>
+            </div>
           )}
-          {activePanel === 'prefs' && <WatchPartyUserPrefs key="wp-panel-prefs" videoFS={videoFS} onClose={() => setActivePanel(null)} />}
-          {activePanel === 'cohost' && (
-            <WatchPartyCoHostManager key="wp-panel-cohost" serverId={serverId} channelId={channelId} videoFS={videoFS}
-              onClose={() => setActivePanel(null)} />
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </>
+
+          <div className={`flex items-center ${videoFS ? "gap-6" : "gap-2"}`}>
+            <button
+              onClick={handleSkipPrev}
+              disabled={!permissions.canControl}
+              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white
+                         transition-all active:scale-90 disabled:opacity-30 disabled:cursor-default"
+            >
+              <SkipBack size={videoFS ? 22 : 18} fill="currentColor" />
+            </button>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.93 }}
+              onClick={handlePlayPause}
+              disabled={!permissions.canControl}
+              className={`flex items-center justify-center rounded-full bg-white text-black
+                           shadow-lg hover:bg-gray-100 transition-colors
+                           disabled:opacity-40 disabled:cursor-default
+                           ${videoFS ? "w-14 h-14" : "w-9 h-9"}`}
+            >
+              {isPlaying
+                ? <Pause size={videoFS ? 24 : 18} fill="currentColor" />
+                : <Play  size={videoFS ? 24 : 18} fill="currentColor" className="ml-0.5" />
+              }
+            </motion.button>
+
+            <button
+              onClick={handleSkipNext}
+              disabled={!permissions.canControl}
+              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white
+                         transition-all active:scale-90 disabled:opacity-30 disabled:cursor-default"
+            >
+              <SkipForward size={videoFS ? 22 : 18} fill="currentColor" />
+            </button>
+
+            <div className="ml-auto">
+              <WatchPartyControls
+                videoFS={videoFS}
+                hasVideo={!!currentTrack}
+                onTogglePlaylist={() => handleTogglePanel("playlist")}
+                onTogglePrefs={() => handleTogglePanel("prefs")}
+                activePanel={activePanel}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── YAN PANEL (Sol taraf) ── */}
+      <AnimatePresence mode="sync">
+        {activePanel === "playlist" && (
+          <WatchPartyPlaylist
+            key="panel-playlist"
+            serverId={serverId}
+            channelId={channelId}
+            permissions={permissions}
+            videoFS={videoFS}
+            onPlayTrack={(t) => {
+              if (permissions.canControl) hostSkip(t);
+              setActivePanel(null);
+            }}
+            onClose={() => setActivePanel(null)}
+          />
+        )}
+        {activePanel === "prefs" && (
+          <WatchPartyUserPrefs
+            key="panel-prefs"
+            videoFS={videoFS}
+            onClose={() => setActivePanel(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Backdrop (fullscreen panel kapatma) */}
+      <AnimatePresence>
+        {activePanel && videoFS && (
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[140]"
+            onClick={() => setActivePanel(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 
-  if (typeof window === "undefined") return null;
-  return createPortal(playerContent, document.body);
+  return createPortal(content, document.body);
 }

@@ -252,21 +252,13 @@ if (webpackFixedCount > 0) {
   console.log(`Fixed ${webpackFixedCount} webpack bundle file(s).`);
 }
 
-// Check if WASM files exist in out directory
-const wasmFile = path.join(outDir, 'rnnoise.wasm');
-const workletFile = path.join(outDir, 'rnnoise.worklet.js');
+// Check if RNNoise bundled worklet exists in out directory
+const rnnoiseWorkletFile = path.join(outDir, 'rnnoise-suppressor.worklet.js');
 
-if (fs.existsSync(wasmFile)) {
-  console.log('✓ rnnoise.wasm found in out/ directory');
+if (fs.existsSync(rnnoiseWorkletFile)) {
+  console.log('✓ rnnoise-suppressor.worklet.js found in out/ directory');
 } else {
-  console.warn('⚠ WARNING: rnnoise.wasm NOT found in out/ directory');
-  console.warn('  Expected location:', wasmFile);
-}
-
-if (fs.existsSync(workletFile)) {
-  console.log('✓ rnnoise.worklet.js found in out/ directory');
-} else {
-  console.warn('⚠ WARNING: rnnoise.worklet.js NOT found in out/ directory');
-  console.warn('  Expected location:', workletFile);
+  console.warn('⚠ WARNING: rnnoise-suppressor.worklet.js NOT found in out/ directory');
+  console.warn('  Expected location:', rnnoiseWorkletFile);
 }
 

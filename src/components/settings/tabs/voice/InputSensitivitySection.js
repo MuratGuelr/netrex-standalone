@@ -78,9 +78,15 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
     };
     initAudio();
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null; // 🔥 FIX: Ref'i sıfırla ki çift başlatma koruması doğru çalışsın
+      }
       if (stream) stream.getTracks().forEach((t) => t.stop());
-      if (audioContext) audioContext.close();
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
     };
   }, [audioInputId, rmsToPercentage, isSettingsModalOpen]);
 

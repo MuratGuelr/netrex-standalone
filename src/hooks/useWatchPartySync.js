@@ -1,282 +1,119 @@
 // src/hooks/useWatchPartySync.js
-import { useEffect, useCallback, useRef } from 'react';
-import { DataPacket_Kind } from 'livekit-client';
+import { useCallback, useRef } from 'react';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
-import { useWatchPartyPermission } from '@/src/hooks/useWatchPartyPermission';
-import { WP_ACTIONS } from '@/src/constants/watchPartyConstants';
 import {
   setCurrentTrackInDb,
   updatePlaybackInDb,
+  clearCurrentTrackInDb,
 } from '@/src/services/watchPartyService';
+import { WP_MSG } from '@/src/constants/watchPartyConstants';
+import { DataPacket_Kind } from 'livekit-client';
 
-const ENCODER = new TextEncoder();
-const DECODER = new TextDecoder();
-
-// ─── Güvenli seek helper — sadece property ataması, AbortError üretmez ───
-function seekPlayer(playerRef, seconds) {
+// DataChannel üzerinden anlık mesaj gönder (Firebase'e ek olarak)
+function sendRoomMessage(room, type, payload) {
+  if (!room) return;
   try {
-    playerRef.current?.seekTo?.(seconds, 'seconds');
-  } catch (err) {
-    console.warn('[WatchParty] seekTo error:', err);
+    const msg = JSON.stringify({ type, payload, ts: Date.now() });
+    const encoded = new TextEncoder().encode(msg);
+    room.localParticipant?.publishData(encoded, {
+      kind: DataPacket_Kind.RELIABLE,
+    });
+  } catch (e) {
+    console.warn('[WatchPartySync] DataChannel send failed:', e);
   }
 }
 
 export function useWatchPartySync(room, playerRef, serverId, channelId) {
-  const {
-    setPlaybackState,
-    setCurrentTrack,
-    playbackState,
-    currentTrack,
-    getSortedPlaylist,
-  } = useWatchPartyStore();
 
-  const permissions = useWatchPartyPermission(serverId);
-  const permRef     = useRef(permissions);
-
-  useEffect(() => {
-    permRef.current = permissions;
-  }, [permissions]);
-
-  // ═══════════════════════════════════════
-  // BROADCAST
-  // ═══════════════════════════════════════
-  const broadcast = useCallback((action, payload = {}) => {
-    if (!room) return;
-
-    const message = JSON.stringify({
-      type: 'WATCH_PARTY',
-      action,
-      payload: { ...payload, timestamp: Date.now() },
-    });
-
-    room.localParticipant.publishData(
-      ENCODER.encode(message),
-      DataPacket_Kind.RELIABLE
-    );
-  }, [room]);
-
-  // ═══════════════════════════════════════
-  // KONTROL FONKSİYONLARI
-  // ═══════════════════════════════════════
-
-  const hostPlay = useCallback((track, seekPos = 0) => {
-    if (!permRef.current.canControl) return;
-
+  // ─── Host: Oynat ───
+  const hostPlay = useCallback(async (track, fromPosition = 0) => {
+    if (!track) return;
     const now = Date.now();
-    const state = {
+    // startedAt = şu an - pozisyon (saniye → ms)
+    // Böylece herkes (Date.now() - startedAt) / 1000 ile pozisyonu bulur
+    const startedAt = now - Math.floor(fromPosition * 1000);
+
+    const playbackState = {
       isPlaying: true,
-      startedAt: now - (seekPos * 1000),
-      seekPosition: seekPos,
+      startedAt,
+      seekPosition: fromPosition,
       lastUpdated: now,
     };
 
-    setPlaybackState(state);
-    if (track) setCurrentTrack(track);
+    // Firebase'e yaz (geç gelen kullanıcılar için kalıcı)
+    await updatePlaybackInDb(serverId, channelId, playbackState);
 
-    broadcast(WP_ACTIONS.PLAY, {
-      track: track || currentTrack,
-      startedAt: state.startedAt,
-      seekPosition: seekPos,
-    });
+    // DataChannel ile anlık bildir (düşük gecikme)
+    sendRoomMessage(room, WP_MSG.PLAY, { startedAt, fromPosition });
+  }, [room, serverId, channelId]);
 
-    // Firebase: sadece yeni track başladığında snapshot güncelle
-    if (track) {
-      setCurrentTrackInDb(serverId, channelId, track).catch(console.error);
-    }
-  }, [broadcast, currentTrack, setPlaybackState, setCurrentTrack,
-      serverId, channelId]);
+  // ─── Host: Duraklat ───
+  const hostPause = useCallback(async () => {
+    const currentPos = playerRef.current?.getCurrentTime?.() || 0;
+    const now = Date.now();
 
-  const hostPause = useCallback(() => {
-    if (!permRef.current.canControl) return;
-    if (!playerRef.current) return;
-
-    const currentTime = playerRef.current.getCurrentTime?.() || 0;
-    const state = {
+    const playbackState = {
       isPlaying: false,
-      seekPosition: currentTime,
-      lastUpdated: Date.now(),
-    };
-
-    setPlaybackState(state);
-    broadcast(WP_ACTIONS.PAUSE, { position: currentTime });
-
-    // Firebase'e sadece durduğumuz son konumu checkpoint olarak yaz
-    updatePlaybackInDb(serverId, channelId, state).catch(console.error);
-  }, [broadcast, setPlaybackState, playerRef, serverId, channelId]);
-
-  const hostSeek = useCallback((position) => {
-    if (!permRef.current.canControl) return;
-
-    const now = Date.now();
-    const state = {
-      isPlaying: true,
-      startedAt: now - (position * 1000),
-      seekPosition: position,
+      startedAt: null,
+      seekPosition: currentPos,
       lastUpdated: now,
     };
 
-    setPlaybackState(state);
-    broadcast(WP_ACTIONS.SEEK, { position, startedAt: state.startedAt });
+    await updatePlaybackInDb(serverId, channelId, playbackState);
+    sendRoomMessage(room, WP_MSG.PAUSE, { seekPosition: currentPos });
+  }, [room, serverId, channelId, playerRef]);
 
-    // Kendi player'ımızı da seek et
-    seekPlayer(playerRef, position);
-  }, [broadcast, setPlaybackState, serverId, channelId, playerRef]);
-
-  const hostSkip = useCallback((nextTrack) => {
-    if (!permRef.current.canControl) return;
-
-    setCurrentTrack(nextTrack);
+  // ─── Host: Seek ───
+  const hostSeek = useCallback(async (seconds) => {
+    const { playbackState } = useWatchPartyStore.getState();
     const now = Date.now();
-    const state = {
-      isPlaying: true,
-      startedAt: now,
-      seekPosition: 0,
-      lastUpdated: now,
-    };
 
-    setPlaybackState(state);
-    broadcast(WP_ACTIONS.SKIP, { track: nextTrack });
-    // Firebase: sadece track değişimini yansıt (snapshot)
-    setCurrentTrackInDb(serverId, channelId, nextTrack).catch(console.error);
-  }, [broadcast, setPlaybackState, setCurrentTrack, serverId, channelId]);
-
-  const autoAdvance = useCallback(() => {
-    if (!permRef.current.canControl) return;
-
-    const sorted = getSortedPlaylist();
-    const remaining = sorted.filter((t) => t.id !== currentTrack?.id);
-
-    if (remaining.length > 0) {
-      hostSkip(remaining[0]);
+    let newState;
+    if (playbackState.isPlaying) {
+      const startedAt = now - Math.floor(seconds * 1000);
+      newState = {
+        isPlaying: true,
+        startedAt,
+        seekPosition: seconds,
+        lastUpdated: now,
+      };
     } else {
-      hostPause();
+      newState = {
+        isPlaying: false,
+        startedAt: null,
+        seekPosition: seconds,
+        lastUpdated: now,
+      };
     }
-  }, [getSortedPlaylist, currentTrack, hostSkip, hostPause]);
 
-  // ═══════════════════════════════════════
-  // ALMA (DataChannel)
-  // ═══════════════════════════════════════
-  useEffect(() => {
-    if (!room) return;
+    await updatePlaybackInDb(serverId, channelId, newState);
+    sendRoomMessage(room, WP_MSG.SEEK, { seconds, isPlaying: playbackState.isPlaying });
 
-    const handleData = (payload, participant) => {
-      if (participant?.identity === room.localParticipant.identity) return;
+    // Local seek (anında)
+    try { playerRef.current?.seekTo?.(seconds, 'seconds'); } catch {}
+  }, [room, serverId, channelId, playerRef]);
 
-      try {
-        const msg = JSON.parse(DECODER.decode(payload));
-        if (msg.type !== 'WATCH_PARTY') return;
+  // ─── Host: Parça atla ───
+  const hostSkip = useCallback(async (track) => {
+    if (!track) return;
+    await setCurrentTrackInDb(serverId, channelId, track);
+    sendRoomMessage(room, WP_MSG.SKIP, { track });
+  }, [room, serverId, channelId]);
 
-        const { action, payload: data } = msg;
+  // ─── Auto advance ───
+  const autoAdvance = useCallback(async () => {
+    const state = useWatchPartyStore.getState();
+    const sorted = state.getSortedPlaylist();
+    const currentIdx = sorted.findIndex((t) => t.id === state.currentTrack?.id);
+    const next = sorted[currentIdx + 1];
 
-        // BILGISAYAR SAATLERI FARKI OLDUGU ICIN (örn: biri 10s ileri)
-        // Karsi tarafin yolladigi startedAt veya timestamp DEGERINI DIKKATE ALMIYORUZ.
-        // Mesaj aninda (50ms) gelir. O andaki yerel Date.now() gercek zamandir.
-        
-        switch (action) {
-          case WP_ACTIONS.PLAY: {
-            if (data.track) setCurrentTrack(data.track);
-            const localStartedAt = Date.now() - ((data.seekPosition || 0) * 1000);
-            
-            setPlaybackState({
-              isPlaying: true,
-              startedAt: localStartedAt,
-              seekPosition: data.seekPosition,
-              lastUpdated: Date.now(),
-            });
-            // Oynatici gecikmesi toleransi icerisinde baslar
-            seekPlayer(playerRef, data.seekPosition);
-            break;
-          }
+    if (next) {
+      await setCurrentTrackInDb(serverId, channelId, next);
+      sendRoomMessage(room, WP_MSG.SKIP, { track: next });
+    } else {
+      await clearCurrentTrackInDb(serverId, channelId);
+    }
+  }, [room, serverId, channelId]);
 
-          case WP_ACTIONS.PAUSE: {
-            setPlaybackState({
-              isPlaying: false,
-              seekPosition: data.position,
-              lastUpdated: Date.now(),
-            });
-            seekPlayer(playerRef, data.position);
-            break;
-          }
-
-          case WP_ACTIONS.SEEK: {
-            const localStartedAt = Date.now() - ((data.position || 0) * 1000);
-            
-            setPlaybackState({
-              isPlaying: true,
-              startedAt: localStartedAt,
-              seekPosition: data.position,
-              lastUpdated: Date.now(),
-            });
-            seekPlayer(playerRef, data.position);
-            break;
-          }
-
-          case WP_ACTIONS.SKIP: {
-            if (data.track) setCurrentTrack(data.track);
-            
-            setPlaybackState({
-              isPlaying: true,
-              startedAt: Date.now(),
-              seekPosition: 0,
-              lastUpdated: Date.now(),
-            });
-            break;
-          }
-
-          case WP_ACTIONS.SYNC_REQ: {
-            if (permRef.current.canControl && playerRef.current) {
-              const curTime = playerRef.current.getCurrentTime?.() || 0;
-              broadcast(WP_ACTIONS.SYNC_RESP, {
-                track: useWatchPartyStore.getState().currentTrack,
-                isPlaying: useWatchPartyStore.getState().playbackState.isPlaying,
-                position: curTime,
-                // Karsi taraf hesaplayacak ama DB geriye donuklugu icin tut
-                startedAt: Date.now() - (curTime * 1000),
-              });
-            }
-            break;
-          }
-
-          case WP_ACTIONS.SYNC_RESP: {
-            if (data.track) setCurrentTrack(data.track);
-            
-            const pos = data.position || 0;
-            const localStartedAt = Date.now() - (pos * 1000);
-            
-            setPlaybackState({
-              isPlaying: data.isPlaying,
-              startedAt: localStartedAt,
-              seekPosition: pos,
-              lastUpdated: Date.now(),
-            });
-            setTimeout(() => seekPlayer(playerRef, pos), 200);
-            break;
-          }
-        }
-      } catch (err) {
-        console.error('[WatchParty] DataChannel error:', err);
-      }
-    };
-
-    room.on('dataReceived', handleData);
-    return () => room.off('dataReceived', handleData);
-  }, [room, playerRef, setPlaybackState, setCurrentTrack, broadcast]);
-
-  // ═══════════════════════════════════════
-  // İLK KATILIM SYNC
-  // ═══════════════════════════════════════
-  useEffect(() => {
-    if (!room || permRef.current.canControl) return;
-    const t = setTimeout(() => broadcast(WP_ACTIONS.SYNC_REQ), 1200);
-    return () => clearTimeout(t);
-  }, [room, broadcast]);
-
-  return {
-    hostPlay,
-    hostPause,
-    hostSeek,
-    hostSkip,
-    autoAdvance,
-    broadcast,
-  };
+  return { hostPlay, hostPause, hostSeek, hostSkip, autoAdvance };
 }
