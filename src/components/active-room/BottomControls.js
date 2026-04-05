@@ -106,6 +106,7 @@ export default function BottomControls({
   const controlBarHidden = useSettingsStore(state => state.controlBarHidden);
   const toggleControlBarHidden = useSettingsStore(state => state.toggleControlBarHidden);
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
+  const cameraMirrorEffect = useSettingsStore(state => state.cameraMirrorEffect);
   const { showChatPanel, chatPosition, chatWidth } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
@@ -208,6 +209,7 @@ export default function BottomControls({
       deafenedBy: serverDeafened ? deafenedBy : null,
       mutedAt: serverMuted ? mutedAt : null,
       deafenedAt: serverDeafened ? deafenedAt : null,
+      cameraMirrorEffect: cameraMirrorEffect,
     });
 
     // Aynı metadata ise güncelleme yapma
@@ -309,7 +311,8 @@ export default function BottomControls({
     mutedAt,
     deafenedAt,
     quickStatus,
-    pinnedStreamIds
+    pinnedStreamIds,
+    cameraMirrorEffect
   ]);
 
   // Video track durumunu senkronize et (sadece event'lerde, sürekli kontrol yok)

@@ -8,6 +8,22 @@ export default function ApplicationSettings() {
   const checkUpdatesOnStartup = useSettingsStore(state => state.checkUpdatesOnStartup);
   const setCheckUpdatesOnStartup = useSettingsStore(state => state.setCheckUpdatesOnStartup);
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
+  const toggleWatchPartyEnabled = useSettingsStore(state => state.toggleWatchPartyEnabled);
+  
+  const wpVideoMode = useSettingsStore(state => state.wpVideoMode);
+  const setWpVideoMode = useSettingsStore(state => state.setWpVideoMode);
+  
+  const wpVideoQuality = useSettingsStore(state => state.wpVideoQuality);
+  const setWpVideoQuality = useSettingsStore(state => state.setWpVideoQuality);
+  
+  const wpDefaultVolume = useSettingsStore(state => state.wpDefaultVolume);
+  const setWpDefaultVolume = useSettingsStore(state => state.setWpDefaultVolume);
+  
+  const wpAutoJoin = useSettingsStore(state => state.wpAutoJoin);
+  const setWpAutoJoin = useSettingsStore(state => state.setWpAutoJoin);
+  
+  const wpAutoMute = useSettingsStore(state => state.wpAutoMute);
+  const setWpAutoMute = useSettingsStore(state => state.setWpAutoMute);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
@@ -75,7 +91,7 @@ export default function ApplicationSettings() {
             label="Watch Party Özelliğini Etkinleştir"
             description="Bu ayar açıkken ses odalarında Watch Party simgesini görebilir ve diğer katılımcılarla birlikte senkronize olarak YouTube videoları izleyebilirsiniz."
             checked={watchPartyEnabled}
-            onChange={() => useSettingsStore.getState().toggleWatchPartyEnabled()}
+            onChange={() => toggleWatchPartyEnabled()}
           />
           
           {watchPartyEnabled && (
@@ -92,8 +108,8 @@ export default function ApplicationSettings() {
                  </div>
                  <div className="sm:w-[220px]">
                     <select
-                      value={useSettingsStore.getState().wpVideoMode}
-                      onChange={(e) => useSettingsStore.getState().setWpVideoMode(e.target.value)}
+                      value={wpVideoMode}
+                      onChange={(e) => setWpVideoMode(e.target.value)}
                       className="w-full bg-[#111214] border border-white/10 text-white p-2.5 rounded-xl text-sm font-medium hover:border-emerald-500/50 focus:border-emerald-500/50 outline-none appearance-none cursor-pointer transition-all duration-300"
                     >
                       <option value="player">Ana Ekran (Player)</option>
@@ -109,8 +125,8 @@ export default function ApplicationSettings() {
                  </div>
                  <div className="sm:w-[220px]">
                     <select
-                      value={useSettingsStore.getState().wpVideoQuality}
-                      onChange={(e) => useSettingsStore.getState().setWpVideoQuality(e.target.value)}
+                      value={wpVideoQuality}
+                      onChange={(e) => setWpVideoQuality(e.target.value)}
                       className="w-full bg-[#111214] border border-white/10 text-white p-2.5 rounded-xl text-sm hover:border-emerald-500/50 focus:border-emerald-500/50 outline-none appearance-none cursor-pointer transition-all duration-300"
                     >
                       <option value="auto">Otomatik (Önerilen)</option>
@@ -130,14 +146,14 @@ export default function ApplicationSettings() {
                     <span className="font-semibold text-white/90">Açılış Sesi Düzeyi</span>
                     <span className="text-xs text-[#949ba4] block mt-1">Watch party başladığında videonun otomatik ses seviyesi</span>
                   </div>
-                  <span className="font-bold text-emerald-400">%{useSettingsStore.getState().wpDefaultVolume}</span>
+                  <span className="font-bold text-emerald-400">%{wpDefaultVolume}</span>
                 </div>
                 <input
                   type="range"
                   min="0"
                   max="100"
-                  value={useSettingsStore.getState().wpDefaultVolume}
-                  onChange={(e) => useSettingsStore.getState().setWpDefaultVolume(parseInt(e.target.value))}
+                  value={wpDefaultVolume}
+                  onChange={(e) => setWpDefaultVolume(parseInt(e.target.value))}
                   className="w-full h-2 bg-black/40 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                 />
               </div>
@@ -147,15 +163,15 @@ export default function ApplicationSettings() {
               <ToggleSwitch
                 label="Otomatik Katıl"
                 description="Biri odada Watch Party başlattığında otomatik olarak player ekranına geçiş yap."
-                checked={useSettingsStore.getState().wpAutoJoin}
-                onChange={() => useSettingsStore.getState().setWpAutoJoin(!useSettingsStore.getState().wpAutoJoin)}
+                checked={wpAutoJoin}
+                onChange={() => setWpAutoJoin(!wpAutoJoin)}
               />
 
               <ToggleSwitch
                 label="Katılınca Mikrofonu Sustur"
                 description="Watch Party başlattığında veya başladığında mikrafonunu otomatik kapatır."
-                checked={useSettingsStore.getState().wpAutoMute}
-                onChange={() => useSettingsStore.getState().setWpAutoMute(!useSettingsStore.getState().wpAutoMute)}
+                checked={wpAutoMute}
+                onChange={() => setWpAutoMute(!wpAutoMute)}
               />
             </div>
           )}

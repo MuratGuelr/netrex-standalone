@@ -305,9 +305,11 @@ const UserCard = ({
   const videoStyle = useMemo(
     () => ({
       transform:
-        participant.isLocal && cameraMirrorEffect ? "scaleX(-1)" : undefined,
+        (participant.isLocal ? cameraMirrorEffect : remoteState.cameraMirrorEffect)
+          ? "scaleX(-1)"
+          : undefined,
     }),
-    [participant.isLocal, cameraMirrorEffect],
+    [participant.isLocal, cameraMirrorEffect, remoteState.cameraMirrorEffect],
   );
 
   // ✅ SPEAKING INDICATOR STYLE (Animasyonlu + Statik)

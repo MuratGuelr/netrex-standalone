@@ -19,9 +19,9 @@ export default function AppearanceSettings() {
   const addPreset = useSettingsStore(state => state.addQuickStatusPreset);
   const removePreset = useSettingsStore(state => state.removeQuickStatusPreset);
 
-  const [activeEmojiPicker, setActiveEmojiPicker] = useState(null); // 'p1', 'p2', etc.
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState(null);
+  const [pickerDirection, setPickerDirection] = useState('down');
   const pickerRef = useRef(null);
-  const buttonRefs = useRef({}); // Store button refs to position the picker
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -34,23 +34,19 @@ export default function AppearanceSettings() {
     }
     return () => window.removeEventListener("mousedown", handleClick);
   }, [activeEmojiPicker]);
-
-  // Calculate picker position based on the active button
-  const getPickerStyle = () => {
-      if (!activeEmojiPicker || !buttonRefs.current[activeEmojiPicker]) return {};
-      const rect = buttonRefs.current[activeEmojiPicker].getBoundingClientRect();
-      const pickerHeight = 320; // Approx height
-      
-      // Check if it fits below, otherwise show above
-      const showAbove = (rect.bottom + pickerHeight) > window.innerHeight;
-      
-      return {
-          position: 'fixed',
-          top: showAbove ? (rect.top - pickerHeight - 8) : (rect.bottom + 8),
-          left: rect.left,
-          zIndex: 99999
-      };
+  
+  const handleEmojiClick = (e, id) => {
+    if (activeEmojiPicker === id) {
+      setActiveEmojiPicker(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // If less than 350px space below, show above
+      setPickerDirection(spaceBelow < 350 ? "up" : "down");
+      setActiveEmojiPicker(id);
+    }
   };
+
 
   const fontOptions = getCommonFonts();
 
@@ -74,7 +70,7 @@ export default function AppearanceSettings() {
       </h3>
 
       {/* 🚀 Hızlı Durum Mesajları Yönetimi */}
-      <div className="glass-strong rounded-2xl border border-white/10 overflow-hidden p-6 mb-8">
+      <div className="glass-strong rounded-2xl border border-white/10 overflow-visible p-6 mb-8 relative z-[60]">
         <div className="flex items-center justify-between mb-6">
             <h4 className="text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
                 <Clock size={14} className="text-indigo-400" />
@@ -88,12 +84,11 @@ export default function AppearanceSettings() {
 
         <div className="grid grid-cols-1 gap-3">
             {presets.map((preset, index) => (
-                <div key={preset.id} className="relative">
+                <div key={preset.id} className="relative z-10">
                     <div className="flex items-center gap-3 bg-white/[0.02] border border-white/5 p-2 rounded-2xl group/preset hover:border-white/10 transition-all">
                         {/* Emoji Button */}
                         <button 
-                            ref={el => buttonRefs.current[preset.id] = el}
-                            onClick={() => setActiveEmojiPicker(activeEmojiPicker === preset.id ? null : preset.id)}
+                            onClick={(e) => handleEmojiClick(e, preset.id)}
                             className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 transition-all text-2xl shadow-sm ${
                                 activeEmojiPicker === preset.id 
                                 ? "bg-indigo-500/20 border-indigo-500/50 scale-105 shadow-indigo-500/20" 
@@ -123,6 +118,26 @@ export default function AppearanceSettings() {
                             <Trash2 size={18} />
                         </button>
                     </div>
+
+                    {/* Emoji Picker Inline Popover */}
+                    {activeEmojiPicker === preset.id && (
+                        <div 
+                            ref={pickerRef} 
+                            className={`absolute z-[100] w-[280px] drop-shadow-2xl animate-nds-scale-up ${
+                                pickerDirection === "up" 
+                                ? "bottom-full mb-3 origin-bottom-left" 
+                                : "top-[60px] left-0 origin-top-left"
+                            }`}
+                        >
+                            <EmojiPicker 
+                                onSelect={(emoji) => {
+                                    updatePreset(activeEmojiPicker, { icon: emoji });
+                                    setActiveEmojiPicker(null);
+                                }}
+                                onClose={() => setActiveEmojiPicker(null)}
+                            />
+                        </div>
+                    )}
                 </div>
             ))}
 
@@ -140,22 +155,6 @@ export default function AppearanceSettings() {
             )}
         </div>
         
-        {/* Emoji Picker Portal (Fixed Position) */}
-        {activeEmojiPicker && (
-            <div 
-                ref={pickerRef} 
-                style={getPickerStyle()}
-                className="w-[280px] drop-shadow-2xl animate-nds-scale-up origin-top-left"
-            >
-                <EmojiPicker 
-                    onSelect={(emoji) => {
-                        updatePreset(activeEmojiPicker, { icon: emoji });
-                        setActiveEmojiPicker(null);
-                    }}
-                    onClose={() => setActiveEmojiPicker(null)}
-                />
-            </div>
-        )}
 
         <p className="mt-6 text-[11px] text-[#5c5e66] leading-relaxed flex items-center gap-2 px-1">
             <Smile size={14} className="text-indigo-500/50" />

@@ -24,12 +24,13 @@ export default function VideoSettingsSection({ videoInputs }) {
   const setVideoFrameRate = useSettingsStore(s => s.setVideoFrameRate);
 
   const videoRef = useRef(null);
+  const [isPreviewActive, setIsPreviewActive] = useState(false);
 
   // Kamera Önizleme
   useEffect(() => {
     let stream;
-    // Eğer kamera devre dışıysa stream başlatma
-    if (!enableCamera) return;
+    // Eğer kamera devre dışıysa veya kullanıcı henüz önizlemeyi başlatmadıysa stream başlatma
+    if (!enableCamera || !isPreviewActive) return;
 
     const initVideo = async () => {
       if (videoInputs.length === 0) return;
@@ -49,6 +50,7 @@ export default function VideoSettingsSection({ videoInputs }) {
         }
       } catch (e) {
         console.error("Kamera önizleme hatası:", e);
+        setIsPreviewActive(false);
       }
     };
 
@@ -56,7 +58,7 @@ export default function VideoSettingsSection({ videoInputs }) {
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
     };
-  }, [videoId, videoInputs, enableCamera]);
+  }, [videoId, videoInputs, enableCamera, isPreviewActive]);
 
   return (
     <div className="mb-6">
@@ -95,7 +97,10 @@ export default function VideoSettingsSection({ videoInputs }) {
           </div>
           <ToggleSwitch
             checked={enableCamera}
-            onChange={toggleEnableCamera}
+            onChange={() => {
+              toggleEnableCamera();
+              setIsPreviewActive(false); // Kamera kapatıldığında önizlemeyi de sıfırla
+            }}
           />
         </div>
 
@@ -111,6 +116,7 @@ export default function VideoSettingsSection({ videoInputs }) {
                   value={videoId}
                   onChange={(e) => {
                     setVideoInput(e.target.value);
+                    setIsPreviewActive(false); // Cihaz değiştiğinde önizlemeyi durdur ki tekrar basılsın
                     if (room?.localParticipant)
                       room.switchActiveDevice("videoinput", e.target.value);
                   }}
@@ -134,22 +140,51 @@ export default function VideoSettingsSection({ videoInputs }) {
 
             <div className="relative w-full aspect-video bg-[#0a0a0c] rounded-xl overflow-hidden border-2 border-white/10 shadow-lg flex items-center justify-center relative z-10">
               {videoInputs.length > 0 ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform scale-x-[-1]"
-                />
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover transition-transform duration-300 ${cameraMirrorEffect ? "scale-x-[-1]" : ""} ${isPreviewActive ? "opacity-100" : "opacity-0"}`}
+                  />
+                  
+                  {/* ÖNİZLEME OVERLAY */}
+                  {!isPreviewActive && (
+                    <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-md flex flex-col items-center justify-center z-20 transition-all duration-300">
+                      <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4 shadow-2xl group/btn animate-pulse-slow">
+                        <Camera size={32} className="text-white/40 group-hover/btn:text-white group-hover/btn:scale-110 transition-all duration-300" />
+                      </div>
+                      <button
+                        onClick={() => setIsPreviewActive(true)}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all duration-300 hover:scale-105 active:scale-95"
+                      >
+                        Kamerayı Önizle
+                      </button>
+                      <p className="text-[10px] text-[#949ba4] mt-3 font-medium uppercase tracking-wider">Gizliliğinizi korumak için önizleme kapalı</p>
+                    </div>
+                  )}
+
+                  {isPreviewActive && (
+                    <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm z-30 flex items-center gap-1.5 shadow-lg border border-red-400/20 animate-in fade-in duration-300">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      ÖNİZLEME AKTİF
+                    </div>
+                  )}
+                  
+                  {isPreviewActive && (
+                    <button 
+                      onClick={() => setIsPreviewActive(false)}
+                      className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white text-[10px] font-bold px-3 py-1 rounded-lg backdrop-blur-sm z-30 transition-all border border-white/10 shadow-lg"
+                    >
+                      Durdur
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="flex flex-col items-center text-[#949ba4] opacity-50">
                   <VideoOff size={48} className="mb-2" />
                   <span className="text-sm font-bold">Kamera Yok</span>
-                </div>
-              )}
-              {videoInputs.length > 0 && (
-                <div className="absolute top-2 left-2 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
-                  ÖNİZLEME
                 </div>
               )}
             </div>
