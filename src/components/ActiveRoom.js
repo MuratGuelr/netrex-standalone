@@ -292,8 +292,8 @@ export default function ActiveRoom({
   const toggleMute = useSettingsStore((state) => state.toggleMute);
   const toggleDeaf = useSettingsStore((state) => state.toggleDeaf);
 
-  // ✅ Sadece local state — global SettingsModal AppShell'de render ediliyor
-  // store'daki showSettingsModal'ı OKUMA — çift modal açılmasına sebep olur
+  // ✅ Sadece local state - global SettingsModal AppShell'de render ediliyor
+  // store'daki showSettingsModal'ı OKUMA - çift modal açılmasına sebep olur
   const showSettings = showSettingsLocal;
   const setShowSettings = (value) => {
     setShowSettingsLocal(value);
@@ -315,9 +315,11 @@ export default function ActiveRoom({
     setShowChatPanel,
     currentChannel,
     clearCurrentChannel,
+    chatPosition,
+    setChatPosition,
+    chatWidth,
+    setChatWidth,
   } = useChatStore();
-  const [chatPosition, setChatPosition] = useState("right");
-  const [chatWidth, setChatWidth] = useState(400); // Chat genişliği (pixel)
   const [contextMenu, setContextMenu] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [pinnedStreamIds, setPinnedStreamIds] = useState([]); // ✅ Faz 2: Çoklu yayın desteği
@@ -1299,6 +1301,7 @@ export default function ActiveRoom({
       />
 
       <ModerationHandler
+        serverId={serverId}
         setServerMuted={setServerMuted}
         setServerDeafened={setServerDeafened}
         setMutedBy={setMutedBy}
@@ -1477,30 +1480,31 @@ export default function ActiveRoom({
           />
         )}
         renderBottomControls={(stopScreenShare) => (
-          <BottomControls
-            username={username}
-            serverId={serverId}
-            channelId={roomName}
-            onLeave={handleManualLeave}
-            onOpenSettings={() => setShowSettings(true)}
-            isDeafened={isDeafened}
-            onDeafenToggle={toggleDeaf}
-            isMuted={isMuted}
-            onMuteToggle={toggleMute}
-            serverMuted={serverMuted}
-            serverDeafened={serverDeafened}
-            playSound={playSound}
-            setPinnedStreamIds={setPinnedStreamIds}
-            pinnedStreamIds={pinnedStreamIds}
-            isCameraOn={isCameraOn}
-            setIsCameraOn={setIsCameraOn}
-            stopScreenShare={stopScreenShare}
-            chatPosition={chatPosition}
-            mutedBy={mutedBy}
-            deafenedBy={deafenedBy}
-            mutedAt={mutedAt}
-            deafenedAt={deafenedAt}
-          />
+          hasConnectedOnce && (
+            <BottomControls
+              username={username}
+              serverId={serverId}
+              channelId={roomName}
+              onLeave={handleManualLeave}
+              onOpenSettings={() => setShowSettings(true)}
+              isDeafened={isDeafened}
+              onDeafenToggle={toggleDeaf}
+              isMuted={isMuted}
+              onMuteToggle={toggleMute}
+              serverMuted={serverMuted}
+              serverDeafened={serverDeafened}
+              playSound={playSound}
+              setPinnedStreamIds={setPinnedStreamIds}
+              pinnedStreamIds={pinnedStreamIds}
+              isCameraOn={isCameraOn}
+              setIsCameraOn={setIsCameraOn}
+              stopScreenShare={stopScreenShare}
+              mutedBy={mutedBy}
+              deafenedBy={deafenedBy}
+              mutedAt={mutedAt}
+              deafenedAt={deafenedAt}
+            />
+          )
         )}
       />
       {contextMenu && (

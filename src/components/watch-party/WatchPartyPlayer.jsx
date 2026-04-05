@@ -25,7 +25,7 @@ function getYouTubeId(url) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SOUNDCLOUD PLAYER — postMessage API
+// SOUNDCLOUD PLAYER - postMessage API
 // ═══════════════════════════════════════════════════════════
 function SoundCloudPlayer({
   trackUrl,
@@ -410,8 +410,10 @@ export function WatchPartyPlayer({ serverId, channelId }) {
 
     const performSync = () => {
       let jumpTo = 0;
-      if (pbState.isPlaying && pbState.startedAt) {
-        jumpTo = (Date.now() - pbState.startedAt) / 1000;
+      if (pbState.isPlaying && pbState.receivedAt) {
+        // 🔥 FIX: (Şu an - Verinin Ulaştığı An) + Kayıtlı Pozisyon
+        const elapsedSinceSync = (Date.now() - pbState.receivedAt) / 1000;
+        jumpTo = (pbState.seekPosition || 0) + elapsedSinceSync;
       } else {
         jumpTo = pbState.seekPosition || 0;
       }
@@ -421,7 +423,7 @@ export function WatchPartyPlayer({ serverId, channelId }) {
 
       const actual = playerRef.current.getCurrentTime ? playerRef.current.getCurrentTime() : 0;
       
-      // Eğer ciddi bir fark varsa (1 saniyeden fazla) zıpla
+      // Eğer ciddi bir fark varsa (1.2 saniyeden fazla) zıpla
       if (Math.abs(jumpTo - actual) > 1.2) {
         console.log(`[WatchParty] Sync Pulse: Jumping to ${jumpTo.toFixed(1)}s (was at ${actual.toFixed(1)}s)`);
         try { playerRef.current.seekTo(jumpTo, 'seconds'); } catch {}
@@ -450,8 +452,9 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     
     // Initial Sync
     let jumpTo = 0;
-    if (pb.isPlaying && pb.startedAt) {
-      jumpTo = (Date.now() - pb.startedAt) / 1000;
+    if (pb.isPlaying && pb.receivedAt) {
+      const elapsedSinceSync = (Date.now() - pb.receivedAt) / 1000;
+      jumpTo = (pb.seekPosition || 0) + elapsedSinceSync;
     } else {
       jumpTo = pb.seekPosition || 0;
     }
@@ -507,8 +510,9 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     const pb = store.playbackState;
     
     let jumpTo = 0;
-    if (pb.isPlaying && pb.startedAt) {
-      jumpTo = (Date.now() - pb.startedAt) / 1000;
+    if (pb.isPlaying && pb.receivedAt) {
+      const elapsedSinceSync = (Date.now() - pb.receivedAt) / 1000;
+      jumpTo = (pb.seekPosition || 0) + elapsedSinceSync;
     } else {
       jumpTo = pb.seekPosition || 0;
     }
@@ -548,8 +552,9 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     if (d && d > 0) setDuration(d);
 
     let jumpTo = 0;
-    if (pb.isPlaying && pb.startedAt) {
-      jumpTo = (Date.now() - pb.startedAt) / 1000;
+    if (pb.isPlaying && pb.receivedAt) {
+      const elapsedSinceSync = (Date.now() - pb.receivedAt) / 1000;
+      jumpTo = (pb.seekPosition || 0) + elapsedSinceSync;
     } else {
       jumpTo = pb.seekPosition || 0;
     }

@@ -19,6 +19,7 @@ export const useWatchPartyStore = create(
         startedAt: null,
         seekPosition: 0,
         lastUpdated: null,
+        receivedAt: null,
       },
       playlist: [],
       votes: {},
@@ -50,6 +51,7 @@ export const useWatchPartyStore = create(
       // ══════════════════════════════════════
       setRemoteState: (data) => {
         const current = get();
+        const now = Date.now();
 
         const newIsActive     = data.isActive ?? false;
         const newHostId       = data.hostId ?? null;
@@ -76,12 +78,14 @@ export const useWatchPartyStore = create(
         let effectivePlaybackState = current.playbackState;
         let pbChanged = false;
         
+        // Eğer herhangibir playback alanı değiştiyse, 'receivedAt' olarak 'şu anı' işaretle
         if (isPlayingChanged || startedAtChanged || trackChanged || seekPositionChanged || lastUpdatedChanged) {
           effectivePlaybackState = {
             isPlaying: newIsPlaying,
             startedAt: newPB.startedAt ?? null,
             seekPosition: newPB.seekPosition ?? 0,
             lastUpdated: newPB.lastUpdated ?? null,
+            receivedAt: now,
           };
           pbChanged = true;
         }
@@ -151,7 +155,7 @@ export const useWatchPartyStore = create(
       },
 
       setPlaybackState: (patch) => set((s) => {
-        const newPB = { ...s.playbackState, ...patch };
+        const newPB = { ...s.playbackState, ...patch, receivedAt: Date.now() };
         // Değişim yoksa skip
         if (
           s.playbackState.isPlaying    === newPB.isPlaying &&

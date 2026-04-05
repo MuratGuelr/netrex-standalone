@@ -13,12 +13,13 @@ export function useWatchPartyDrift(playerRef) {
     intervalRef.current = setInterval(() => {
       const { playbackState } = useWatchPartyStore.getState();
 
-      // Oynatılmıyor ya da startedAt yoksa kontrol etme
-      if (!playbackState.isPlaying || !playbackState.startedAt) return;
+      // Oynatılmıyor ya da receivedAt yoksa kontrol etme
+      if (!playbackState.isPlaying || !playbackState.receivedAt) return;
       if (!playerRef.current?.getCurrentTime) return;
 
-      // Beklenen pozisyon: (şu an - başlangıç) / 1000
-      const expectedSec = (Date.now() - playbackState.startedAt) / 1000;
+      // Beklenen pozisyon: (şu an - verinin elimize ulaştığı an) + sinyaldeki konum
+      const elapsedSinceSync = (Date.now() - playbackState.receivedAt) / 1000;
+      const expectedSec = (playbackState.seekPosition || 0) + elapsedSinceSync;
       const actualSec   = playerRef.current.getCurrentTime();
 
       const drift = Math.abs(expectedSec - actualSec);

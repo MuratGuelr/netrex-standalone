@@ -12,16 +12,16 @@ import {
   VideoTrack,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { Tv, Maximize, VolumeX, MicOff, Clock } from "lucide-react";
+import { Tv, Maximize, VolumeX, MicOff, Clock, ShieldAlert } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSpeakingStore } from "@/src/store/speakingStore";
 import { useAuthStore } from "@/src/store/authStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 
 // ✅ Client-side audio level based speaking detection
-// LiveKit sunucusunun isSpeaking eşiği yüksek — düşük sesler algılanmıyor.
+// LiveKit sunucusunun isSpeaking eşiği yüksek - düşük sesler algılanmıyor.
 // participant.audioLevel (0.0-1.0) ile kendi tespitimizi yapıyoruz.
-const AUDIO_LEVEL_THRESHOLD = 0.005; // Çok hassas — kullanıcının duyduğu sesleri yakala
+const AUDIO_LEVEL_THRESHOLD = 0.005; // Çok hassas - kullanıcının duyduğu sesleri yakala
 const AUDIO_LEVEL_CHECK_INTERVAL = 80; // ms
 
 function useRemoteAudioLevelSpeaking(participant, isLocal) {
@@ -197,7 +197,7 @@ const UserCard = ({
 
   useEffect(() => {
     // ✅ Lokal: voiceProcessor'dan gelen localIsSpeaking kullan
-    // ✅ Uzak: LiveKit VAD VEYA client-side audioLevel — hangisi duyarlıysa
+    // ✅ Uzak: LiveKit VAD VEYA client-side audioLevel - hangisi duyarlıysa
     const rawIsSpeaking = participant.isLocal
       ? localIsSpeaking
       : (livekitIsSpeaking || audioLevelSpeaking);
@@ -598,6 +598,18 @@ const UserCard = ({
               <div className="absolute inset-0 bg-black/50 transition-all duration-300" />
             )}
 
+            {/* ✅ Video modunda sağ üstteki minik ikonların altına isim ekle (Sadece sunucu moderasyonu varsa) */}
+            {(shouldShowVideo && videoTrack) && (remoteState.serverMuted || remoteState.serverDeafened) && (
+              <div className="absolute top-10 right-2 z-50 flex items-center gap-1 bg-red-600/90 px-1.5 py-0.5 rounded border border-red-400/30 shadow-lg scale-90 origin-right transition-opacity group-hover:opacity-0">
+                 <ShieldAlert size={10} className="text-white" />
+                 <span className="text-[9px] font-black text-white uppercase truncate max-w-[60px]">
+                    {typeof (remoteState.mutedBy || remoteState.deafenedBy) === 'object' 
+                      ? (remoteState.mutedBy || remoteState.deafenedBy).displayName 
+                      : (remoteState.mutedBy || remoteState.deafenedBy)}
+                 </span>
+              </div>
+            )}
+
             <div
               className={`relative flex flex-col items-center ${shouldShowVideo && videoTrack ? "gap-1" : compact ? "gap-1.5" : "gap-3"}`}
             >
@@ -625,29 +637,34 @@ const UserCard = ({
 
               {!(shouldShowVideo && videoTrack) && (
                 <div
-                  className={`bg-black/60 rounded-xl border border-white/5 flex flex-col items-center justify-center ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
+                  className={`bg-black/80 rounded-2xl border border-red-500/30 flex flex-col items-center justify-center shadow-2xl ${compact ? "px-2 py-1" : "px-4 py-2"}`}
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(20,20,22,0.9) 0%, rgba(139,0,0,0.6) 100%)',
+                    backdropBlur: '12px'
+                  }}
                 >
                   <span
-                    className={`font-bold text-white/90 tracking-wide uppercase block ${compact ? "text-[9px]" : "text-xs"}`}
+                    className={`font-black text-white tracking-[0.15em] uppercase block ${compact ? "text-[8px]" : "text-[11px]"}`}
                   >
                     {remoteState.serverDeafened
-                      ? "SUNUCU SAĞIRLAŞTIRMASI"
+                      ? "SUNUCU TARAFINDAN SAĞIRLAŞTIRILDI"
                       : remoteState.serverMuted
-                        ? "SUNUCU SUSTURMASI"
+                        ? "SUNUCU TARAFINDAN SUSTURULDU"
                         : isDeafened
                           ? "SAĞIRLAŞTIRDI"
                           : "SUSTURDU"}
                   </span>
-                  {(remoteState.serverDeafened || remoteState.serverMuted) &&
-                    (remoteState.deafenedBy || remoteState.mutedBy) && (
-                      <span
-                        className={`font-medium text-red-400 mt-0.5 ${compact ? "text-[8px]" : "text-[10px]"}`}
-                      >
-                        {remoteState.serverDeafened
-                          ? `Tarafından: ${typeof remoteState.deafenedBy === "object" ? remoteState.deafenedBy.displayName : remoteState.deafenedBy}`
-                          : `Tarafından: ${typeof remoteState.mutedBy === "object" ? remoteState.mutedBy.displayName : remoteState.mutedBy}`}
+                  
+                  {(remoteState.serverDeafened || remoteState.serverMuted) && (remoteState.deafenedBy || remoteState.mutedBy) && (
+                    <div className="flex items-center gap-1.5 mt-1.5 px-2 py-1 bg-red-950/40 rounded-lg border border-red-500/20">
+                      <ShieldAlert size={compact ? 10 : 12} className="text-red-400" />
+                      <span className={`font-bold text-red-200/90 whitespace-nowrap ${compact ? "text-[8px]" : "text-[10px]"}`}>
+                        YETKİLİ: {typeof (remoteState.mutedBy || remoteState.deafenedBy) === 'object' 
+                          ? (remoteState.mutedBy || remoteState.deafenedBy).displayName 
+                          : (remoteState.mutedBy || remoteState.deafenedBy)}
                       </span>
-                    )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

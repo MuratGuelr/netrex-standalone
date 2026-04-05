@@ -69,7 +69,7 @@ const Avatar = forwardRef(function Avatar(
     effectiveBorderColor = match ? match[0] : undefined;
   }
 
-  // ✅ box-shadow ile DIŞA doğru border — avatarın boyutunu etkilemez
+  // ✅ box-shadow ile DIŞA doğru border - avatarın boyutunu etkilemez
   const toBorderShadow = (base) => {
     if (!base) return `0 0 0 2.5px rgba(255,255,255,0.12)`;
     if (base.startsWith("#")) {
@@ -151,7 +151,7 @@ const Avatar = forwardRef(function Avatar(
         `}
         style={{
           background: !src ? avatarColor : undefined,
-          // ✅ box-shadow dışa doğru — border yerine
+          // ✅ box-shadow dışa doğru - border yerine
           boxShadow: borderless ? "none" : toBorderShadow(effectiveBorderColor || avatarColor),
         }}
       >

@@ -95,13 +95,13 @@ export const useServerStore = create((set, get) => ({
     if (_inviteListener) _inviteListener();
     if (_voiceStateListener) _voiceStateListener();
 
-    // ✅ OPTIMIZATION: Optimistic update — cache'ten sunucu bilgisini hemen göster
+    // ✅ OPTIMIZATION: Optimistic update - cache'ten sunucu bilgisini hemen göster
     let nextServer = null;
     if (serverId) {
         nextServer = get().servers.find(s => s.id === serverId) || null;
     }
 
-    // ✅ FIX: Tek bir set() ile state'i güncelle — "ileri geri" glitch'ini önle
+    // ✅ FIX: Tek bir set() ile state'i güncelle - "ileri geri" glitch'ini önle
     set({ 
       currentServer: nextServer, 
       channels: [], 
@@ -124,7 +124,7 @@ export const useServerStore = create((set, get) => ({
       
       const serverDocPromise = getDoc(doc(db, "servers", serverId));
       
-      // Channels Listener — hemen başlat (getDoc'u bekleme)
+      // Channels Listener - hemen başlat (getDoc'u bekleme)
       const channelsQ = query(
         collection(db, "servers", serverId, "channels")
       );
@@ -247,7 +247,7 @@ export const useServerStore = create((set, get) => ({
         return; 
       }
 
-      // ✅ TEK set() — currentServer + listeners + isLoading = 1 render
+      // ✅ TEK set() - currentServer + listeners + isLoading = 1 render
       set({
         currentServer: { id: serverDoc.id, ...serverDoc.data() },
         isLoading: false,

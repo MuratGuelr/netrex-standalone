@@ -72,7 +72,7 @@ export default function ServerMemberList({ onClose }) {
   const [profileModal, setProfileModal] = useState(null);
   const [userProfiles, setUserProfiles] = useState({});
 
-  // ✅ FIX: Stable member ID key — listener sadece ÜYE SAYISI/ID'LERİ değişince yeniden bağlanır.
+  // ✅ FIX: Stable member ID key - listener sadece ÜYE SAYISI/ID'LERİ değişince yeniden bağlanır.
   // Daha önce: [members] dep → Firestore snapshot her members güncellemesinde listener'ı teardown/rebuild yapıyordu.
   // Şimdi: ID listesi değişmediği sürece (presence/profil güncelleme) listener sabit kalıyor.
   const memberIdsKey = useMemo(() => {
@@ -152,7 +152,7 @@ export default function ServerMemberList({ onClose }) {
     };
   }, []);
 
-  // ✅ enrichedMembers — profileColor kaynağı: Firestore users > member doc > local store (sadece kendi)
+  // ✅ enrichedMembers - profileColor kaynağı: Firestore users > member doc > local store (sadece kendi)
   const enrichedMembers = useMemo(() => {
     return members.map((member) => {
       const memberId = member.id || member.userId;

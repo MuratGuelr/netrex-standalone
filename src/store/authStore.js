@@ -57,23 +57,23 @@ export const useAuthStore = create((set) => ({
         // Yoksa (ilk giriş) Auth'tan al.
         let photoURL;
         if (existingData && "photoURL" in existingData) {
-          // Firestore'daki değeri esas al — null olsa bile
+          // Firestore'daki değeri esas al - null olsa bile
           photoURL = existingData.photoURL ?? null;
         } else {
           // İlk kez giriş → Auth'taki değeri Firestore'a yaz
           photoURL = firebaseUser.photoURL ?? null;
         }
 
-        // ── 3. displayName — Firestore'daki güncelse onu kullan ─────
+        // ── 3. displayName - Firestore'daki güncelse onu kullan ─────
         const displayName =
           existingData?.displayName && existingData.displayName !== "User"
             ? existingData.displayName
             : firebaseUser.displayName || "User";
 
         // ── 4. State'e Firestore'dan gelen photoURL'yi yaz ──────────
-        // ✅ FIX: Önce UI state'i hemen set et — setDoc'u bekleme
+        // ✅ FIX: Önce UI state'i hemen set et - setDoc'u bekleme
         // Eski: await setDoc(...) → sonra set({ isAuth: true }) → splash 1-2sn daha açık kalıyor
-        // Yeni: set() anında, setDoc arka planda — startup CPU baskısını azaltır
+        // Yeni: set() anında, setDoc arka planda - startup CPU baskısını azaltır
         const user = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -86,7 +86,7 @@ export const useAuthStore = create((set) => ({
         set({ user, isAuth: true, isLoading: false });
 
         // Firestore yazımını arka planda yap (non-blocking)
-        // ✅ lastSeen KALDIRILDI — usePresence zaten 3sn sonra yazıyor (duplicate write önlendi)
+        // ✅ lastSeen KALDIRILDI - usePresence zaten 3sn sonra yazıyor (duplicate write önlendi)
         setDoc(
           userRef,
           {

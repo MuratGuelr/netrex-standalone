@@ -69,7 +69,7 @@ export default function AppShell({
   useEffect(() => {
     setIsElectron(typeof window !== "undefined" && !!window.netrex);
     // 🚀 v5.3: Sistem seslerini RAM'e ön-yükle (Zero Latency)
-    // ✅ FIX: 3sn geciktir — auth init ve Firestore onSnapshot ile yarışmasın
+    // ✅ FIX: 3sn geciktir - auth init ve Firestore onSnapshot ile yarışmasın
     const soundInitDelay = setTimeout(() => {
       useSoundManagerStore.getState().init();
     }, 3000);

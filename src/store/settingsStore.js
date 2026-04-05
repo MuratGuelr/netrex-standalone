@@ -145,7 +145,7 @@ export const useSettingsStore = create(
         return target ? { quickStatus: target, lastQuickStatus: target } : {};
       }),
 
-      // ✅ Per-slot hotkey ile tetikleme — index'e göre doğrudan slot aç/kapa
+      // ✅ Per-slot hotkey ile tetikleme - index'e göre doğrudan slot aç/kapa
       setQuickStatusByIndex: (index) => set((state) => {
         const preset = state.quickStatusPresets[index];
         if (!preset) return {};

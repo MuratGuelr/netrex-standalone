@@ -68,7 +68,7 @@ export default function ProfileAvatarUploader() {
         updatedAt: serverTimestamp(),
       });
 
-      // Firebase Auth currentUser'ı güncelle — onAuthStateChanged ezmesin
+      // Firebase Auth currentUser'ı güncelle - onAuthStateChanged ezmesin
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { photoURL: imageUrl }).catch(
           () => {},
@@ -118,7 +118,7 @@ export default function ProfileAvatarUploader() {
       );
       const fallbackPhotoURL = googleProvider?.photoURL || null;
 
-      // 1) Firestore users dokümanı — kaynak of truth
+      // 1) Firestore users dokümanı - kaynak of truth
       await updateDoc(doc(db, "users", user.uid), {
         photoURL: fallbackPhotoURL,
         updatedAt: serverTimestamp(),

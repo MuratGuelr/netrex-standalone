@@ -2,11 +2,14 @@
 import { useEffect, useRef } from "react";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
-import { Mic, MicOff, VolumeX, Headphones } from "lucide-react";
+import { Mic, MicOff, VolumeX, Headphones, ShieldAlert } from "lucide-react";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/src/lib/firebase";
 import { toast } from "@/src/utils/toast";
 
 // Moderasyon Komutlarını Dinleyen ve Mikrofon Senkronizasyonu Yapan Bileşen
 export default function ModerationHandler({ 
+  serverId,
   setServerMuted, 
   setServerDeafened, 
   setMutedBy,
@@ -195,6 +198,89 @@ export default function ModerationHandler({
                   });
                 }
              }
+          }
+        } else if (data.type === "MODERATION_REQUEST") {
+          // Eğer moderasyon yetkim varsa bu talepleri gör
+          // (Actually, check if I have the permission locally)
+          // Simplified: All participants in room will see it if they are listening, but typically only mods care.
+          if (data.action === "UNMUTE_REQUEST") {
+            const requesterName = data.username || "Bir kullanıcı";
+            const requesterId = data.userId;
+
+            // ✅ Native Notification (Masaüstü Bildirimi)
+            if (Notification.permission === "granted") {
+              const notification = new Notification("Susturma Kaldırma Talebi", {
+                body: `${requesterName} susturulmasının kaldırılmasını istiyor.`,
+                icon: "/favicon.ico",
+              });
+              notification.onclick = () => {
+                if (window.netrex?.focusWindow) window.netrex.focusWindow();
+                else window.focus();
+              };
+            }
+
+            toast.info(`${requesterName} susturulmasının kaldırılmasını talep ediyor.`, {
+              duration: 10000,
+              action: {
+                label: "Aç",
+                onClick: async () => {
+                   const payload = JSON.stringify({
+                     type: "MODERATION_COMMAND",
+                     targetId: requesterId,
+                     moderatorName: localParticipant.name || localParticipant.identity,
+                     action: "MUTE",
+                     value: false
+                   });
+                   localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+                   
+                   if (serverId) {
+                     try {
+                        const memberRef = doc(db, "servers", serverId, "members", requesterId);
+                        await updateDoc(memberRef, { 
+                          isMutedByServer: false,
+                          mutedBy: null,
+                          mutedAt: null
+                        });
+                     } catch (err) {
+                        console.error("Unmute request firebase update failed:", err);
+                     }
+                   }
+                }
+              }
+            });
+          } else if (data.action === "UNDEAFEN_REQUEST") {
+            const requesterName = data.username || "Bir kullanıcı";
+            const requesterId = data.userId;
+
+            toast.info(`${requesterName} sağırlaştırmasının kaldırılmasını talep ediyor.`, {
+              duration: 10000,
+              action: {
+                label: "Aç",
+                onClick: async () => {
+                   const payload = JSON.stringify({
+                     type: "MODERATION_COMMAND",
+                     targetId: requesterId,
+                     moderatorName: localParticipant.name || localParticipant.identity,
+                     action: "DEAFEN",
+                     value: false
+                   });
+                   localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+                   
+                   if (serverId) {
+                     try {
+                        const memberRef = doc(db, "servers", serverId, "members", requesterId);
+                        await updateDoc(memberRef, { 
+                          isDeafenedByServer: false,
+                          deafenedBy: null,
+                          deafenedAt: null
+                        });
+                     } catch (err) {
+                        console.error("Undeafen request firebase update failed:", err);
+                     }
+                   }
+                }
+              }
+            });
           }
         }
       } catch (e) {}

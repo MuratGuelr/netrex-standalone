@@ -24,7 +24,7 @@ const ParticipantList = React.memo(({
   const allScreenShareTracks = useTracks([Track.Source.ScreenShare]);
   const allCameraTracks = useTracks([Track.Source.Camera]);
 
-  // ✅ Map'e dönüştür — O(1) lookup (O(N) find yerine)
+  // ✅ Map'e dönüştür - O(1) lookup (O(N) find yerine)
   const screenShareTrackMap = useMemo(() => {
     const map = new Map();
     allScreenShareTracks.forEach(t => map.set(t.participant.sid, t));

@@ -3,6 +3,8 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
+import { useSettingsStore } from '@/src/store/settingsStore';
+import { useChatStore } from '@/src/store/chatStore';
 import { Music, Play, Pause } from 'lucide-react';
 
 export function WatchPartyMiniBadge() {
@@ -12,6 +14,9 @@ export function WatchPartyMiniBadge() {
   const currentTrack = useWatchPartyStore((s) => s.currentTrack);
   const isPlaying    = useWatchPartyStore((s) => s.playbackState.isPlaying);
 
+  const controlBarHidden = useSettingsStore((s) => s.controlBarHidden);
+  const { showChatPanel, chatPosition, chatWidth } = useChatStore();
+
   if (typeof window === "undefined") return null;
 
   return createPortal(
@@ -20,18 +25,30 @@ export function WatchPartyMiniBadge() {
         <motion.button
           key="mini-badge"
           initial={{ scale: 0, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
+          animate={{ 
+            scale: 1, 
+            opacity: 1, 
+            y: 0,
+            right: (showChatPanel && chatPosition === "right") 
+              ? chatWidth + (controlBarHidden ? 88 : 24) 
+              : (controlBarHidden ? 88 : 24),
+            left: (showChatPanel && chatPosition === "left")
+              ? chatWidth + (controlBarHidden ? 88 : 24)
+              : "auto",
+          }}
           exit={{ scale: 0, opacity: 0, y: 20 }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.93 }}
-          transition={{ type: "spring", damping: 20, stiffness: 300 }}
+          transition={{ type: "spring", damping: 25, stiffness: 400 }}
+          layout
           onClick={togglePlayer}
-          className="fixed bottom-6 right-6 z-[100] w-14 h-14
+          className="fixed z-[100] w-12 h-12
                      bg-zinc-900/95 backdrop-blur-xl border border-white/15
                      rounded-full shadow-2xl shadow-black/60
                      flex items-center justify-center
                      cursor-pointer overflow-hidden group"
-          title={`${currentTrack?.title || 'Watch Party'} — Göster`}
+          style={{ bottom: "20px" }}
+          title={`${currentTrack?.title || 'Watch Party'} - Göster`}
         >
           {/* Thumbnail arka plan */}
           {currentTrack?.thumbnail && (

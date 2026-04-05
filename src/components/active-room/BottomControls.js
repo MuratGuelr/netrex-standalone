@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent, ConnectionState } from "livekit-client";
 import {
@@ -14,7 +14,8 @@ import {
   PhoneOff,
   ChevronUp,
   ChevronDown,
-  Music
+  Music,
+  Hand
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -84,7 +85,6 @@ export default function BottomControls({
   isCameraOn,
   setIsCameraOn,
   stopScreenShare,
-  chatPosition,
   serverMuted,
   serverDeafened,
   isMuted,
@@ -106,7 +106,7 @@ export default function BottomControls({
   const controlBarHidden = useSettingsStore(state => state.controlBarHidden);
   const toggleControlBarHidden = useSettingsStore(state => state.toggleControlBarHidden);
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
-  const { showChatPanel } = useChatStore();
+  const { showChatPanel, chatPosition, chatWidth } = useChatStore();
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);
@@ -358,17 +358,62 @@ export default function BottomControls({
     lastCameraStateRef.current = isCameraOn;
   }, [isCameraOn]);
 
+  const [mRequestTimeout, setMRequestTimeout] = useState(false);
+  const [dRequestTimeout, setDRequestTimeout] = useState(false);
+
+  const sendUnmuteRequest = useCallback(() => {
+    if (mRequestTimeout) return;
+    const payload = JSON.stringify({
+      type: "MODERATION_REQUEST",
+      userId: localParticipant?.identity,
+      username: username || localParticipant?.name || localParticipant?.identity,
+      action: "UNMUTE_REQUEST",
+      timestamp: Date.now()
+    });
+    if (localParticipant) {
+      localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+      toastOnce("Susturmanın kaldırılması için yetkililere talep gönderildi.", "success");
+      setMRequestTimeout(true);
+      setTimeout(() => setMRequestTimeout(false), 5000);
+    }
+  }, [localParticipant, username, mRequestTimeout]);
+
+  const sendUndeafenRequest = useCallback(() => {
+    if (dRequestTimeout) return;
+    const payload = JSON.stringify({
+      type: "MODERATION_REQUEST",
+      userId: localParticipant?.identity,
+      username: username || localParticipant?.name || localParticipant?.identity,
+      action: "UNDEAFEN_REQUEST",
+      timestamp: Date.now()
+    });
+    if (localParticipant) {
+      localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+      toastOnce("Sağırlaştırmanın kaldırılması için yetkililere talep gönderildi.", "success");
+      setDRequestTimeout(true);
+      setTimeout(() => setDRequestTimeout(false), 5000);
+    }
+  }, [localParticipant, username, dRequestTimeout]);
+
   const toggleMute = useCallback(() => {
-    const { isMuted } = stateRef.current;
+    const { isMuted, serverMuted } = stateRef.current;
+    if (serverMuted) {
+      sendUnmuteRequest();
+      return;
+    }
     onMuteToggle();
     playSound(!isMuted ? "mute" : "unmute");
-  }, [playSound, onMuteToggle]);
+  }, [playSound, onMuteToggle, sendUnmuteRequest]);
 
   const toggleDeaf = useCallback(() => {
-    const { isDeafened } = stateRef.current;
+    const { isDeafened, serverDeafened } = stateRef.current;
+    if (serverDeafened) {
+      sendUndeafenRequest();
+      return;
+    }
     onDeafenToggle();
     playSound(!isDeafened ? "deafen" : "undeafen");
-  }, [playSound, onDeafenToggle]);
+  }, [playSound, onDeafenToggle, sendUndeafenRequest]);
 
   const toggleCamera = useCallback(async () => {
     if (!enableCamera) {
@@ -984,7 +1029,11 @@ export default function BottomControls({
       {controlBarHidden && createPortal(
         <button
           onClick={toggleControlBarHidden}
-          className="fixed bottom-6 right-6 z-[50000] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-300 animate-fadeScaleIn group overflow-hidden"
+          className="fixed bottom-6 z-[50000] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-700 ease-in-out group overflow-hidden"
+          style={{
+            right: showChatPanel && chatPosition === "right" ? `${chatWidth + 24}px` : "24px",
+            left: showChatPanel && chatPosition === "left" ? `${chatWidth + 24}px` : "auto",
+          }}
           title="Kontrolleri Göster"
         >
           {/* Glass Specular Highlight - Stronger */}
@@ -1005,7 +1054,11 @@ export default function BottomControls({
           controlBarHidden 
             ? 'opacity-0 pointer-events-none translate-x-[calc(50vw-80px)] scale-[0.15]' 
             : 'opacity-100 translate-x-0 scale-100'
-        } ${!showChatPanel || chatPosition !== "left" ? "left-0" : "left-[380px]"} ${!showChatPanel || chatPosition !== "right" ? "right-0" : "right-[380px]"}`}
+        }`}
+        style={{
+          left: showChatPanel && chatPosition === "left" ? `${chatWidth}px` : "0",
+          right: showChatPanel && chatPosition === "right" ? `${chatWidth}px` : "0",
+        }}
       >
         {/* TTS Stop Badge - Controls'un hemen üzerinde */}
         <TtsStopBadge />
@@ -1019,12 +1072,12 @@ export default function BottomControls({
           <div className="flex items-center gap-1 sm:gap-1.5">
             <ControlButton
               isActive={!isMuted}
-              activeIcon={<Mic size={20} className="sm:w-5 sm:h-5" />}
-              inactiveIcon={<MicOff size={20} className="sm:w-5 sm:h-5" />}
+              activeIcon={serverMuted ? <Hand size={20} className="sm:w-5 sm:h-5 text-amber-400" /> : <Mic size={20} className="sm:w-5 sm:h-5" />}
+              inactiveIcon={serverMuted ? <Hand size={20} className="sm:w-5 sm:h-5 text-amber-400" /> : <MicOff size={20} className="sm:w-5 sm:h-5" />}
               onClick={toggleMute}
-              tooltip={serverMuted ? `Sunucu tarafından susturuldu (${mutedBy || "Yetkili"})` : isMuted ? "Susturmayı Kaldır" : "Sustur"}
-              danger={isMuted}
-              disabled={isDeafened || serverMuted}
+              tooltip={serverMuted ? `Susturmayı açmalarını talep et (${mutedBy || "Yetkili"})` : isMuted ? "Susturmayı Kaldır" : "Sustur"}
+              danger={isMuted && !serverMuted}
+              disabled={isDeafened || (serverMuted && mRequestTimeout)}
             />
             <ControlButton
               isActive={!isDeafened}

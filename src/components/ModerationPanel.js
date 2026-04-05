@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { MicOff, Headphones, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -18,6 +18,26 @@ const ModerationPanel = memo(({
   canMute,
   canDeafen
 }) => {
+  // ✅ OPTIMISTIC UI: Beklemeyi ortadan kaldır
+  const [localMute, setLocalMute] = useState(null);
+  const [localDeafen, setLocalDeafen] = useState(null);
+
+  // Prop değiştikçe yerel state'i sıfırla (senkronize olduk)
+  useEffect(() => {
+    if (localMute !== null && statusFlags.isTargetServerMuted === localMute) {
+      setLocalMute(null);
+    }
+  }, [statusFlags.isTargetServerMuted, localMute]);
+
+  useEffect(() => {
+    if (localDeafen !== null && statusFlags.isTargetServerDeafened === localDeafen) {
+      setLocalDeafen(null);
+    }
+  }, [statusFlags.isTargetServerDeafened, localDeafen]);
+
+  const isMuted = localMute !== null ? localMute : statusFlags.isTargetServerMuted;
+  const isDeafened = localDeafen !== null ? localDeafen : statusFlags.isTargetServerDeafened;
+
   // Firebase update helper
   const updateFirebaseStatus = useCallback(async (type, value) => {
     if (!currentServerId || !participant.identity) return;
@@ -60,7 +80,12 @@ const ModerationPanel = memo(({
 
   const handleMuteToggle = useCallback((e) => {
     e.stopPropagation();
-    const newValue = !statusFlags.isTargetServerMuted;
+    // ✅ FIX: Prop yerine o anki UI durumuna bak (isMuted değişkeni)
+    const newValue = !isMuted;
+    
+    // Yerel durumu anında güncelle (Optimistic)
+    setLocalMute(newValue);
+
     const payload = JSON.stringify({
       type: "MODERATION_COMMAND",
       targetId: participant.identity,
@@ -68,6 +93,7 @@ const ModerationPanel = memo(({
       action: "MUTE",
       value: newValue
     });
+
     if (localParticipant) {
       localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
       updateFirebaseStatus("MUTE", newValue);
@@ -76,11 +102,16 @@ const ModerationPanel = memo(({
         : `${participant.name || participant.identity} susturması kaldırıldı`
       );
     }
-  }, [statusFlags.isTargetServerMuted, participant.identity, participant.name, localParticipant, updateFirebaseStatus]);
+  }, [isMuted, participant.identity, participant.name, localParticipant, updateFirebaseStatus]);
 
   const handleDeafenToggle = useCallback((e) => {
     e.stopPropagation();
-    const newValue = !statusFlags.isTargetServerDeafened;
+    // ✅ FIX: Prop yerine o anki UI durumuna bak
+    const newValue = !isDeafened;
+
+    // Yerel durumu anında güncelle
+    setLocalDeafen(newValue);
+
     const payload = JSON.stringify({
       type: "MODERATION_COMMAND",
       targetId: participant.identity,
@@ -88,6 +119,7 @@ const ModerationPanel = memo(({
       action: "DEAFEN",
       value: newValue
     });
+
     if (localParticipant) {
       localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
       updateFirebaseStatus("DEAFEN", newValue);
@@ -96,7 +128,7 @@ const ModerationPanel = memo(({
         : `${participant.name || participant.identity} sağırlaştırması kaldırıldı`
       );
     }
-  }, [statusFlags.isTargetServerDeafened, participant.identity, participant.name, localParticipant, updateFirebaseStatus]);
+  }, [isDeafened, participant.identity, participant.name, localParticipant, updateFirebaseStatus]);
 
   return (
     <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.04] space-y-2.5">
@@ -121,29 +153,29 @@ const ModerationPanel = memo(({
           >
             <div className="flex items-center gap-2.5">
               <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
-                statusFlags.isTargetServerMuted ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'
+                isMuted ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'
               }`}>
                 <MicOff size={13} />
               </div>
               <span className={`text-[13px] font-medium transition-colors ${
-                statusFlags.isTargetServerMuted ? 'text-red-400' : 'text-[#b5bac1] group-hover:text-white'
+                isMuted ? 'text-red-400' : 'text-[#b5bac1] group-hover:text-white'
               }`}>
                 Sunucu Susturması
               </span>
-              {statusFlags.isTargetServerMuted && statusFlags.mutedBy && (
-                <span className="text-[10px] text-red-500/60 font-medium ml-1">
-                   ({statusFlags.mutedBy})
+              {isMuted && (statusFlags.mutedBy || (localMute !== null && localParticipant.name)) && (
+                <span className="text-[10px] text-red-500/60 font-medium ml-1 truncate max-w-[60px]">
+                   ({localMute !== null ? 'Sen' : statusFlags.mutedBy})
                 </span>
               )}
             </div>
             
             <div className={`w-9 h-5 rounded-full transition-all duration-200 relative ${
-              statusFlags.isTargetServerMuted 
+              isMuted 
                 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' 
                 : 'bg-[#2b2d31]'
             }`}>
               <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${
-                statusFlags.isTargetServerMuted ? 'left-[18px]' : 'left-0.5'
+                isMuted ? 'left-[18px]' : 'left-0.5'
               }`} />
             </div>
           </div>
@@ -156,29 +188,29 @@ const ModerationPanel = memo(({
           >
             <div className="flex items-center gap-2.5">
               <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
-                statusFlags.isTargetServerDeafened ? 'bg-orange-500/20 text-orange-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'
+                isDeafened ? 'bg-orange-500/20 text-orange-400' : 'bg-white/5 text-[#5c5e66] group-hover:text-[#949ba4]'
               }`}>
                 <Headphones size={13} />
               </div>
               <span className={`text-[13px] font-medium transition-colors ${
-                statusFlags.isTargetServerDeafened ? 'text-orange-400' : 'text-[#b5bac1] group-hover:text-white'
+                isDeafened ? 'text-orange-400' : 'text-[#b5bac1] group-hover:text-white'
               }`}>
                 Sunucu Sağırlaştırması
               </span>
-              {statusFlags.isTargetServerDeafened && statusFlags.deafenedBy && (
-                 <span className="text-[10px] text-orange-500/60 font-medium ml-1">
-                   ({statusFlags.deafenedBy})
+              {isDeafened && (statusFlags.deafenedBy || (localDeafen !== null && localParticipant.name)) && (
+                 <span className="text-[10px] text-orange-500/60 font-medium ml-1 truncate max-w-[60px]">
+                   ({localDeafen !== null ? 'Sen' : statusFlags.deafenedBy})
                 </span>
               )}
             </div>
             
             <div className={`w-9 h-5 rounded-full transition-all duration-200 relative ${
-              statusFlags.isTargetServerDeafened 
+              isDeafened 
                 ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.4)]' 
                 : 'bg-[#2b2d31]'
             }`}>
               <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${
-                statusFlags.isTargetServerDeafened ? 'left-[18px]' : 'left-0.5'
+                isDeafened ? 'left-[18px]' : 'left-0.5'
               }`} />
             </div>
           </div>

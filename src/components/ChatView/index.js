@@ -178,7 +178,7 @@ export default function ChatView({ channelId, username, userId }) {
     }
   }, [imgIsDragging]);
 
-  // ✅ FIX: Keydown listener ref kullanıyor — state değişince listener kaldırılıp eklenmeyecek
+  // ✅ FIX: Keydown listener ref kullanıyor - state değişince listener kaldırılıp eklenmeyecek
   const selectedImageRef = useRef(selectedImage);
   const editingMessageIdRef = useRef(editingMessageId);
   useEffect(() => { selectedImageRef.current = selectedImage; }, [selectedImage]);
@@ -195,7 +195,7 @@ export default function ChatView({ channelId, username, userId }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []); // ✅ Boş array — artık listener birikmiyor
+  }, []); // ✅ Boş array - artık listener birikmiyor
 
   useEffect(() => { if (!selectedImage) handleImgReset(); }, [selectedImage, handleImgReset]);
 

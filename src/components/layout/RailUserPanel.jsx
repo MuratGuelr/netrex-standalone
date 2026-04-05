@@ -16,7 +16,7 @@ export default function RailUserPanel() {
   const toggleDeaf = useSettingsStore((s) => s.toggleDeaf);
   const userStatus = useSettingsStore((s) => s.userStatus);
   const setUserStatus = useSettingsStore((s) => s.setUserStatus);
-  // ✅ settingsStore'dan oku — üyeler listesiyle aynı kaynak
+  // ✅ settingsStore'dan oku - üyeler listesiyle aynı kaynak
   const profileColor = useSettingsStore((s) => s.profileColor);
   // ✅ Firestore member dokümanındaki rengi de kontrol et (üyeler listesiyle tam senkron)
   const members = useServerStore((s) => s.members);
@@ -208,7 +208,7 @@ export default function RailUserPanel() {
               style={{ background: solidProfileColor }}
             />
 
-            {/* User Header — üyeler listesiyle aynı stil */}
+            {/* User Header - üyeler listesiyle aynı stil */}
             <div className="relative p-3 mb-2 rounded-xl bg-white/5 border border-white/5 overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="flex items-center gap-3 relative z-10">

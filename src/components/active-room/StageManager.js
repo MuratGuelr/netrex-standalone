@@ -730,7 +730,7 @@ function StageManager({
     }
   }, [activeTracks, activeDragId]);
 
-  // Context menu stale data — track kaybolursa kapat
+  // Context menu stale data - track kaybolursa kapat
   useEffect(() => {
     if (
       contextMenu &&
@@ -1428,7 +1428,6 @@ const StageOverlay = React.memo(
     isAudioDisabled,
     volume,
     isFullscreen,
-    viewerCount,
     participant,
     trackRef,
     onStopWatching,
@@ -1520,8 +1519,12 @@ const StageOverlay = React.memo(
           </div>
         </div>
 
-        {/* Bottom Controls - ALWAYS VISIBLE */}
-        <div className="absolute inset-0 flex flex-col justify-end p-4 sm:p-6 pointer-events-none will-change-opacity">
+        {/* Bottom Controls - responsive visibility */}
+        <div 
+          className={`absolute inset-0 flex flex-col justify-end p-4 sm:p-6 pointer-events-none transition-all duration-500 will-change-opacity ${
+            showOverlay ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
           <div className="pointer-events-auto flex justify-between items-end gap-4">
             <div className="flex items-center gap-2 bg-[#2b2d31]/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-soft">
               <Users size={14} className="text-indigo-400" />
@@ -1534,43 +1537,53 @@ const StageOverlay = React.memo(
             </div>
 
             <div className="flex items-center gap-3">
-              {!isLocalSharing && (
-                <div className="flex items-center gap-3">
-                  {isAudioDisabled ? (
-                    <div className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
-                      <AlertTriangle size={18} />
-                      <span>Ses Kapalı</span>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={toggleMuteStream}
-                        className={`p-2 rounded-xl transition-all duration-200 hover:scale-110 border border-white/10 backdrop-blur-sm bg-black/30 ${
-                          volume === 0 ? "text-red-400" : "text-white"
-                        }`}
-                      >
-                        {volume === 0 ? (
-                          <VolumeX size={18} />
-                        ) : volume < 50 ? (
-                          <Volume1 size={18} />
-                        ) : (
-                          <Volume2 size={18} />
-                        )}
-                      </button>
-                      <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-xl border border-white/10 px-2">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={volume}
-                          onChange={(e) => setVolume(Number(e.target.value))}
-                          className="w-20 sm:w-28 accent-[#5865f2]"
-                        />
+              <div className="flex items-center gap-3">
+                {isAudioDisabled && !isLocalSharing ? (
+                  <div className="flex items-center gap-2 text-yellow-400 text-xs font-bold px-3 py-1.5 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+                    <AlertTriangle size={18} />
+                    <span>Ses Kapalı</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={toggleMuteStream}
+                      className={`p-2 rounded-xl transition-all duration-200 hover:scale-110 border border-white/10 backdrop-blur-sm bg-black/30 relative flex items-center justify-center ${
+                        volume === 0 ? "text-red-400" : "text-white"
+                      }`}
+                    >
+                      {volume === 0 ? (
+                        <VolumeX size={18} />
+                      ) : volume < 50 ? (
+                        <Volume1 size={18} />
+                      ) : (
+                        <Volume2 size={18} />
+                      )}
+                      {/* Audio activity indicator (minimalist) - visual feedback fix */}
+                      {volume > 0 && !isAudioDisabled && (
+                         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5 items-end h-1">
+                            <div className="w-0.5 h-full bg-indigo-400/80 rounded-full animate-bounce" style={{ animationDuration: '0.6s' }}></div>
+                            <div className="w-0.5 h-[60%] bg-indigo-400/80 rounded-full animate-bounce" style={{ animationDuration: '0.4s' }}></div>
+                            <div className="w-0.5 h-[80%] bg-indigo-400/80 rounded-full animate-bounce" style={{ animationDuration: '0.5s' }}></div>
+                         </div>
+                      )}
+                    </button>
+                    <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-xl border border-white/10 px-2 group/volume relative">
+                      <input
+                        type="range"
+                        min="0"
+                        max="200"
+                        value={volume}
+                        onChange={(e) => setVolume(Number(e.target.value))}
+                        className="w-24 sm:w-32 accent-[#5865f2] h-6 cursor-pointer"
+                      />
+                      {/* Volume tooltip on hover/interaction */}
+                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#5865f2] text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 group-hover/volume:opacity-100 transition-opacity shadow-lg pointer-events-none">
+                         %{volume}
                       </div>
-                    </>
-                  )}
-                </div>
-              )}
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 onClick={toggleFullscreen}
                 title={
@@ -1624,7 +1637,10 @@ function ScreenShareStage({
   const audioTrackRef = audioTracks.find(
     (t) => t.participant.sid === participant?.sid,
   );
-  const isAudioDisabled = amISharing && !isLocalSharing;
+  
+  // 🚀 FIX: Yayın ses ayarı her zaman görünmeli (remote screen share ise)
+  // Kullanıcı ses track'i gelmeden önce de ayarı görebilmeli.
+  const isAudioDisabled = isLocalSharing || (trackRef.source !== Track.Source.ScreenShare && !audioTrackRef);
 
   useEffect(() => {
     const audioEl = audioRef.current;
@@ -1842,7 +1858,6 @@ function ScreenShareStage({
           isAudioDisabled={isAudioDisabled}
           volume={volume}
           isFullscreen={isFullscreen}
-          viewerCount={viewerCount}
           participant={participant}
           trackRef={trackRef}
           onStopWatching={onStopWatching}

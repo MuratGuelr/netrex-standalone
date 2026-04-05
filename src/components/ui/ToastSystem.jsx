@@ -165,6 +165,20 @@ const ToastItem = ({ toast }) => {
                 <p className="text-[13px] text-[#949ba4] leading-[1.4] line-clamp-2 group-hover:text-white/80 transition-colors font-medium">
                   {toast.message}
                 </p>
+                {toast.action && (
+                  <div className="mt-2.5 flex items-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (toast.action.onClick) toast.action.onClick();
+                        removeToast(toast.id);
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white text-white hover:text-black font-bold text-[11px] transition-all duration-300 border border-white/5 hover:border-white shadow-[0_4px_12px_rgba(0,0,0,0.5)] active:scale-95"
+                    >
+                      {toast.action.label}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

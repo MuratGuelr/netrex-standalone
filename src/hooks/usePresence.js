@@ -162,7 +162,7 @@ export function usePresence() {
         ? HEARTBEAT_INTERVAL_VOICE 
         : HEARTBEAT_INTERVAL_IDLE;
       heartbeatIntervalRef.current = setInterval(sendHeartbeat, interval);
-      // ✅ FIX: Açılışta anında Firestore write yapma — geciktir
+      // ✅ FIX: Açılışta anında Firestore write yapma - geciktir
       if (sendImmediate) {
         sendHeartbeat();
       }
@@ -171,7 +171,7 @@ export function usePresence() {
       }
     };
 
-    // ✅ İlk heartbeat'i 30sn geciktir — updatePresence zaten t=3'te yazıyor
+    // ✅ İlk heartbeat'i 30sn geciktir - updatePresence zaten t=3'te yazıyor
     // sendImmediate=false: Açılışta duplicate Firestore write yapma
     startupDelay = setTimeout(() => {
       updateHeartbeatInterval(false);

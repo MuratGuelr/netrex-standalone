@@ -49,7 +49,7 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
     }
   }, []);
 
-  // Kanala git yardımcısı — güncel store state'ini kullanır
+  // Kanala git yardımcısı - güncel store state'ini kullanır
   const navigateToChannel = useCallback((channelId) => {
     // 1. Chat panelini aç
     if (setShowChatPanelRef.current) {
@@ -61,7 +61,7 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
     const serverState = useServerStore.getState();
     
     if (channelId && channelId !== chatState.currentChannel?.id) {
-      // Server ID'yi bul — eğer server kanal yapısı kullanılıyorsa
+      // Server ID'yi bul - eğer server kanal yapısı kullanılıyorsa
       const serverId = serverState.currentServer?.id || null;
       chatState.loadChannelMessages(channelId, serverId);
     }
@@ -216,7 +216,7 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
                 lastTtsSpeakerRef.current = senderId;
                 lastTtsTimeRef.current = now;
                 
-                // ✅ Kuyruk yönetimi: Max 3 bekleyen mesaj — fazlasını at
+                // ✅ Kuyruk yönetimi: Max 3 bekleyen mesaj - fazlasını at
                 const pending = window.speechSynthesis.pending;
                 if (pending && window.__netrexTtsQueueCount >= 3) {
                   console.log("[TTS] Queue full, skipping:", textToRead.substring(0, 30));
@@ -275,6 +275,6 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
       hasRegisteredChatRef.current = false;
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room]); // ✅ Minimal dependencies — tüm güncel state ref/getState üzerinden alınıyor
+  }, [room]); // ✅ Minimal dependencies - tüm güncel state ref/getState üzerinden alınıyor
   return null;
 }

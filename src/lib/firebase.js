@@ -16,7 +16,7 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
-// ✅ PERFORMANCE FIX: Memory-only cache — IndexedDB persistence KAPALI
+// ✅ PERFORMANCE FIX: Memory-only cache - IndexedDB persistence KAPALI
 // Varsayılan getFirestore() her onSnapshot update'inde IndexedDB'ye yazıyordu
 // → Sürekli disk I/O → CPU spike (idle'da bile %10-17)
 // memoryLocalCache ile: sıfır disk yazması, sıfır IndexedDB overhead

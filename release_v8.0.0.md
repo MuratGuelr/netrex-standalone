@@ -1,4 +1,4 @@
-# Release Notes - v7.5.0
+# Release Notes - v8.0.0
 
 ## 🎬 Watch Party Experience 2.0 (Enhanced)
 - **Persistent Media Rendering**: Refactored the core player to keep YouTube, SoundCloud, and generic players persistently in the DOM. This ensures playback is **never interrupted** when toggling the UI, switching between panels, or moving the player.

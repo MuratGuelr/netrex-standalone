@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X, ZoomIn, ZoomOut, RotateCcw, Check, Move } from "lucide-react";
 
 /**
- * ImageCropModal — Canvas tabanlı, sürükle-kaydır-zoom destekli kırpma modalı.
+ * ImageCropModal - Canvas tabanlı, sürükle-kaydır-zoom destekli kırpma modalı.
  *
  * Props:
  *   file        - Kırpılacak File nesnesi
@@ -197,7 +197,7 @@ export default function ImageCropModal({
     }
     ctx.restore();
 
-    // 7) Köşe tutamaçları — renkli, yuvarlak uçlu (rect için)
+    // 7) Köşe tutamaçları - renkli, yuvarlak uçlu (rect için)
     if (shape === "rect") {
       const cs = 14;
       const lw = 2.5;
@@ -469,7 +469,7 @@ export default function ImageCropModal({
           }}
         />
 
-        {/* Canvas area — full bleed */}
+        {/* Canvas area - full bleed */}
         <div
           className="relative mx-5 mt-4"
           style={{
@@ -510,7 +510,7 @@ export default function ImageCropModal({
             </div>
           )}
 
-          {/* Drag hint — bottom left */}
+          {/* Drag hint - bottom left */}
           {imgLoaded && (
             <div
               className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 pointer-events-none"

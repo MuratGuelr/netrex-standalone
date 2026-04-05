@@ -191,7 +191,7 @@ export default function RoomList({
     };
   }, []);
 
-  // Room presence'leri dinle — state batching ile optimize edilmiş
+  // Room presence'leri dinle - state batching ile optimize edilmiş
   const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
   const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
   const prevPresenceRef = useRef({});

@@ -51,6 +51,12 @@ export const useChatStore = create((set, get) => ({
   setShowChatPanel: (show) => set({ showChatPanel: show }),
   toggleChatPanel: () => set((state) => ({ showChatPanel: !state.showChatPanel })),
 
+  // YENİ: Sohbet konumu ve genişliği
+  chatPosition: "right", // "left" | "right"
+  chatWidth: 340,
+  setChatPosition: (pos) => set({ chatPosition: pos }),
+  setChatWidth: (width) => set({ chatWidth: width }),
+
   // YENİ: Okunmamış Mesaj Sayıları { channelId: sayi }
   unreadCounts: {},
 

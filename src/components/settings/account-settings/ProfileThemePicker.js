@@ -343,7 +343,7 @@ export default function ProfileThemePicker({ profileColor, setProfileColor, user
                 Hızlı Seçim
               </span>
               <div className="flex flex-wrap gap-3">
-                {/* Otomatik (mevcut) gradient — sadece otomatik tema açıksa göster */}
+                {/* Otomatik (mevcut) gradient - sadece otomatik tema açıksa göster */}
                 {autoThemeFromImage && (
                   <button
                     onClick={() => {

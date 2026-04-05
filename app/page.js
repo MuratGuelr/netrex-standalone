@@ -40,7 +40,7 @@ const StandaloneChatView = dynamic(
   },
 );
 
-// ✅ SettingsModal KALDIRILDI — AppShell global olarak render ediyor
+// ✅ SettingsModal KALDIRILDI - AppShell global olarak render ediyor
 import UpdateNotification from "@/src/components/UpdateNotification";
 import InfoModal from "@/src/components/InfoModal";
 import VoiceChannelSwitchModal from "@/src/components/VoiceChannelSwitchModal";
@@ -151,7 +151,7 @@ export default function Home() {
         if (error) toast.info(error);
       });
     }
-  }, []); // ✅ Boş array — IPC callback'ler sadece 1 kez kaydediliyor
+  }, []); // ✅ Boş array - IPC callback'ler sadece 1 kez kaydediliyor
 
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -329,7 +329,7 @@ export default function Home() {
     >
       <UpdateNotification />
 
-      {/* ✅ SettingsModal yok — AppShell'deki global instance kullanılıyor */}
+      {/* ✅ SettingsModal yok - AppShell'deki global instance kullanılıyor */}
 
       <InfoModal
         isOpen={infoModal.isOpen}

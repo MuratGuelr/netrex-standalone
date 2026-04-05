@@ -13,7 +13,7 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { extractDominantGradient } from "@/src/utils/extractDominantGradient";
 
 /**
- * ✅ ProfileBackgroundUploader — Kırpma destekli arkaplan yükleyici.
+ * ✅ ProfileBackgroundUploader - Kırpma destekli arkaplan yükleyici.
  * Önce ImageCropModal ile 16:9 kırpma yapılır, onay sonrası Cloudinary'ye yüklenir.
  */
 export default function ProfileBackgroundUploader({
@@ -210,7 +210,7 @@ export default function ProfileBackgroundUploader({
         </div>
       </div>
 
-      {/* Kırpma Modalı — 16:9 oran */}
+      {/* Kırpma Modalı - 16:9 oran */}
       {cropFile && (
         <ImageCropModal
           file={cropFile}

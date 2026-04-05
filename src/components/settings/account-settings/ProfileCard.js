@@ -19,7 +19,7 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { extractDominantGradient } from "@/src/utils/extractDominantGradient";
 
 /**
- * ✅ ProfileCard — Optimized account profile header
+ * ✅ ProfileCard - Optimized account profile header
  * Avatar tıklandığında dosya seçilir → ImageCropModal açılır →
  * Onaylanınca Cloudinary'ye yüklenir.
  */
@@ -77,7 +77,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
         updatedAt: serverTimestamp(),
       });
 
-      // Firebase Auth currentUser'ı güncelle — onAuthStateChanged ezmesin
+      // Firebase Auth currentUser'ı güncelle - onAuthStateChanged ezmesin
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { photoURL: imageUrl }).catch(
           () => {},
@@ -154,7 +154,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
 
-        {/* Banner — Arka plan resmi varsa onu göster, yoksa dominant renk */}
+        {/* Banner - Arka plan resmi varsa onu göster, yoksa dominant renk */}
         <div
           className="h-28 w-full transition-all duration-300 relative overflow-hidden"
           style={{ background: bannerColor || profileColor }}
@@ -179,7 +179,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
         <div className="px-5 pb-5 relative">
           <div className="flex justify-between items-end -mt-10 mb-4">
             <div className="flex items-end gap-3">
-              {/* Avatar — tıkla ve kırpma modalı açılır */}
+              {/* Avatar - tıkla ve kırpma modalı açılır */}
               <div className="p-1.5 bg-[#1e1f22] rounded-xl">
                 <button
                   type="button"
@@ -264,7 +264,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
         </div>
       </div>
 
-      {/* Kırpma Modalı — 1:1 daire */}
+      {/* Kırpma Modalı - 1:1 daire */}
       {cropFile && (
         <ImageCropModal
           file={cropFile}
