@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { MicOff, Headphones } from "lucide-react";
 import Avatar from "@/src/components/ui/Avatar";
+import { useSpeakingStore } from "@/src/store/speakingStore";
 
 const VoiceParticipantItem = memo(
   function VoiceParticipantItem({ participant }) {
@@ -12,6 +13,10 @@ const VoiceParticipantItem = memo(
     // profileColor hem avatar arka planı hem border için
     const effectiveColor =
       participant.profileColor || participant.color || null;
+
+    const isSpeaking = useSpeakingStore(
+      (state) => state.speakingParticipants[participant.userId] || false
+    );
 
     return (
       <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-default">
@@ -23,6 +28,8 @@ const VoiceParticipantItem = memo(
             name={displayName}
             color={effectiveColor}
             borderColor={effectiveColor}
+            borderless={true}
+            speaking={isSpeaking}
           />
           {(participant.isMuted || participant.isDeafened) && (
             <div className="absolute -bottom-0.5 -right-0.5 bg-[#111214] rounded-full p-[2px]">
@@ -54,8 +61,12 @@ const VoiceParticipantItem = memo(
         </div>
 
         {/* Speaking Indicator */}
-        {!participant.isMuted && !participant.isDeafened && (
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.6)]" />
+        {!participant.isMuted && !participant.isDeafened && !isSpeaking && (
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shadow-[0_0_4px_rgba(16,185,129,0.3)]" />
+        )}
+        {/* If actually speaking, hide the mic-dot since the ring covers it nicely, or keep a bright one? Let's hide it or make it pulse */}
+        {isSpeaking && (
+           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse" />
         )}
       </div>
     );

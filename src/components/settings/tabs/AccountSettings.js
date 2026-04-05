@@ -112,19 +112,18 @@ const AccountSettings = forwardRef(
           <span className="relative z-10">Hesabım</span>
         </h3>
 
-        {/* 1. Profile Card */}
-        <ProfileCard user={user} profileColor={profileColor} />
+        {/* 1. Profile Card (Includes Avatar Upload & Dominant Color Extraction) */}
+        <ProfileCard user={user} profileColor={profileColor} bgImage={profileBgImage} />
 
         {/* 2. Profile Theme Picker */}
         <ProfileThemePicker
           profileColor={profileColor}
           setProfileColor={setProfileColor}
+          user={user}
+          bgImage={profileBgImage}
         />
 
-        {/* 2.5 Profile Avatar Uploader */}
-        <ProfileAvatarUploader />
-
-        {/* 3. Profile Background Uploader */}
+        {/* 3. Profile Background Uploader (Includes Background Upload & Color Extraction) */}
         <ProfileBackgroundUploader
           user={user}
           profileBgImage={profileBgImage}

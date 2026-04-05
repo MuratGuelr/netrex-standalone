@@ -22,6 +22,11 @@ export const useSettingsStore = create(
 
       // Watch Party
       watchPartyEnabled: false,
+      wpAutoMute: false, // Odaya katılınca veya Watch Party başlayınca otomatik mikrofonu kapat
+      wpAutoJoin: true,  // Biri Watch Party açtığında otomatik olarak Player'ı (veya mini player'ı) göster
+      wpDefaultVolume: 20, // Watch Party açıldığında varsayılan ses seviyesi (yüksek ses koruması)
+      wpVideoQuality: "auto", // "auto" | "hd1080" | "hd720" | "large" (480p) | "medium" (360p) | "small" (240p)
+      wpVideoMode: "player", // "player" | "mini" - Ana ekranda mı yoksa sağ altta küçük mü gösterilecek?
 
       // Ses İşleme
       noiseSuppression: true,
@@ -45,6 +50,7 @@ export const useSettingsStore = create(
       sfxVolume: 30, // %30 varsayılan uygulama sesleri
       profileColor: "#6366f1",
       autoThemeFromImage: false,
+      useProfileColorForSpeaking: true, // Profil rengine göre border parlama efekti
 
       // Kullanıcı sesleri
       userVolumes: {},
@@ -139,7 +145,19 @@ export const useSettingsStore = create(
         return target ? { quickStatus: target, lastQuickStatus: target } : {};
       }),
 
-      // Voice State Toggles
+      // ✅ Per-slot hotkey ile tetikleme — index'e göre doğrudan slot aç/kapa
+      setQuickStatusByIndex: (index) => set((state) => {
+        const preset = state.quickStatusPresets[index];
+        if (!preset) return {};
+        // Aynı preset zaten aktifse kapat (toggle davranışı)
+        if (state.quickStatus?.id === preset.id) {
+          return { quickStatus: null };
+        }
+        return { quickStatus: preset, lastQuickStatus: preset };
+      }),
+
+      setUseProfileColorForSpeaking: (val) => set({ useProfileColorForSpeaking: val }),
+
       // Voice State Toggles
       toggleMute: () => set((state) => {
         const nextMuted = !state.isMuted;
@@ -169,6 +187,13 @@ export const useSettingsStore = create(
         
       toggleWatchPartyEnabled: () =>
         set((state) => ({ watchPartyEnabled: !state.watchPartyEnabled })),
+      
+      // YENİ: Watch Party Ayarları Actions
+      setWpAutoMute: (val) => set({ wpAutoMute: val }),
+      setWpAutoJoin: (val) => set({ wpAutoJoin: val }),
+      setWpDefaultVolume: (vol) => set({ wpDefaultVolume: vol }),
+      setWpVideoQuality: (quality) => set({ wpVideoQuality: quality }),
+      setWpVideoMode: (mode) => set({ wpVideoMode: mode }),
 
       toggleNoiseSuppression: () =>
         set((state) => ({ noiseSuppression: !state.noiseSuppression })),
@@ -371,11 +396,11 @@ export const useSettingsStore = create(
     }),
     {
       name: "netrex-user-settings",
-      version: 2, // Upgraded for Quick Status v2 (4 slots fixed)
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => Object.fromEntries(
         Object.entries(state).filter(
-          ([key]) => !['localIsSpeaking', 'isInVoiceRoom', 'showSettingsModal'].includes(key)
+          ([key]) => !['localIsSpeaking', 'isInVoiceRoom', 'showSettingsModal', 'isAutoIdle'].includes(key)
         )
       ),
       migrate: (persistedState, version) => {

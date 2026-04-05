@@ -72,15 +72,23 @@ export default function ServerMemberList({ onClose }) {
   const [profileModal, setProfileModal] = useState(null);
   const [userProfiles, setUserProfiles] = useState({});
 
-  // ✅ Firestore users listener — profileColor da dahil
-  useEffect(() => {
-    if (!members || members.length === 0) return;
-
-    const memberIds = members
+  // ✅ FIX: Stable member ID key — listener sadece ÜYE SAYISI/ID'LERİ değişince yeniden bağlanır.
+  // Daha önce: [members] dep → Firestore snapshot her members güncellemesinde listener'ı teardown/rebuild yapıyordu.
+  // Şimdi: ID listesi değişmediği sürece (presence/profil güncelleme) listener sabit kalıyor.
+  const memberIdsKey = useMemo(() => {
+    if (!members || members.length === 0) return "";
+    return members
       .map((m) => m.id || m.userId)
       .filter(Boolean)
-      .slice(0, 30);
+      .sort()
+      .slice(0, 30)
+      .join(",");
+  }, [members]);
 
+  useEffect(() => {
+    if (!memberIdsKey) return;
+
+    const memberIds = memberIdsKey.split(",");
     if (memberIds.length === 0) return;
 
     const q = query(
@@ -100,8 +108,8 @@ export default function ServerMemberList({ onClose }) {
             customStatusColor: data.customStatusColor || null,
             presence: data.presence || null,
             lastSeen: data.lastSeen || null,
-            profileColor: data.profileColor || null, // ✅ yeni
-            photoURL: data.photoURL ?? null, // ✅ Firestore'dan en güncel fotoğraf
+            profileColor: data.profileColor || null,
+            photoURL: data.photoURL ?? null,
           };
         });
         setUserProfiles(profiles);
@@ -112,7 +120,7 @@ export default function ServerMemberList({ onClose }) {
     );
 
     return () => unsubscribe();
-  }, [members]);
+  }, [memberIdsKey]); // ✅ Sadece üye ID'leri değişince yeniden bağlan
 
   const profileModalTimeoutRef = useRef(null);
   const contextMenuTimeoutRef = useRef(null);
@@ -181,7 +189,7 @@ export default function ServerMemberList({ onClose }) {
             ? currentUser.displayName
             : `User${member.id?.slice(-4) || ""}`),
         photoURL,
-        profileColor, // ✅ override edilmiş renk
+        profileColor,
         presence: effectivePresence,
         gameActivity: userProfile.gameActivity,
         customStatus: userProfile.customStatus || member.customStatus,

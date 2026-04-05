@@ -70,31 +70,6 @@ const MemoizedStageBackground = React.memo(
     return (
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {!disableBackgroundEffects && (
-          <>
-            <div
-              className="absolute inset-0 transition-opacity duration-1000 ease-in-out will-change-opacity pointer-events-none"
-              style={{
-                opacity: baseColor ? 0.25 : 0,
-                background: baseColor || "transparent",
-                filter: "blur(80px)",
-                maskImage:
-                  "radial-gradient(circle at 50% 50%, black 0%, transparent 70%)",
-                WebkitMaskImage:
-                  "radial-gradient(circle at 50% 50%, black 0%, transparent 70%)",
-                transform: "translateZ(0)", // Direct GPU hint
-              }}
-            />
-
-            <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-indigo-500/[0.08] rounded-full blur-[80px] animate-pulse-slow will-change-opacity" />
-            <div
-              className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/[0.06] rounded-full blur-[65px] animate-pulse-slow will-change-opacity"
-              style={{ animationDelay: "1s" }}
-            />
-            <div
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-cyan-500/[0.05] rounded-full blur-[100px] animate-pulse-slow will-change-opacity"
-              style={{ animationDelay: "2s" }}
-            />
-
             <div
               className="absolute inset-0 opacity-[0.015] will-change-opacity"
               style={{
@@ -109,7 +84,6 @@ const MemoizedStageBackground = React.memo(
                   "radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%)",
               }}
             />
-          </>
         )}
       </div>
     );
@@ -343,6 +317,29 @@ function StreamContextMenu({
   );
 }
 
+// ✅ FIX: Tekil bir global interval ile tüm QualityBadge'leri güncelle
+// N adet stream için N adet setInterval açmak CPU yükü yaratıyordu.
+const qualityBadgeUpdaters = new Set();
+let globalQualityBadgeInterval = null;
+
+function registerQualityUpdater(fn) {
+  qualityBadgeUpdaters.add(fn);
+  if (!globalQualityBadgeInterval && qualityBadgeUpdaters.size > 0) {
+    globalQualityBadgeInterval = setInterval(() => {
+      for (const updateFn of qualityBadgeUpdaters) {
+        updateFn();
+      }
+    }, 5000);
+  }
+  return () => {
+    qualityBadgeUpdaters.delete(fn);
+    if (qualityBadgeUpdaters.size === 0 && globalQualityBadgeInterval) {
+      clearInterval(globalQualityBadgeInterval);
+      globalQualityBadgeInterval = null;
+    }
+  };
+}
+
 // --- QUALITY BADGE ---
 function QualityBadge({ trackRef }) {
   const [quality, setQuality] = useState(null);
@@ -380,8 +377,7 @@ function QualityBadge({ trackRef }) {
     };
 
     update();
-    const interval = setInterval(update, 5000);
-    return () => clearInterval(interval);
+    return registerQualityUpdater(update);
   }, [trackRef]);
 
   if (!quality) return null;
@@ -393,6 +389,65 @@ function QualityBadge({ trackRef }) {
       {quality.label}
     </div>
   );
+}
+
+// ✅ WatcherCountBadge - useParticipants izole edildi
+// Ekran paylaşımlarında izleyici sayısını gösterir. Tüm ScreenShareStage'i re-render olmaktan kurtarır.
+const WatcherCountBadge = React.memo(({ participantIdentity, compact }) => {
+  const participants = useParticipants();
+  
+  const viewerCount = useMemo(() => {
+    if (!participantIdentity) return 0;
+    return participants.filter((p) => {
+      if (p.identity === participantIdentity) return false;
+      try {
+        const meta = p.metadata ? JSON.parse(p.metadata) : {};
+        return meta.watchingStreamId === participantIdentity;
+      } catch (e) {
+        return false;
+      }
+    }).length;
+  }, [participants, participantIdentity]);
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-md border border-white/[0.08]">
+        <Users size={9} className="text-indigo-400" />
+        <span className="text-[9px] font-bold text-white/80">{viewerCount}</span>
+      </div>
+    );
+  }
+
+  return <span className="text-xs font-bold text-white">{viewerCount}</span>;
+});
+
+// ✅ ActiveSpeakerColor - useParticipants izole edildi
+// Her konuşmada sadece bu küçük component re-render olur,
+// StageManager (DndContext + tüm track grid) etkilenmez.
+function ActiveSpeakerColor({ onColorChange }) {
+  const participants = useParticipants();
+  const localIsSpeaking = useSettingsStore((s) => s.localIsSpeaking);
+  const localProfileColor = useSettingsStore((s) => s.profileColor);
+
+  useEffect(() => {
+    if (localIsSpeaking) {
+      onColorChange(localProfileColor || "#6366f1");
+      return;
+    }
+    const speaker = participants.find((p) => p.isSpeaking && !p.isLocal);
+    if (!speaker) {
+      onColorChange(null);
+      return;
+    }
+    try {
+      const meta = speaker.metadata ? JSON.parse(speaker.metadata) : {};
+      onColorChange(meta.profileColor || "#6366f1");
+    } catch {
+      onColorChange("#6366f1");
+    }
+  }, [participants, localIsSpeaking, localProfileColor, onColorChange]);
+
+  return null;
 }
 
 function StageManager({
@@ -527,26 +582,14 @@ function StageManager({
     (state) => state.desktopNotifications,
   );
   const notifyOnJoin = useSettingsStore((state) => state.notifyOnJoin);
+  // ✅ FIX: getState() yerine reaktif selector
+  const disableBackgroundEffects = useSettingsStore((s) => s.disableBackgroundEffects);
 
   // 🌈 v5.4 Adaptive Background Logic
-  const participants = useParticipants();
-  const localIsSpeaking = useSettingsStore((s) => s.localIsSpeaking);
-  const localProfileColor = useSettingsStore((s) => s.profileColor);
-
-  const activeSpeakerColor = useMemo(() => {
-    if (localIsSpeaking) return localProfileColor || "#6366f1";
-
-    // Remote speaker bul
-    const speaker = participants.find((p) => p.isSpeaking && !p.isLocal);
-    if (!speaker) return null;
-
-    try {
-      const meta = speaker.metadata ? JSON.parse(speaker.metadata) : {};
-      return meta.profileColor || "#6366f1";
-    } catch {
-      return "#6366f1";
-    }
-  }, [participants, localIsSpeaking, localProfileColor]);
+  // ✅ CRITICAL FIX: useParticipants() burada olmamalı!
+  // Her konuşma başlayıp bitince tüm StageManager (DndContext, track'ler, chat) re-render oluyordu.
+  // Çözüm: ActiveSpeakerColor adlı küçük bir component'e taşındı.
+  const [activeSpeakerColor, setActiveSpeakerColor] = useState(null);
 
   // Yayın açıldığında bildirim göster
   useEffect(() => {
@@ -748,10 +791,9 @@ function StageManager({
       ref={containerRef}
       className="flex-1 flex overflow-hidden min-h-0 relative bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12]"
     >
+      <ActiveSpeakerColor onColorChange={setActiveSpeakerColor} />
       <MemoizedStageBackground
-        disableBackgroundEffects={
-          useSettingsStore.getState().disableBackgroundEffects
-        }
+        disableBackgroundEffects={disableBackgroundEffects}
         activeSpeakerColor={activeSpeakerColor}
       />
       {showVoicePanel && (
@@ -1412,12 +1454,7 @@ const StageOverlay = React.memo(
                   : participant?.name || participant?.identity || "Kullanıcı"}
               </span>
             </div>
-            <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-md border border-white/[0.08]">
-              <Users size={9} className="text-indigo-400" />
-              <span className="text-[9px] font-bold text-white/80">
-                {viewerCount}
-              </span>
-            </div>
+            <WatcherCountBadge participantIdentity={participant?.identity} compact={true} />
           </div>
         </>
       );
@@ -1492,9 +1529,7 @@ const StageOverlay = React.memo(
                 <span className="text-[10px] text-[#949ba4] font-medium">
                   İzleyici
                 </span>
-                <span className="text-xs font-bold text-white">
-                  {viewerCount}
-                </span>
+                <WatcherCountBadge participantIdentity={participant?.identity} compact={false} />
               </div>
             </div>
 
@@ -1583,24 +1618,8 @@ function ScreenShareStage({
   const mouseMoveTimeoutRef = useRef(null);
   const cursorTimeoutRef = useRef(null);
 
-  const participants = useParticipants();
   const participant = trackRef?.participant;
 
-  // Custom logic to calculate viewerCount based on metadata watchingStreamId
-  const viewerCount = useMemo(() => {
-    if (!participant) return 0;
-
-    return participants.filter((p) => {
-      // Streamer'ın kendisini sayma
-      if (p.identity === participant.identity) return false;
-      try {
-        const meta = p.metadata ? JSON.parse(p.metadata) : {};
-        return meta.watchingStreamId === participant.identity;
-      } catch (e) {
-        return false;
-      }
-    }).length;
-  }, [participants, participant]);
   const audioTracks = useTracks([Track.Source.ScreenShareAudio]);
   const audioTrackRef = audioTracks.find(
     (t) => t.participant.sid === participant?.sid,

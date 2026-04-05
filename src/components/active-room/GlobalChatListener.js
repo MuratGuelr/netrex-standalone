@@ -216,11 +216,38 @@ export default function GlobalChatListener({ showChatPanel, setShowChatPanel }) 
                 lastTtsSpeakerRef.current = senderId;
                 lastTtsTimeRef.current = now;
                 
-                const utterance = new SpeechSynthesisUtterance(textToRead);
-                utterance.lang = 'tr-TR';
-                utterance.volume = settingsState.ttsVolume / 100;
-                applyVoiceCustomization(utterance, message.userId, settingsState.ttsVoiceURI);
-                window.speechSynthesis.speak(utterance);
+                // ✅ Kuyruk yönetimi: Max 3 bekleyen mesaj — fazlasını at
+                const pending = window.speechSynthesis.pending;
+                if (pending && window.__netrexTtsQueueCount >= 3) {
+                  console.log("[TTS] Queue full, skipping:", textToRead.substring(0, 30));
+                } else {
+                  const utterance = new SpeechSynthesisUtterance(textToRead);
+                  utterance.lang = 'tr-TR';
+                  utterance.volume = settingsState.ttsVolume / 100;
+                  applyVoiceCustomization(utterance, message.userId, settingsState.ttsVoiceURI);
+                  
+                  // ✅ Queue sayacı
+                  window.__netrexTtsQueueCount = (window.__netrexTtsQueueCount || 0) + 1;
+                  
+                  // ✅ TTS durumunu global state'e yaz (UI stop butonu için)
+                  // Speeche giden metin (textToRead) ile UI'da gözüken (displayText) farklı olabilir
+                  const displayText = `${senderName}: ${message.text || ""}`;
+                  window.__netrexTtsActive = true;
+                  window.dispatchEvent(new CustomEvent('netrex-tts-state', { 
+                    detail: { active: true, text: displayText } 
+                  }));
+                  
+                  utterance.onend = () => {
+                    window.__netrexTtsQueueCount = Math.max(0, (window.__netrexTtsQueueCount || 1) - 1);
+                    if (window.__netrexTtsQueueCount === 0 && !window.speechSynthesis.speaking) {
+                      window.__netrexTtsActive = false;
+                      window.dispatchEvent(new CustomEvent('netrex-tts-state', { detail: { active: false } }));
+                    }
+                  };
+                  utterance.onerror = utterance.onend;
+                  
+                  window.speechSynthesis.speak(utterance);
+                }
               }
             }
           }

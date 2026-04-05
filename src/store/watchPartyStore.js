@@ -28,7 +28,7 @@ export const useWatchPartyStore = create(
       // ══════════════════════════════════════
       localPreferences: {
         isListening: true,
-        volume: 80,
+        volume: 15,
         isMuted: false,
         videoMode: false,
         videoFullscreen: false,
@@ -67,17 +67,16 @@ export const useWatchPartyStore = create(
           current.currentTrack?.id  !== newCurrentTrack?.id ||
           current.currentTrack?.url !== newCurrentTrack?.url;
 
-        // ─── Playback state isPlaying değişti mi? ───
-        const isPlayingChanged = current.playbackState.isPlaying !== newIsPlaying;
+        // ─── Playback state isPlaying veya startedAt veya seekPosition veya lastUpdated değişti mi? ───
+        const isPlayingChanged    = current.playbackState.isPlaying !== newIsPlaying;
+        const startedAtChanged    = current.playbackState.startedAt !== newPB.startedAt;
+        const seekPositionChanged = current.playbackState.seekPosition !== (newPB.seekPosition ?? 0);
+        const lastUpdatedChanged  = current.playbackState.lastUpdated !== (newPB.lastUpdated ?? null);
         
-        // EGER Track veya Oynatma Durumu degismediyse,
-        // Firebase'den gelen startedAt ve seekPosition surekli YOK SAYILMALIDIR!
-        // Cunku Firebase'deki Timestamp'ler Host'un saatidir, 10s ileri olabilir!
-        // WebRTC zaten milisaniye hizinda bu isleri local Date.now() ile senkronize ediyor.
         let effectivePlaybackState = current.playbackState;
         let pbChanged = false;
         
-        if (isPlayingChanged || trackChanged) {
+        if (isPlayingChanged || startedAtChanged || trackChanged || seekPositionChanged || lastUpdatedChanged) {
           effectivePlaybackState = {
             isPlaying: newIsPlaying,
             startedAt: newPB.startedAt ?? null,
@@ -99,15 +98,39 @@ export const useWatchPartyStore = create(
           current.hostId   !== newHostId ||
           current.coHosts.length !== newCoHosts.length;
 
-        // ─── Co-Host izinleri değişti mi? (deep compare) ───
-        const coHostPermsChanged =
-          JSON.stringify(current.coHostPermissions || {}) !==
-          JSON.stringify(newCoHostPerms || {});
+        // ─── Co-Host izinleri değişti mi? (shallow compare) ───
+        const currentCoHostKeys = Object.keys(current.coHostPermissions || {});
+        const newCoHostKeys = Object.keys(newCoHostPerms || {});
+        let coHostPermsChanged = currentCoHostKeys.length !== newCoHostKeys.length;
+        if (!coHostPermsChanged) {
+           for (const key of currentCoHostKeys) {
+             if (current.coHostPermissions[key]?.canManageTracks !== newCoHostPerms[key]?.canManageTracks ||
+                 current.coHostPermissions[key]?.canControlPlayback !== newCoHostPerms[key]?.canControlPlayback) {
+               coHostPermsChanged = true;
+               break;
+             }
+           }
+        }
 
-        // ─── Votes (basit length check) ───
-        const votesChanged =
-          Object.keys(current.votes).length !== Object.keys(newVotes).length ||
-          JSON.stringify(current.votes) !== JSON.stringify(newVotes);
+        // ─── Votes değişti mi? (deep counts) ───
+        const currentVoteKeys = Object.keys(current.votes || {});
+        const newVoteKeys = Object.keys(newVotes || {});
+        let votesChanged = currentVoteKeys.length !== newVoteKeys.length;
+        if (!votesChanged) {
+           for (const tId of currentVoteKeys) {
+             const userKeys1 = Object.keys(current.votes[tId] || {});
+             const userKeys2 = Object.keys(newVotes[tId] || {});
+             if (userKeys1.length !== userKeys2.length) {
+                votesChanged = true; break;
+             }
+             for (const uId of userKeys1) {
+                if (current.votes[tId][uId] !== newVotes[tId][uId]) {
+                   votesChanged = true; break;
+                }
+             }
+             if (votesChanged) break;
+           }
+        }
 
         // Hiçbir şey değişmediyse → SET ÇAĞIRMA → re-render YOK
         if (!pbChanged && !trackChanged && !playlistChanged &&
@@ -208,7 +231,7 @@ export const useWatchPartyStore = create(
         const { localPreferences } = get();
         if (!localPreferences.isListening) return 0;
         if (localPreferences.isMuted) return 0;
-        return localPreferences.volume / 100;
+        return (localPreferences.volume / 100) * 0.5;
       },
 
       getTrackVoteScore: (trackId) => {
@@ -226,7 +249,13 @@ export const useWatchPartyStore = create(
         return [...playlist].sort((a, b) => {
           const scoreA = Object.values(votes[a.id] || {}).reduce((s, v) => s + v, 0);
           const scoreB = Object.values(votes[b.id] || {}).reduce((s, v) => s + v, 0);
-          return scoreB - scoreA;
+          if (scoreA !== scoreB) {
+            return scoreB - scoreA;
+          }
+          // Oylar eşitse, listeye eklenme sırasına (orijinal index) göre ilk gelene öncelik ver
+          const idxA = playlist.findIndex(t => t.id === a.id);
+          const idxB = playlist.findIndex(t => t.id === b.id);
+          return idxA - idxB;
         });
       },
 

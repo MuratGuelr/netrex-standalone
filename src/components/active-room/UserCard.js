@@ -8,15 +8,58 @@ import React, {
 } from "react";
 import {
   useParticipantInfo,
-  useTracks,
   useIsSpeaking,
   VideoTrack,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { Tv, Maximize, VolumeX, MicOff, Clock } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import { useServerStore } from "@/src/store/serverStore";
+import { useSpeakingStore } from "@/src/store/speakingStore";
+import { useAuthStore } from "@/src/store/authStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
+
+// ✅ Client-side audio level based speaking detection
+// LiveKit sunucusunun isSpeaking eşiği yüksek — düşük sesler algılanmıyor.
+// participant.audioLevel (0.0-1.0) ile kendi tespitimizi yapıyoruz.
+const AUDIO_LEVEL_THRESHOLD = 0.005; // Çok hassas — kullanıcının duyduğu sesleri yakala
+const AUDIO_LEVEL_CHECK_INTERVAL = 80; // ms
+
+function useRemoteAudioLevelSpeaking(participant, isLocal) {
+  const [isAudioSpeaking, setIsAudioSpeaking] = useState(false);
+  const speakingTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    // Lokal kullanıcı için bu hook kullanılmaz
+    if (isLocal || !participant) return;
+    
+    const checkLevel = setInterval(() => {
+      const level = participant.audioLevel || 0;
+      if (level > AUDIO_LEVEL_THRESHOLD) {
+        if (speakingTimeoutRef.current) {
+          clearTimeout(speakingTimeoutRef.current);
+          speakingTimeoutRef.current = null;
+        }
+        setIsAudioSpeaking(true);
+      } else {
+        if (!speakingTimeoutRef.current) {
+          speakingTimeoutRef.current = setTimeout(() => {
+            setIsAudioSpeaking(false);
+            speakingTimeoutRef.current = null;
+          }, 150); // 150ms hysteresis
+        }
+      }
+    }, AUDIO_LEVEL_CHECK_INTERVAL);
+    
+    return () => {
+      clearInterval(checkLevel);
+      if (speakingTimeoutRef.current) {
+        clearTimeout(speakingTimeoutRef.current);
+      }
+    };
+  }, [participant, isLocal]);
+  
+  return isAudioSpeaking;
+}
 
 const UserCard = ({
   participant,
@@ -26,9 +69,16 @@ const UserCard = ({
   hideIncomingVideo,
   setPinnedStreamIds,
   pinnedStreamIds,
+  // ✅ OPTIMIZATION: Parent'tan gelen props (useTracks N kez yerine 1 kez çağrılır)
+  screenShareTrackMap,
+  cameraTrackMap,
+  members,
 }) => {
   const { identity, name, metadata } = useParticipantInfo({ participant });
   const livekitIsSpeaking = useIsSpeaking(participant);
+  // ✅ Client-side audio level detection (LiveKit'in sunucu VAD'ından daha hassas)
+  const audioLevelSpeaking = useRemoteAudioLevelSpeaking(participant, participant.isLocal);
+
 
   const displayName = name || identity || "User";
 
@@ -48,11 +98,13 @@ const UserCard = ({
     [displayName, getInitials],
   );
 
-  const members = useServerStore((s) => s.members);
+  // ✅ OPTIMIZATION: members artık prop olarak geliyor (store subscription yok)
   const member = useMemo(
     () => members?.find((m) => m.id === identity || m.userId === identity),
     [members, identity],
   );
+
+  const localUser = useAuthStore((s) => s.user);
 
   // 🚀 Store Optimizasyonu
   const localProfileColor = useSettingsStore((s) => s.profileColor);
@@ -62,11 +114,10 @@ const UserCard = ({
   const localIsSpeaking = useSettingsStore((s) => s.localIsSpeaking);
   const storeIsMuted = useSettingsStore((s) => s.isMuted);
   const storeIsDeafened = useSettingsStore((s) => s.isDeafened);
+  const useProfileColorForSpeaking = useSettingsStore((s) => s.useProfileColorForSpeaking ?? true);
 
-  const screenShareTracks = useTracks([Track.Source.ScreenShare]);
-  const screenShareTrack = screenShareTracks.find(
-    (t) => t.participant.sid === participant.sid,
-  );
+  // ✅ OPTIMIZATION: useTracks parent'tan Map olarak geliyor (O(1) lookup)
+  const screenShareTrack = screenShareTrackMap?.get(participant.sid) || null;
   const hasScreenShare = !!screenShareTrack;
   const isCurrentlyWatching = pinnedStreamIds?.some(
     (id) =>
@@ -105,6 +156,12 @@ const UserCard = ({
     }
   }, [metadata]);
 
+  // Global identity data derived from all available states (Local > Remote > Member > Fallback)
+  const effectivePhotoURL = participant.isLocal ? localUser?.photoURL : (remoteState.photoURL || member?.photoURL);
+  const effectiveDisplayName = participant.isLocal 
+    ? (localUser?.displayName || localUser?.username || displayName)
+    : (remoteState.displayName || member?.displayName || member?.username || displayName);
+
   const isMuted = participant.isLocal ? storeIsMuted : remoteState.isMuted;
   const isDeafened = participant.isLocal
     ? storeIsDeafened
@@ -139,9 +196,11 @@ const UserCard = ({
   const speakingTimerRef = useRef(null);
 
   useEffect(() => {
+    // ✅ Lokal: voiceProcessor'dan gelen localIsSpeaking kullan
+    // ✅ Uzak: LiveKit VAD VEYA client-side audioLevel — hangisi duyarlıysa
     const rawIsSpeaking = participant.isLocal
       ? localIsSpeaking
-      : livekitIsSpeaking;
+      : (livekitIsSpeaking || audioLevelSpeaking);
     const isSpeakingNow = rawIsSpeaking && !isMuted && !isDeafened;
 
     if (isSpeakingNow) {
@@ -169,6 +228,7 @@ const UserCard = ({
     };
   }, [
     livekitIsSpeaking,
+    audioLevelSpeaking,
     localIsSpeaking,
     isMuted,
     isDeafened,
@@ -176,6 +236,19 @@ const UserCard = ({
   ]);
 
   const isSpeaking = debouncedIsSpeaking;
+  const setSpeakingStore = useSpeakingStore(s => s.setSpeaking);
+
+  // ✅ Ses durumunu diğer bileşenlerin (Sidebar vs.) görebilmesi için global store'a senkronize et
+  useEffect(() => {
+    if (participant.identity) {
+      setSpeakingStore(participant.identity, isSpeaking);
+    }
+    return () => {
+      if (participant.identity) {
+         setSpeakingStore(participant.identity, false);
+      }
+    }
+  }, [isSpeaking, participant.identity, setSpeakingStore]);
 
   const avatarSize = useMemo(() => {
     if (compact) return "w-10 h-10 text-base";
@@ -183,9 +256,8 @@ const UserCard = ({
     return "w-16 h-16 text-xl";
   }, [compact, totalCount]);
 
-  const videoTrack = useTracks([Track.Source.Camera]).find(
-    (t) => t.participant.sid === participant.sid,
-  );
+  // ✅ OPTIMIZATION: useTracks parent'tan Map olarak geliyor (O(1) lookup)
+  const videoTrack = cameraTrackMap?.get(participant.sid) || null;
 
   const cameraPublication = participant.getTrackPublication(
     Track.Source.Camera,
@@ -239,43 +311,45 @@ const UserCard = ({
   );
 
   // ✅ SPEAKING INDICATOR STYLE (Animasyonlu + Statik)
+  const activeBorderColor = useProfileColorForSpeaking ? borderColor : "#34d399";
+  const activeGlowColor = useProfileColorForSpeaking ? userColor : "#34d399";
+
   const speakingIndicatorStyle = useMemo(() => {
     if (isPotatoMode) {
       // 🥔 PATATES MODU: Statik border, animasyon yok
       return {
         opacity: isSpeaking ? 1 : 0,
-        border: `2px solid ${borderColor}`,
+        border: `2px solid ${activeBorderColor}`,
         transition: "opacity 200ms ease-out", // Sadece opacity transition
       };
     } else {
       // 🎨 NORMAL MOD: Animasyonlu + glow
       return {
         opacity: isSpeaking ? 1 : 0,
-        border: `2px solid ${borderColor}cc`,
-        boxShadow: `0 0 20px ${borderColor}40, 0 0 10px ${borderColor}20`,
+        border: `2px solid ${activeBorderColor}cc`,
+        boxShadow: `0 0 20px ${activeBorderColor}40, 0 0 10px ${activeBorderColor}20`,
       };
     }
-  }, [isSpeaking, borderColor, isPotatoMode]);
+  }, [isSpeaking, activeBorderColor, isPotatoMode]);
 
   // ✅ BACKGROUND GLOW STYLE (Sadece normal modda)
   const backgroundGlowStyle = useMemo(() => {
     if (isPotatoMode) {
       // 🥔 PATATES: Hafif statik glow (animasyon yok)
       return {
-        background: borderColor,
+        background: activeBorderColor,
         opacity: isSpeaking ? 0.08 : 0, // Çok hafif
         transition: "opacity 200ms ease-out",
       };
     } else {
       // 🎨 NORMAL: Animasyonlu glow
       return {
-        background: userColor,
+        background: activeGlowColor,
         opacity: isSpeaking ? 0.15 : 0,
-        animation: isSpeaking ? "pulse-glow 3s infinite ease-in-out" : "none",
+        animation: isSpeaking ? "pulse-glow 3s forwards ease-in-out" : "none",
       };
     }
-  }, [isSpeaking, isPotatoMode, userColor, borderColor]);
-
+  }, [isSpeaking, isPotatoMode, activeGlowColor, activeBorderColor]);
   // ✅ AVATAR TRANSFORM STYLE
   const avatarTransformStyle = useMemo(
     () => ({
@@ -407,29 +481,19 @@ const UserCard = ({
               className={`${avatarSize} rounded-xl flex items-center justify-center text-white font-bold z-10 relative group/avatar overflow-hidden`}
               style={{
                 ...avatarTransformStyle,
-                // ✅ PATATES: Statik scale (animasyon yok)
-                transform: isPotatoMode
-                  ? "translateZ(0)"
-                  : shouldAnimate && isSpeaking
-                    ? "translateZ(0) scale(1.02)"
-                    : "translateZ(0)",
+                // ✅ Büyüme/küçülme tamamen kaldırıldı (sabit)
+                transform: "translateZ(0)",
               }}
             >
               {/* ✅ RING ANIMASYONLARI - Sadece high quality'de */}
-              {isSpeaking && !isPotatoMode && shouldAnimateRings && (
-                <>
-                  <div
-                    className="absolute inset-0 rounded-2xl border-2 border-emerald-400 z-20 animate-nds-speaking-ring"
-                    style={{ "--speaking-color": "#34d399" }}
-                  />
-                  <div
-                    className="absolute inset-0 rounded-2xl ring-2 ring-emerald-500/60 z-20"
-                    style={{
-                      animation:
-                        "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                    }}
-                  />
-                </>
+              {!isPotatoMode && shouldAnimateRings && (
+                <div
+                  className={`absolute inset-0 rounded-2xl border-2 z-20 transition-opacity duration-200 ease-in-out ${isSpeaking ? "opacity-100" : "opacity-0"}`}
+                  style={{
+                    borderColor: activeBorderColor,
+                    boxShadow: `0 0 10px ${activeBorderColor}60, inset 0 0 6px ${activeBorderColor}40`,
+                  }}
+                />
               )}
 
               {/* 🥔 PATATES: Statik ring (animasyon yok) */}
@@ -437,24 +501,22 @@ const UserCard = ({
                 <div
                   className="absolute inset-0 rounded-2xl border-2 z-20"
                   style={{
-                    borderColor: borderColor,
+                    borderColor: activeBorderColor,
                     opacity: 0.8,
                     transition: "opacity 200ms ease-out",
                   }}
                 />
               )}
 
-              {member?.photoURL ? (
+              {effectivePhotoURL ? (
                 <img
-                  src={member.photoURL}
-                  alt={displayName}
+                  src={effectivePhotoURL}
+                  alt={effectiveDisplayName}
                   className="w-full h-full object-cover rounded-2xl relative z-10"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span className="relative z-10 drop-shadow-md">
-                  {userInitials}
-                </span>
+                <span className="relative z-10 uppercase">{getInitials(effectiveDisplayName)}</span>
               )}
 
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
@@ -507,7 +569,7 @@ const UserCard = ({
               <span
                 className={`font-semibold text-white tracking-wide truncate drop-shadow-md ${compact ? "text-[10px]" : "text-xs"}`}
               >
-                {displayName}
+                {effectiveDisplayName}
               </span>
             </div>
           </div>
@@ -624,7 +686,7 @@ const UserCard = ({
                   <span className="text-2xl mb-1 drop-shadow-lg filter contrast-125 select-none">
                     {remoteState.quickStatus.icon || "⏰"}
                   </span>
-                  <span className="text-[11px] font-black text-white uppercase tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] leading-tight truncate w-full max-w-[120px]">
+                  <span className="text-[11px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] leading-tight max-w-[200px] text-center break-words" style={{ wordBreak: 'break-word' }}>
                     {remoteState.quickStatus.label}
                   </span>
                 </div>

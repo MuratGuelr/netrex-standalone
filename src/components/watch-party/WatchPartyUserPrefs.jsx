@@ -47,9 +47,16 @@ export function WatchPartyUserPrefs({ onClose, videoFS }) {
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={videoFS
         ? "absolute bottom-36 right-12 w-[360px] h-[calc(100vh-200px)] flex flex-col bg-zinc-900/90 backdrop-blur-3xl rounded-3xl border border-white/10 shadow-2xl z-[150] overflow-hidden"
-        : "overflow-hidden border border-white/10 bg-zinc-900/95 backdrop-blur-3xl flex shrink-0 z-[150] h-[370px] rounded-2xl shadow-2xl"}
+        : "overflow-hidden bg-zinc-900/90 backdrop-blur-3xl border-r border-white/10 flex shrink-0 z-[150] h-[370px]"}
     >
-      <div className={videoFS ? "flex flex-col h-full" : "w-[360px] flex flex-col h-full"}>
+      {/* ── ARKA PLAN EFEKTİ ── */}
+      {currentTrack?.thumbnail && (
+        <div className="absolute inset-0 z-0 opacity-20 pointer-events-none overflow-hidden">
+          <img src={currentTrack.thumbnail} alt="" className="w-full h-full object-cover blur-2xl scale-125" />
+        </div>
+      )}
+
+      <div className={`relative z-10 ${videoFS ? "flex flex-col h-full" : "w-[360px] flex flex-col h-full"}`}>
         <div className="flex items-center justify-between px-5 py-4
                       border-b border-white/5 bg-white/5 shrink-0">
         <h3 className="text-sm font-bold text-white tracking-wide">Kişisel Ayarlar</h3>

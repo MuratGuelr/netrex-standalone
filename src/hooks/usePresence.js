@@ -152,42 +152,43 @@ export function usePresence() {
   useEffect(() => {
     if (!user?.uid) return;
     
-    const updateHeartbeatInterval = () => {
-      // Clear existing interval
+    let startupDelay = null;
+
+    const updateHeartbeatInterval = (sendImmediate = true) => {
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
-      
-      // Get current interval based on voice state
       const interval = isInVoiceRoomRef.current 
         ? HEARTBEAT_INTERVAL_VOICE 
         : HEARTBEAT_INTERVAL_IDLE;
-      
-      // Start new interval
       heartbeatIntervalRef.current = setInterval(sendHeartbeat, interval);
-      
-      // Send initial heartbeat
-      sendHeartbeat();
-      
+      // ✅ FIX: Açılışta anında Firestore write yapma — geciktir
+      if (sendImmediate) {
+        sendHeartbeat();
+      }
       if (process.env.NODE_ENV === 'development') {
         console.log(`💓 Heartbeat interval: ${interval / 1000}s (voice: ${isInVoiceRoomRef.current})`);
       }
     };
-    
-    updateHeartbeatInterval();
-    
-    // Subscribe to voice room changes
+
+    // ✅ İlk heartbeat'i 30sn geciktir — updatePresence zaten t=3'te yazıyor
+    // sendImmediate=false: Açılışta duplicate Firestore write yapma
+    startupDelay = setTimeout(() => {
+      updateHeartbeatInterval(false);
+    }, 30000);
+
     const unsubscribe = useSettingsStore.subscribe(
       (state) => state.isInVoiceRoom,
       (newValue, prevValue) => {
         if (newValue !== prevValue) {
           isInVoiceRoomRef.current = newValue;
-          updateHeartbeatInterval();
+          updateHeartbeatInterval(true);
         }
       }
     );
     
     return () => {
+      if (startupDelay) clearTimeout(startupDelay);
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
-import { Keyboard, Info, Mic, Volume2, Camera, Clock } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Keyboard, Info, Mic, Volume2, Camera, Clock, Zap, VolumeX, MessageSquare } from "lucide-react";
 import { useRoomContext } from "@livekit/components-react";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { toastOnce } from "@/src/utils/toast";
 import KeybindRow from "../KeybindRow";
+import { useSettingsStore } from "@/src/store/settingsStore";
 
 const formatKeybinding = (keybinding) => {
   if (!keybinding) return "Atanmadı";
@@ -36,25 +37,42 @@ export default function KeybindSettings() {
   const [error, setError] = useState(null);
   const [recordedKeybinding, setRecordedKeybinding] = useState(null);
   const [quickStatusKeybinding, setQuickStatusKeybinding] = useState(null);
+  const [ttsStopKeybinding, setTtsStopKeybinding] = useState(null);
+  const [ttsToggleKeybinding, setTtsToggleKeybinding] = useState(null);
+  const [slotKeybindings, setSlotKeybindings] = useState({});
+  const quickStatusPresets = useSettingsStore(s => s.quickStatusPresets);
+
   useEffect(() => {
     const loadHotkeys = async () => {
         if (!window.netrex) return;
         
         try {
-            // Load all hotkeys in parallel
-            const [mute, deafen, camera, quickStatus] = await Promise.all([
-                window.netrex.getHotkey("mute").catch(e => { console.error("Error loading mute:", e); return null; }),
-                window.netrex.getHotkey("deafen").catch(e => { console.error("Error loading deafen:", e); return null; }),
-                window.netrex.getHotkey("camera").catch(e => { console.error("Error loading camera:", e); return null; }),
-                window.netrex.getHotkey("quick-status").catch(e => { console.error("Error loading quick-status:", e); return null; })
+            // Load base hotkeys in parallel
+            const [mute, deafen, camera, quickStatus, ttsStop, ttsToggle] = await Promise.all([
+                window.netrex.getHotkey("mute").catch(() => null),
+                window.netrex.getHotkey("deafen").catch(() => null),
+                window.netrex.getHotkey("camera").catch(() => null),
+                window.netrex.getHotkey("quick-status").catch(() => null),
+                window.netrex.getHotkey("tts-stop").catch(() => null),
+                window.netrex.getHotkey("tts-toggle").catch(() => null)
             ]);
-
-            console.log("Loaded Hotkeys:", { mute, deafen, camera, quickStatus });
 
             if (mute) setMuteKeybinding(mute);
             if (deafen) setDeafenKeybinding(deafen);
             if (camera) setCameraKeybinding(camera);
             if (quickStatus) setQuickStatusKeybinding(quickStatus);
+            if (ttsStop) setTtsStopKeybinding(ttsStop);
+            if (ttsToggle) setTtsToggleKeybinding(ttsToggle);
+
+            // ✅ Per-slot hotkeys yükle
+            const slotBindings = {};
+            for (let i = 0; i < 6; i++) {
+              try {
+                const binding = await window.netrex.getHotkey(`quick-status-${i}`);
+                if (binding) slotBindings[i] = binding;
+              } catch {}
+            }
+            setSlotKeybindings(slotBindings);
         } catch (error) {
             console.error("Failed to load hotkeys:", error);
             setError("Tuş atamaları yüklenirken bir sorun oluştu.");
@@ -107,8 +125,18 @@ export default function KeybindSettings() {
         const currentDeafen = recording !== "deafen" ? deafenKeybinding : null;
         const currentCamera = recording !== "camera" ? cameraKeybinding : null;
         const currentQuickStatus = recording !== "quick-status" ? quickStatusKeybinding : null;
+        const currentTtsStop = recording !== "tts-stop" ? ttsStopKeybinding : null;
+        const currentTtsToggle = recording !== "tts-toggle" ? ttsToggleKeybinding : null;
+        // ✅ Per-slot bindings de çakışma kontrolüne dahil
+        const allSlotBindings = Object.entries(slotKeybindings)
+          .filter(([idx]) => recording !== `quick-status-${idx}`)
+          .map(([, binding]) => binding);
 
-        const isDuplicate = [currentMute, currentDeafen, currentCamera, currentQuickStatus].some(existing => {
+        const isDuplicate = [
+          currentMute, currentDeafen, currentCamera, currentQuickStatus,
+          currentTtsStop, currentTtsToggle,
+          ...allSlotBindings
+        ].some(existing => {
             if (!existing) return false;
             // Mouse
             if (existing.type === "mouse" && keybinding.type === "mouse") {
@@ -144,6 +172,13 @@ export default function KeybindSettings() {
           if (recording === "deafen") setDeafenKeybinding(keybinding);
           if (recording === "camera") setCameraKeybinding(keybinding);
           if (recording === "quick-status") setQuickStatusKeybinding(keybinding);
+          if (recording === "tts-stop") setTtsStopKeybinding(keybinding);
+          if (recording === "tts-toggle") setTtsToggleKeybinding(keybinding);
+          // ✅ Per-slot quick status keybinding update
+          const slotRecordMatch = recording.match(/^quick-status-(\d+)$/);
+          if (slotRecordMatch) {
+            setSlotKeybindings(prev => ({ ...prev, [slotRecordMatch[1]]: keybinding }));
+          }
           
           // Eğer sadece modifier tuşuna basıldıysa kaydı durdurma (Kombinasyon için bekle)
           // Örnek: Ctrl'ye bastı -> Ctrl atandı ama kayıt devam ediyor -> A'ya bastı -> Ctrl+A atandı ve kayıt bitti.
@@ -342,7 +377,110 @@ export default function KeybindSettings() {
             }
           }}
         />
+
+        <KeybindRow
+          label="Metin Seslendirmeyi Durdur"
+          description="Sıradaki ve o an okunan tüm metinleri atlar/durdurur."
+          shortcut={formatKeybinding(ttsStopKeybinding)}
+          isRecording={recording === "tts-stop"}
+          recordedKeybinding={recording === "tts-stop" ? recordedKeybinding : null}
+          formatKeybinding={formatKeybinding}
+          icon={<VolumeX size={16} className="text-red-400" />}
+          onClick={() => {
+            setRecording("tts-stop");
+            setRecordedKeybinding(null);
+            setError(null);
+          }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("tts-stop", null);
+              if (result?.success) {
+                setTtsStopKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(result?.error || "Tuş ataması kaldırılamadı.", "error");
+              }
+            }
+          }}
+        />
+        
+        <KeybindRow
+          label="Metin Seslendirmeyi Aç/Kapat"
+          description="Metin Seslendirmeyi (TTS) tamamen etkinleştirir veya devre dışı bırakır."
+          shortcut={formatKeybinding(ttsToggleKeybinding)}
+          isRecording={recording === "tts-toggle"}
+          recordedKeybinding={recording === "tts-toggle" ? recordedKeybinding : null}
+          formatKeybinding={formatKeybinding}
+          icon={<MessageSquare size={16} className="text-blue-400" />}
+          onClick={() => {
+            setRecording("tts-toggle");
+            setRecordedKeybinding(null);
+            setError(null);
+          }}
+          onRemove={async () => {
+            if (window.netrex) {
+              const result = await window.netrex.updateHotkey("tts-toggle", null);
+              if (result?.success) {
+                setTtsToggleKeybinding(null);
+                toastOnce("Tuş ataması kaldırıldı.", "success");
+              } else {
+                toastOnce(result?.error || "Tuş ataması kaldırılamadı.", "error");
+              }
+            }
+          }}
+        />
       </div>
+
+      {/* ✅ Per-Slot Quick Status Hotkeys */}
+      {quickStatusPresets.length > 0 && (
+        <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card mt-4">
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+          
+          <div className="flex bg-gradient-to-r from-[#1a1b1e] via-[#25272a] to-[#1a1b1e] p-4 border-b border-white/10">
+            <div className="flex-1 text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
+              <div className="w-1 h-1 bg-amber-400 rounded-full"></div>
+              Hızlı Durum Slotları
+            </div>
+            <div className="w-44 text-center text-xs font-bold text-[#949ba4] uppercase flex items-center justify-center gap-2">
+              <div className="w-1 h-1 bg-orange-400 rounded-full"></div>
+              Tuş Kombinasyonu
+            </div>
+          </div>
+          
+          {quickStatusPresets.map((preset, index) => (
+            <KeybindRow
+              key={preset.id}
+              label={`${preset.icon} ${preset.label || 'Boş Slot'}`}
+              description={`Bu durumu doğrudan aç/kapat`}
+              shortcut={formatKeybinding(slotKeybindings[index])}
+              isRecording={recording === `quick-status-${index}`}
+              recordedKeybinding={recording === `quick-status-${index}` ? recordedKeybinding : null}
+              formatKeybinding={formatKeybinding}
+              icon={<Zap size={16} className="text-amber-400" />}
+              onClick={() => {
+                setRecording(`quick-status-${index}`);
+                setRecordedKeybinding(null);
+                setError(null);
+              }}
+              onRemove={async () => {
+                if (window.netrex) {
+                  const result = await window.netrex.updateHotkey(`quick-status-${index}`, null);
+                  if (result?.success) {
+                    setSlotKeybindings(prev => {
+                      const next = { ...prev };
+                      delete next[index];
+                      return next;
+                    });
+                    toastOnce("Tuş ataması kaldırıldı.", "success");
+                  } else {
+                    toastOnce(result?.error || "Tuş ataması kaldırılamadı.", "error");
+                  }
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Info Box */}
       <div className="mt-4 glass-strong rounded-xl p-4 border border-white/10 flex items-center gap-3">

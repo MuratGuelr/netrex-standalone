@@ -1,8 +1,10 @@
 import React, { useMemo } from "react";
-import { useParticipants } from "@livekit/components-react";
+import { useParticipants, useTracks } from "@livekit/components-react";
+import { Track } from "livekit-client";
 import UserCard from "./UserCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useServerStore } from "@/src/store/serverStore";
 
 // --- KATILIMCI LİSTESİ ---
 const ParticipantList = React.memo(({
@@ -17,6 +19,26 @@ const ParticipantList = React.memo(({
 
   const disableAnimations = useSettingsStore(s => s.disableAnimations);
   const graphicsQuality = useSettingsStore(s => s.graphicsQuality);
+
+  // ✅ OPTIMIZATION: useTracks'i parent'ta BİR KEZ çağır (N kez yerine)
+  const allScreenShareTracks = useTracks([Track.Source.ScreenShare]);
+  const allCameraTracks = useTracks([Track.Source.Camera]);
+
+  // ✅ Map'e dönüştür — O(1) lookup (O(N) find yerine)
+  const screenShareTrackMap = useMemo(() => {
+    const map = new Map();
+    allScreenShareTracks.forEach(t => map.set(t.participant.sid, t));
+    return map;
+  }, [allScreenShareTracks]);
+
+  const cameraTrackMap = useMemo(() => {
+    const map = new Map();
+    allCameraTracks.forEach(t => map.set(t.participant.sid, t));
+    return map;
+  }, [allCameraTracks]);
+
+  // ✅ OPTIMIZATION: members'ı parent'ta bir kez al
+  const members = useServerStore(s => s.members);
 
   // Potato/Low quality: Animasyon yok
   const shouldAnimate = !disableAnimations && 
@@ -60,6 +82,9 @@ const ParticipantList = React.memo(({
                   hideIncomingVideo={hideIncomingVideo}
                   setPinnedStreamIds={setPinnedStreamIds}
                   pinnedStreamIds={pinnedStreamIds}
+                  screenShareTrackMap={screenShareTrackMap}
+                  cameraTrackMap={cameraTrackMap}
+                  members={members}
                 />
               </motion.div>
             ))}
@@ -79,6 +104,9 @@ const ParticipantList = React.memo(({
                   hideIncomingVideo={hideIncomingVideo}
                   setPinnedStreamIds={setPinnedStreamIds}
                   pinnedStreamIds={pinnedStreamIds}
+                  screenShareTrackMap={screenShareTrackMap}
+                  cameraTrackMap={cameraTrackMap}
+                  members={members}
                 />
             </div>
            ))
@@ -111,6 +139,9 @@ const ParticipantList = React.memo(({
                     hideIncomingVideo={hideIncomingVideo}
                     setPinnedStreamIds={setPinnedStreamIds}
                     pinnedStreamIds={pinnedStreamIds}
+                    screenShareTrackMap={screenShareTrackMap}
+                    cameraTrackMap={cameraTrackMap}
+                    members={members}
                 />
             </motion.div>
             ))}
@@ -129,6 +160,9 @@ const ParticipantList = React.memo(({
                   hideIncomingVideo={hideIncomingVideo}
                   setPinnedStreamIds={setPinnedStreamIds}
                   pinnedStreamIds={pinnedStreamIds}
+                  screenShareTrackMap={screenShareTrackMap}
+                  cameraTrackMap={cameraTrackMap}
+                  members={members}
                 />
             </div>
         ))

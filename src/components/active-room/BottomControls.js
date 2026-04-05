@@ -25,7 +25,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import { startWatchParty, endWatchParty } from "@/src/services/watchPartyService";
 import { toastOnce } from "@/src/utils/toast";
 import ScreenShareModal from "../ScreenShareModal";
-
+import TtsStopBadge from "../TtsStopBadge";
 function ControlButton({
   isActive,
   activeIcon,
@@ -112,9 +112,17 @@ export default function BottomControls({
   const screenShareMenuRef = useRef(null);
   const screenShareButtonRef = useRef(null);
   
+  // ✅ FIX: State'i ref'te tut - mousedown listener'ının dependency olmasını önle
+  const showScreenShareMenuRef = useRef(false);
+  const showWatchPartyMenuRef = useRef(false);
+  
   const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
   const watchPartyMenuRef = useRef(null);
   const watchPartyButtonRef = useRef(null);
+
+  // Ref'leri state ile senkronize tut
+  useEffect(() => { showScreenShareMenuRef.current = showScreenShareMenu; }, [showScreenShareMenu]);
+  useEffect(() => { showWatchPartyMenuRef.current = showWatchPartyMenu; }, [showWatchPartyMenu]);
 
   const isScreenSharing = localParticipant?.isScreenShareEnabled;
   const hasSentInitialMetadataRef = useRef(false); // İlk metadata gönderildi mi?
@@ -188,6 +196,8 @@ export default function BottomControls({
       isDeafened,
       isMuted,
       profileColor,
+      photoURL: currentUser?.photoURL || null,
+      displayName: currentUser?.displayName || currentUser?.username || null,
       isCameraOn,
       serverMuted,
       serverDeafened,
@@ -907,30 +917,39 @@ export default function BottomControls({
     }
   };
 
+  // ✅ FIX: Hotkey handler ref'ten çalışıyor - IPC listener birikmesi yok
+  const setQuickStatusByIndex = useSettingsStore(state => state.setQuickStatusByIndex);
+  const hotkeysRef = useRef({ toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus, setQuickStatusByIndex });
   useEffect(() => {
-    const handleHotkey = (action) => {
-      if (action === "toggle-mute") toggleMute();
-      if (action === "toggle-deafen") toggleDeaf();
-      if (action === "toggle-camera") toggleCamera();
-      if (action === "toggle-quick-status") toggleLastQuickStatus();
-    };
-    
-    // ✅ Modern pattern: onHotkeyTriggered returns cleanup function
-    let cleanup;
-    if (window.netrex) {
-      cleanup = window.netrex.onHotkeyTriggered(handleHotkey);
-    }
-    
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, [toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus]);
+    hotkeysRef.current = { toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus, setQuickStatusByIndex };
+  }, [toggleMute, toggleDeaf, toggleCamera, toggleLastQuickStatus, setQuickStatusByIndex]);
 
-  // Ekran paylaşımı ve Watch Party menüleri için dışarı tıklama kontrolü
+  useEffect(() => {
+    if (!window.netrex) return;
+    const handleHotkey = (action) => {
+      if (action === "toggle-mute") hotkeysRef.current.toggleMute();
+      if (action === "toggle-deafen") hotkeysRef.current.toggleDeaf();
+      if (action === "toggle-camera") hotkeysRef.current.toggleCamera();
+      if (action === "toggle-quick-status") hotkeysRef.current.toggleLastQuickStatus();
+      // ✅ Per-slot quick status hotkeys: "toggle-quick-status-0", "toggle-quick-status-1", ...
+      const slotMatch = action.match(/^toggle-quick-status-(\d+)$/);
+      if (slotMatch) {
+        hotkeysRef.current.setQuickStatusByIndex(parseInt(slotMatch[1], 10));
+      }
+    };
+    
+    // ✅ Sadece MOUNT'ta kayıt yap - dependency yok, IPC listener birikmiyor
+    const cleanup = window.netrex.onHotkeyTriggered(handleHotkey);
+    return () => cleanup?.();
+  }, []); // ✅ boş array - handler artık ref üzerinden güncel kalıyor
+
+  // ✅ FIX: mousedown listener artık state'e bağlı değil - ref kullanıyor
+  // Eski: [showScreenShareMenu, showWatchPartyMenu] dep. → her menu aç-kapa'da listener kaldırılıp ekleniyor
+  // Yeni: Sadece MOUNT'ta ekleniyor, ref'ten okuyarak güncel state'e erişiyor
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
-        showScreenShareMenu &&
+        showScreenShareMenuRef.current &&
         screenShareMenuRef.current &&
         screenShareButtonRef.current &&
         !screenShareMenuRef.current.contains(e.target) &&
@@ -940,7 +959,7 @@ export default function BottomControls({
       }
       
       if (
-        showWatchPartyMenu &&
+        showWatchPartyMenuRef.current &&
         watchPartyMenuRef.current &&
         watchPartyButtonRef.current &&
         !watchPartyMenuRef.current.contains(e.target) &&
@@ -951,7 +970,7 @@ export default function BottomControls({
     };
     window.addEventListener("mousedown", handleClickOutside);
     return () => window.removeEventListener("mousedown", handleClickOutside);
-  }, [showScreenShareMenu, showWatchPartyMenu]);
+  }, []); // ✅ boş array - artık listener birikmiyor
 
   return (
     <>
@@ -988,6 +1007,9 @@ export default function BottomControls({
             : 'opacity-100 translate-x-0 scale-100'
         } ${!showChatPanel || chatPosition !== "left" ? "left-0" : "left-[380px]"} ${!showChatPanel || chatPosition !== "right" ? "right-0" : "right-[380px]"}`}
       >
+        {/* TTS Stop Badge - Controls'un hemen üzerinde */}
+        <TtsStopBadge />
+
         {/* Kontrol Butonları - Floating Glass Style */}
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 relative z-10 rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
           {/* Inner Glow */}

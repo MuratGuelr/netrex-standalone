@@ -191,11 +191,13 @@ export default function RoomList({
     };
   }, []);
 
-  // Room presence'leri dinle ve yeni kullanıcı girişlerinde bildirim göster
+  // Room presence'leri dinle — state batching ile optimize edilmiş
   const desktopNotifications = useSettingsStore(state => state.desktopNotifications);
   const notifyOnJoin = useSettingsStore(state => state.notifyOnJoin);
   const prevPresenceRef = useRef({});
-  
+  // ✅ Stabil key: rooms referansı değişse bile sadece oda listesi değişince yeniden bağlan
+  const roomNamesKey = useMemo(() => rooms.map(r => r.name).sort().join(','), [rooms]);
+
   useEffect(() => {
     if (rooms.length === 0) {
       setRoomPresence({});
@@ -203,104 +205,78 @@ export default function RoomList({
       return;
     }
 
-    // Tüm room presence'leri tek bir listener ile dinle (daha az read işlemi)
     const roomNames = rooms.map((r) => r.name);
-    const presenceRefs = roomNames.map((name) => doc(db, "room_presence", name));
-    
-    // Her presence için ayrı listener (ama daha optimize: sadece mevcut room'lar için)
-    const unsubscribes = presenceRefs.map((presenceRef, index) => {
-      return onSnapshot(presenceRef, (snapshot) => {
-        const data = snapshot.data();
-        const roomName = roomNames[index];
+    // ✅ FIX: Tüm presence güncellemelerini tek bir setState'e topla
+    // Eski: Her oda için ayrı onSnapshot → ayrı setRoomPresence → N re-render cascade
+    // Yeni: Tüm update'ler birikirken pendingUpdate setTimeout(0) ile batching yapıyor
+    const batchedPresence = { ...prevPresenceRef.current };
+    let pendingFlush = null;
+
+    const scheduleFlush = () => {
+      if (pendingFlush) clearTimeout(pendingFlush);
+      pendingFlush = setTimeout(() => {
+        pendingFlush = null;
+        const snapshot = { ...batchedPresence };
+        prevPresenceRef.current = snapshot;
+        setRoomPresence(snapshot);
+      }, 0);
+    };
+
+    const unsubscribes = roomNames.map((roomName) => {
+      const presenceRef = doc(db, "room_presence", roomName);
+      return onSnapshot(presenceRef, (snap) => {
+        const data = snap.data();
         const currentUsers = data?.users || [];
-        const prevUsers = prevPresenceRef.current[roomName]?.users || [];
-        
-        // Yeni kullanıcıları tespit et
-        const newUsers = currentUsers.filter(
-          (u) => !prevUsers.some((prevUser) => prevUser.userId === u.userId)
-        );
-        
-        // Bildirim göster (ayarlar açıksa)
-        if (newUsers.length > 0 && notifyOnJoin) {
+        const prevUsers = batchedPresence[roomName]?.users || [];
+
+        // Bildirim: yeni gelen kullanıcıları tespit et
+        if (notifyOnJoin) {
+          const newUsers = currentUsers.filter(
+            (u) => !prevUsers.some((p) => p.userId === u.userId)
+          );
           newUsers.forEach((newUser) => {
-            // Kendi kullanıcımız değilse bildirim göster
             if (newUser.userId !== user?.uid) {
               const username = newUser.username || "Bir kullanıcı";
               const isAppActive = typeof document !== "undefined" && !document.hidden && document.hasFocus();
               const isInSameRoom = currentRoom === roomName;
-              
-              // Toast bildirimi (uygulama aktifken ve aynı odada değilsek)
               if (isAppActive && !isInSameRoom) {
-                systemToast({
-                  title: `${username} online oldu`,
-                  message: `"${roomName}" odasına katıldı`,
-                  type: "join",
-                });
+                systemToast({ title: `${username} online oldu`, message: `"${roomName}" odasına katıldı`, type: "join" });
               }
-              
-              // Masaüstü bildirimi (uygulama arka plandayken veya minimizedken)
               if (!isAppActive && desktopNotifications) {
                 if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                   try {
-                    const notification = new Notification(
-                      `${username} online oldu`,
-                      {
-                        body: `"${roomName}" odasına katıldı`,
-                        icon: "/favicon.ico",
-                        badge: "/favicon.ico",
-                        tag: `join-${roomName}-${newUser.userId}-${Date.now()}`,
-                        silent: false,
-                      }
-                    );
-                    
-                    notification.onclick = () => {
-                      if (window.netrex?.focusWindow) {
-                        window.netrex.focusWindow();
-                      } else {
-                        window.focus();
-                      }
-                      notification.close();
-                    };
-                    
-                    setTimeout(() => notification.close(), 5000);
-                  } catch (error) {
-                    console.error("Masaüstü bildirim hatası:", error);
-                  }
+                    const n = new Notification(`${username} online oldu`, {
+                      body: `"${roomName}" odasına katıldı`,
+                      icon: "/favicon.ico",
+                      tag: `join-${roomName}-${newUser.userId}-${Date.now()}`,
+                      silent: false,
+                    });
+                    n.onclick = () => { window.netrex?.focusWindow?.() || window.focus(); n.close(); };
+                    setTimeout(() => n.close(), 5000);
+                  } catch (e) { console.error("Bildirim hatası:", e); }
                 }
               }
             }
           });
         }
-        
-        // State'i güncelle
-        setRoomPresence((prev) => {
-          const updated = {
-            ...prev,
-            [roomName]: data || { users: [] },
-          };
-          prevPresenceRef.current = updated;
-          return updated;
-        });
+
+        // ✅ Batch: state'i güncellemek yerine biriktir
+        batchedPresence[roomName] = data || { users: [] };
+        scheduleFlush();
       }, (error) => {
-        // Document yoksa boş array olarak işaretle
         if (error.code === "not-found") {
-          const roomName = roomNames[index];
-          setRoomPresence((prev) => {
-            const updated = {
-              ...prev,
-              [roomName]: { users: [] },
-            };
-            prevPresenceRef.current = updated;
-            return updated;
-          });
+          batchedPresence[roomName] = { users: [] };
+          scheduleFlush();
         }
       });
     });
 
     return () => {
+      if (pendingFlush) clearTimeout(pendingFlush);
       unsubscribes.forEach((unsub) => unsub());
     };
-  }, [rooms, currentRoom, desktopNotifications, notifyOnJoin, user?.uid]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomNamesKey, currentRoom, desktopNotifications, notifyOnJoin, user?.uid]);
 
   useEffect(() => {
     const handleShortcut = (event) => {

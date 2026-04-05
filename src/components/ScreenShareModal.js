@@ -153,11 +153,7 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/40 to-transparent animate-pulse-slow" />
         </div>
 
-        {/* Ambient glow orbs */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-indigo-500/[0.08] rounded-full blur-[100px] animate-pulse-slow" />
-          <div className="absolute top-0 right-1/4 w-[250px] h-[250px] bg-purple-500/[0.06] rounded-full blur-[80px] animate-pulse-slow" style={{ animationDelay: '1s' }} />
-        </div>
+        {/* Ambient glow orbs - Removed for performance */}
 
         {/* --- HEADER --- */}
         <div className="p-6 pb-5 shrink-0 flex justify-between items-start border-b border-white/[0.15] relative bg-gradient-to-br from-white/[0.02] via-transparent to-transparent">

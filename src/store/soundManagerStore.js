@@ -7,6 +7,8 @@ import { create } from 'zustand';
  * - Retry logic
  * - Volume clamping
  */
+const lastPlayedTimes = {};
+
 export const useSoundManagerStore = create((set, get) => ({
   audioContext: null,
   cachedBuffers: {},
@@ -26,7 +28,7 @@ export const useSoundManagerStore = create((set, get) => ({
       const sounds = ['mute', 'unmute', 'deafen', 'undeafen', 'join', 'left', 'message'];
       const cache = {};
 
-      const isFileProtocol = window.location.protocol === 'file:';
+      const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
       const baseUrl = isFileProtocol ? '.' : '';
 
       const fetchWithRetry = async (url, retries = 2) => {
@@ -37,7 +39,7 @@ export const useSoundManagerStore = create((set, get) => ({
             return await response.arrayBuffer();
           } catch (err) {
             if (i === retries) throw err;
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 1000));
           }
         }
       };
@@ -59,11 +61,14 @@ export const useSoundManagerStore = create((set, get) => ({
         set({ audioContext: ctx, cachedBuffers: cache, isLoaded: true, _isInitializing: false });
         console.log(`✅ ${loadedCount}/${sounds.length} sistem sesi RAM'e yüklendi`);
         
-        // ✅ Init tamamlandıktan sonra bekleyen sesleri çal
+        // ✅ Init tamamlandıktan sonra bekleyen sesleri çal (Aynı anda aynı ses birden fazla kez binişmesini engelle)
         const pending = get()._pendingQueue;
         if (pending.length > 0) {
           set({ _pendingQueue: [] });
-          pending.forEach(({ name, volume }) => get().play(name, volume));
+          const uniquePending = pending.filter((item, index, self) => 
+            index === self.findIndex((t) => t.name === item.name)
+          );
+          uniquePending.forEach(({ name, volume }) => get().play(name, volume));
         }
       } else {
         throw new Error('No sounds loaded');
@@ -78,27 +83,27 @@ export const useSoundManagerStore = create((set, get) => ({
     const safeVolume = Math.max(0, Math.min(1, volume));
     const { audioContext, cachedBuffers, _isInitializing, isLoaded, _pendingQueue } = get();
     
-    // ✅ Eğer yükleniyorsa queue'ya ekle ve çık (new Audio fallback'i önler)
-    if (_isInitializing && !isLoaded) {
+    // ✅ FIX: "İlk girişte mükerrer çalma"
+    // HTML5 <audio> (fallback) ile WebAudio API (AudioContext) çakışmasını engellemek için
+    // fallback'i sildik. Artık eğer RAM'e yüklenmemişse KESİNLİKLE kuyruğa alır ve init'i zorlar.
+    // Init bitince deduplicate ederek çalar.
+    if (!isLoaded) {
       set({ _pendingQueue: [..._pendingQueue, { name, volume: safeVolume }] });
+      if (!_isInitializing) {
+        get().init();
+      }
       return;
     }
 
+    const now = Date.now();
+    // ✅ FIX: "Cızırtı" - 250ms içinde aynı sesin mükemmel saniye sekansında çağrılmasını engelle
+    if (lastPlayedTimes[name] && now - lastPlayedTimes[name] < 250) {
+      return; 
+    }
+    lastPlayedTimes[name] = now;
+    
     if (!audioContext || !cachedBuffers[name]) {
-      const audio = new Audio(`./sounds/${name}.mp3`);
-      audio.volume = safeVolume;
-      audio.onended = () => {
-        audio.src = '';
-        audio.remove?.();
-      };
-      audio.onerror = () => {
-        audio.src = '';
-        audio.remove?.();
-      };
-      audio.play().catch(() => {
-        audio.src = '';
-        audio.remove?.();
-      });
+      console.warn(`Ses bulunamadı: ${name}`);
       return;
     }
 

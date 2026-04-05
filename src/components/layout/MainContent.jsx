@@ -22,21 +22,10 @@ const MainContent = forwardRef(function MainContent({
         ${className}
       `}
     >
-      {/* Background Decoration */}
+      {/* Background gradient - lightweight alternative to blurred circles */}
       {showBackgroundDecoration && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="
-            decoration-circle-indigo
-            w-96 h-96
-            top-1/4 right-1/4
-            opacity-50
-          " />
-          <div className="
-            decoration-circle-purple
-            w-96 h-96
-            bottom-1/4 left-1/4
-            opacity-40
-          " />
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.03] via-transparent to-purple-500/[0.02]" />
         </div>
       )}
 
@@ -48,8 +37,7 @@ const MainContent = forwardRef(function MainContent({
           flex items-center
           px-4
           border-b border-nds-border-subtle
-          bg-nds-bg-tertiary/80
-          backdrop-blur-sm
+          bg-nds-bg-tertiary
           flex-shrink-0
           relative z-10
         ">
@@ -74,8 +62,7 @@ const MainContent = forwardRef(function MainContent({
           h-controls
           flex-shrink-0
           border-t border-nds-border-subtle
-          bg-nds-bg-secondary/80
-          backdrop-blur-sm
+          bg-nds-bg-secondary
           relative z-10
         ">
           {footer}

@@ -70,21 +70,10 @@ export const useAuthStore = create((set) => ({
             ? existingData.displayName
             : firebaseUser.displayName || "User";
 
-        // ── 4. Firestore'u güncelle — photoURL'yi YAZMA ─────────────
-        // photoURL alanına dokunmuyoruz; sadece lastSeen ve diğer meta.
-        await setDoc(
-          userRef,
-          {
-            uid: firebaseUser.uid,
-            displayName,
-            email: firebaseUser.email,
-            lastSeen: serverTimestamp(),
-            // photoURL burada YOK — Firestore'daki değeri koru
-          },
-          { merge: true },
-        );
-
-        // ── 5. State'e Firestore'dan gelen photoURL'yi yaz ──────────
+        // ── 4. State'e Firestore'dan gelen photoURL'yi yaz ──────────
+        // ✅ FIX: Önce UI state'i hemen set et — setDoc'u bekleme
+        // Eski: await setDoc(...) → sonra set({ isAuth: true }) → splash 1-2sn daha açık kalıyor
+        // Yeni: set() anında, setDoc arka planda — startup CPU baskısını azaltır
         const user = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -95,6 +84,20 @@ export const useAuthStore = create((set) => ({
         };
 
         set({ user, isAuth: true, isLoading: false });
+
+        // Firestore yazımını arka planda yap (non-blocking)
+        // ✅ lastSeen KALDIRILDI — usePresence zaten 3sn sonra yazıyor (duplicate write önlendi)
+        setDoc(
+          userRef,
+          {
+            uid: firebaseUser.uid,
+            displayName,
+            email: firebaseUser.email,
+          },
+          { merge: true },
+        ).catch(err => {
+          console.warn("Background user sync failed:", err);
+        });
       } catch (error) {
         console.error("Error syncing user to Firestore:", error);
         await signOut(auth).catch(() => {});

@@ -43,8 +43,56 @@ export const sanitizeForTTS = (text) => {
 
   let cleanText = text;
 
-  // 1. Yazılı Emoji ve Argo (Slang) / Kısaltma Çevirileri
-  // ÖNEMLİ: Çoğul ve ekli formlar da dahil edilmeli (knklar, slmlar vb.)
+  // ═══════════════════════════════════════════════════════
+  // 0. ERKEN ÇIKIŞ: Teknik/kod içerik algılama (TTS'e hiç girmemeli)
+  // ═══════════════════════════════════════════════════════
+
+  // Noktalı virgülle ayrılmış veri (EQ ayarları, CSV, config satırları)
+  const semicolonCount = (cleanText.match(/;/g) || []).length;
+  if (semicolonCount >= 5) {
+    return { text: "teknik veri içeren bir mesaj gönderdi", isSpam: true };
+  }
+
+  // Sayı ağırlıklı içerik (%60+ sayısal karakter)
+  const digitCount = (cleanText.match(/[\d.,-]/g) || []).length;
+  if (cleanText.length > 30 && digitCount / cleanText.length > 0.5) {
+    return { text: "sayısal veri içeren bir mesaj gönderdi", isSpam: true };
+  }
+
+  // Kod blokları (``` veya ` işaretleri)
+  if (/```[\s\S]*```/.test(cleanText) || (cleanText.match(/`/g) || []).length >= 4) {
+    return { text: "bir kod bloğu paylaştı", isSpam: true };
+  }
+
+  // JSON / nesne yapıları
+  if (/^\s*[\[{]/.test(cleanText) && /[\]}]\s*$/.test(cleanText)) {
+    return { text: "bir veri yapısı paylaştı", isSpam: true };
+  }
+
+  // CSS / stil kuralları
+  if (/[a-zA-Z-]+\s*:\s*[^;]+;/.test(cleanText) && (cleanText.match(/:/g) || []).length >= 3) {
+    return { text: "bir ayar paylaştı", isSpam: true };
+  }
+
+  // Hex kodları (renkler, hash'ler)
+  if ((cleanText.match(/#[0-9a-fA-F]{4,}/g) || []).length >= 2) {
+    return { text: "kod içeren bir mesaj gönderdi", isSpam: true };
+  }
+
+  // Dosya yolları
+  if (/[A-Z]:\\|\/usr\/|\/home\/|\.exe|\.dll|\.js|\.py|\.css|\.json/.test(cleanText)) {
+    return { text: "bir dosya yolu paylaştı", isSpam: true };
+  }
+
+  // Pipe, arrow veya programlama sembolleri yoğunluğu
+  const codeSymbols = (cleanText.match(/[|=>{}()\[\]<>@#$%^&*~`\\]/g) || []).length;
+  if (cleanText.length > 20 && codeSymbols / cleanText.length > 0.15) {
+    return { text: "özel karakterler içeren bir mesaj gönderdi", isSpam: true };
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 1. Yazılı Emoji ve Argo Çevirileri
+  // ═══════════════════════════════════════════════════════
   const replacements = {
     // Emojiler
     ":d": " kahkaha atıyor ",
@@ -141,8 +189,9 @@ export const sanitizeForTTS = (text) => {
     "hocam": " hocam ",
     "bro": " kardeşim ",
     "lan": " lan ",
-    "amk": " ",
-    "mk": " ",
+    "amk": " küfür",
+    "mk": " küfür",
+    "aq": " küfür",
     "yav": " yav ",
   };
 
@@ -150,12 +199,13 @@ export const sanitizeForTTS = (text) => {
   const sortedKeys = Object.keys(replacements).sort((a, b) => b.length - a.length);
   sortedKeys.forEach(key => {
     const escapedKey = key.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    // Kelimenin başında veya sonunda ise VEYA nokta, virgül gibi işaretlere yapışmışsa algıla (gi => case insensitive)
     const regex = new RegExp(`(^|[\\s\\(])(${escapedKey})(?=[\\s.,!?\\)]|$)`, 'gi');
     cleanText = cleanText.replace(regex, `$1${replacements[key]}`);
   });
 
-  // 2. Random Gülüş (Klavye Spam'ı veya asdf, haha vb.) yakalama
+  // ═══════════════════════════════════════════════════════
+  // 2. Random Gülüş / Klavye Spam'ı yakalama
+  // ═══════════════════════════════════════════════════════
   const words = cleanText.split(' ');
   for (let i = 0; i < words.length; i++) {
     const word = words[i].toLowerCase().trim();
@@ -167,23 +217,14 @@ export const sanitizeForTTS = (text) => {
       continue;
     }
     
-    // Random atma durumları (en az 6 harfli kelimeler — kısa kelimeler Türkçe kısaltma olabilir)
+    // Random atma durumları (en az 6 harfli kelimeler)
     if (word.length >= 6) {
-      // Türkçe ek kalıplarını içeren kelimeleri atla — bunlar büyük ihtimalle gerçek kelimeler
       const hasTurkishSuffix = /(?:lar|ler|ım|im|ın|in|ız|iz|dan|den|tan|ten|ya|ye|da|de|dır|dir|yor|ken|mak|mek|dım|dim|sın|sin|nız|niz|lık|lik|cık|cik|sız|siz)$/i.test(word);
       if (hasTurkishSuffix) continue;
       
-      // 1. Yan yana 5 veya daha fazla sessiz harf (Örn: dhsgf, fdgjk) — 4'ten 5'e çıkarıldı
-      //    (knkl = 4 sessiz → artık yakalanmaz, dhsgf = 5 sessiz → yakalanır)
       const hasFiveConsonants = /[bcçdfgğhjklmnprsştvyzxwq]{5,}/.test(word);
-      
-      // 2. Klasik klavye kaydırmaları (4+ tuş sırası)
       const hasKeyboardSmash = /(asdf|qwer|zxcv|fdsa|rewq|vcxz|jklş)/.test(word);
-      
-      // 3. Hiç sesli harf olmayan garip uzun dizelimler (en az 6 harf)
       const noVowels = word.length >= 6 && !/[aeıioöuüAEIİOÖUÜ]/.test(word);
-
-      // 4. Aşırı sessiz harf yoğunluğu (%80+ ve 8+ harf)
       const consonantCount = (word.match(/[bcçdfgğhjklmnprsştvyzxwq]/g) || []).length;
       const intenseConsonants = word.length > 8 && (consonantCount / word.length) > 0.80;
 
@@ -194,15 +235,19 @@ export const sanitizeForTTS = (text) => {
   }
   cleanText = words.join(' ');
 
-  // 3. Sürekli tekrar eden karakter kontrolü (Aynı harf 8+ tekrar)
+  // ═══════════════════════════════════════════════════════
+  // 3. Spam Kontrolü: Tekrar eden karakterler
+  // ═══════════════════════════════════════════════════════
   const repeatingRegex = /(.)\1{7,}/; 
   if (repeatingRegex.test(cleanText)) {
     return { text: "spam içeren bir mesaj", isSpam: true };
   }
 
-  // 4. Çok uzun mesaj koruması (Max 200 karakter)
-  if (cleanText.length > 200) {
-    cleanText = cleanText.substring(0, 150) + "... ve devamı.";
+  // ═══════════════════════════════════════════════════════
+  // 4. Çok uzun mesaj koruması (Max 120 karakter → ~8-10 saniye TTS)
+  // ═══════════════════════════════════════════════════════
+  if (cleanText.length > 120) {
+    cleanText = cleanText.substring(0, 100) + "... ve devamı.";
   }
 
   // 5. Nokta bekleme süresini kısma

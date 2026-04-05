@@ -178,18 +178,24 @@ export default function ChatView({ channelId, username, userId }) {
     }
   }, [imgIsDragging]);
 
+  // ✅ FIX: Keydown listener ref kullanıyor — state değişince listener kaldırılıp eklenmeyecek
+  const selectedImageRef = useRef(selectedImage);
+  const editingMessageIdRef = useRef(editingMessageId);
+  useEffect(() => { selectedImageRef.current = selectedImage; }, [selectedImage]);
+  useEffect(() => { editingMessageIdRef.current = editingMessageId; }, [editingMessageId]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
-        if (selectedImage) setSelectedImage(null);
-        if (editingMessageId) handleCancelEdit();
+        if (selectedImageRef.current) setSelectedImage(null);
+        if (editingMessageIdRef.current) handleCancelEdit();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedImage, editingMessageId]);
+  }, []); // ✅ Boş array — artık listener birikmiyor
 
   useEffect(() => { if (!selectedImage) handleImgReset(); }, [selectedImage, handleImgReset]);
 
@@ -557,12 +563,7 @@ export default function ChatView({ channelId, username, userId }) {
           document.body
         )}
 
-        {/* Decorations */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/[0.05] rounded-full blur-[120px]" />
-          <div className="absolute bottom-1/3 left-1/3 w-[400px] h-[400px] bg-cyan-500/[0.04] rounded-full blur-[100px]" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/[0.03] rounded-full blur-[140px]" />
-        </div>
+
         
         {shouldShowNotificationBanner && (
           <div className="px-4 pt-4 relative z-10">

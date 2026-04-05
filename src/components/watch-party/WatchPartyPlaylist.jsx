@@ -50,6 +50,15 @@ export function WatchPartyPlaylist({
     const isSoundcloud = finalUrl.includes('soundcloud.com/');
     const isYouTube    = finalUrl.includes('youtube.com/') || finalUrl.includes('youtu.be/');
 
+    if (finalUrl.includes('twitch.tv')) {
+      setError('Twitch yayınları stabilite sorunları nedeniyle desteklenmiyor.');
+      return;
+    }
+    if (finalUrl.includes('kick.com/')) {
+      setError('Kick platformu API kısıtlamaları nedeniyle desteklenmiyor.');
+      return;
+    }
+
     // SoundCloud playlist kontrolü
     if (isSoundcloud && finalUrl.includes('/sets/')) {
       setError('SoundCloud playlist desteklenmiyor. Tek parça linki girin.');
@@ -86,7 +95,13 @@ export function WatchPartyPlaylist({
 
     // ReactPlayer desteği kontrolü (SoundCloud hariç)
     if (!isSoundcloud && !ReactPlayer.canPlay(finalUrl)) {
-      setError('Bu link desteklenmiyor. YouTube, SoundCloud, Vimeo vb. deneyin.');
+      setError('Bu link desteklenmiyor. Lütfen geçerli bir YouTube veya SoundCloud linki girin.');
+      return;
+    }
+
+    if (playlist.some((track) => track.url === finalUrl)) {
+      setError('Bu parça zaten listeye eklenmiş!');
+      setInputUrl('');
       return;
     }
 
@@ -111,9 +126,13 @@ export function WatchPartyPlaylist({
           if (data.thumbnail_url) thumbnail = data.thumbnail_url;
         } catch {
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
             const res  = await fetch(
-              `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`
+              `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`,
+              { signal: controller.signal }
             );
+            clearTimeout(timeoutId);
             const data = await res.json();
             if (data.title)         title     = data.title;
             if (data.thumbnail_url) thumbnail = data.thumbnail_url;
@@ -138,12 +157,17 @@ export function WatchPartyPlaylist({
         } catch {}
       }
 
+
       // Diğerleri
       else {
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
           const res  = await fetch(
-            `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`
+            `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`,
+            { signal: controller.signal }
           );
+          clearTimeout(timeoutId);
           const data = await res.json();
           if (data.title)         title     = data.title;
           if (data.thumbnail_url) thumbnail = data.thumbnail_url;
@@ -188,13 +212,22 @@ export function WatchPartyPlaylist({
       className={
         videoFS
           ? `absolute bottom-36 right-12 w-[400px] h-[calc(100vh-200px)] flex flex-col
-             bg-zinc-900/95 backdrop-blur-3xl rounded-3xl border border-white/10
+             bg-zinc-900/90 backdrop-blur-3xl rounded-3xl border border-white/10
              shadow-2xl z-[160] overflow-hidden`
-          : `overflow-hidden border border-white/10 bg-zinc-900/95 backdrop-blur-3xl
-             flex flex-col shrink-0 z-[150] h-[370px] rounded-2xl shadow-2xl`
+          : `overflow-hidden bg-zinc-900/90 backdrop-blur-3xl border-r border-white/10
+             flex flex-col shrink-0 z-[150] h-[370px]`
       }
       style={videoFS ? {} : { width: 400 }}
     >
+      {/* ── ARKA PLAN EFEKTİ ── */}
+      {currentTrack?.thumbnail && (
+        <div className="absolute inset-0 z-0 opacity-20 pointer-events-none overflow-hidden">
+          <img src={currentTrack.thumbnail} alt="" className="w-full h-full object-cover blur-2xl scale-125" />
+        </div>
+      )}
+
+      <div className="relative z-10 flex flex-col w-full h-full">
+
       {/* ── Başlık ── */}
       <div className="flex items-center justify-between px-5 py-4
                       border-b border-white/5 bg-white/5 shrink-0">
@@ -270,10 +303,10 @@ export function WatchPartyPlaylist({
           </div>
         ) : (
           (() => {
-            const activeIdx = sortedPlaylist.findIndex((t) => t.id === currentTrack?.id);
-            return sortedPlaylist.map((track, index) => {
+            const nextTrackCandidate = sortedPlaylist.find(t => t.id !== currentTrack?.id);
+            return sortedPlaylist.map((track) => {
               const isActive = track.id === currentTrack?.id;
-              const isNext   = activeIdx === -1 ? index === 0 : index === activeIdx + 1;
+              const isNext   = track.id === nextTrackCandidate?.id;
               const score    = getScore(track.id);
               const myVote   = getMyVote(track.id);
 
@@ -405,6 +438,7 @@ export function WatchPartyPlaylist({
             });
           })()
         )}
+      </div>
       </div>
     </motion.div>
   );

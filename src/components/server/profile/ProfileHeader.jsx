@@ -39,7 +39,6 @@ const ProfileHeader = memo(
                 className="absolute inset-0"
                 style={{ background: bannerColor }}
               />
-              <div className="absolute inset-0 opacity-[0.15] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
               <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-[#0f0f11]/80" />
             </>
           )}

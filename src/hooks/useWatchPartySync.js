@@ -104,8 +104,17 @@ export function useWatchPartySync(room, playerRef, serverId, channelId) {
   const autoAdvance = useCallback(async () => {
     const state = useWatchPartyStore.getState();
     const sorted = state.getSortedPlaylist();
-    const currentIdx = sorted.findIndex((t) => t.id === state.currentTrack?.id);
-    const next = sorted[currentIdx + 1];
+    const currentTrack = state.currentTrack;
+
+    // Aktif track'i listeden çıkar
+    if (currentTrack) {
+        import('@/src/services/watchPartyService').then(({ removeTrackFromPlaylist }) => {
+            removeTrackFromPlaylist(serverId, channelId, currentTrack);
+        });
+    }
+
+    // Sıradaki parçayı bul (mevcut parça buysa atla)
+    const next = sorted.find(t => t.id !== currentTrack?.id);
 
     if (next) {
       await setCurrentTrackInDb(serverId, channelId, next);

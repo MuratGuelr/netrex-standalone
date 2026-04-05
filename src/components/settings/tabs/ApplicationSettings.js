@@ -7,6 +7,7 @@ export default function ApplicationSettings() {
   const setCloseToTray = useSettingsStore(state => state.setCloseToTray);
   const checkUpdatesOnStartup = useSettingsStore(state => state.checkUpdatesOnStartup);
   const setCheckUpdatesOnStartup = useSettingsStore(state => state.setCheckUpdatesOnStartup);
+  const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
@@ -68,13 +69,96 @@ export default function ApplicationSettings() {
           </div>
           İzleme Partisi (Watch Party)
         </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300">
+
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300 space-y-4">
           <ToggleSwitch
             label="Watch Party Özelliğini Etkinleştir"
             description="Bu ayar açıkken ses odalarında Watch Party simgesini görebilir ve diğer katılımcılarla birlikte senkronize olarak YouTube videoları izleyebilirsiniz."
-            checked={useSettingsStore(s => s.watchPartyEnabled)}
+            checked={watchPartyEnabled}
             onChange={() => useSettingsStore.getState().toggleWatchPartyEnabled()}
           />
+          
+          {watchPartyEnabled && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+              <div className="h-px bg-white/5 my-2"></div>
+
+              {/* Video Modu Dropdown */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                 <div className="flex flex-col flex-1 pl-1">
+                    <span className="font-semibold text-white/90">Video Modu</span>
+                    <span className="text-xs text-[#949ba4] mt-1 leading-snug">
+                      Watch Party başladığında videonun nerede gösterileceğini seçin.
+                    </span>
+                 </div>
+                 <div className="sm:w-[220px]">
+                    <select
+                      value={useSettingsStore.getState().wpVideoMode}
+                      onChange={(e) => useSettingsStore.getState().setWpVideoMode(e.target.value)}
+                      className="w-full bg-[#111214] border border-white/10 text-white p-2.5 rounded-xl text-sm font-medium hover:border-emerald-500/50 focus:border-emerald-500/50 outline-none appearance-none cursor-pointer transition-all duration-300"
+                    >
+                      <option value="player">Ana Ekran (Player)</option>
+                      <option value="mini">Mini (Sağ Altta İkon)</option>
+                    </select>
+                 </div>
+              </div>
+
+              {/* Kalite Dropdown */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                 <div className="flex pl-1">
+                    <span className="font-semibold text-xs uppercase text-[#949ba4]">YouTube Kalitesi</span>
+                 </div>
+                 <div className="sm:w-[220px]">
+                    <select
+                      value={useSettingsStore.getState().wpVideoQuality}
+                      onChange={(e) => useSettingsStore.getState().setWpVideoQuality(e.target.value)}
+                      className="w-full bg-[#111214] border border-white/10 text-white p-2.5 rounded-xl text-sm hover:border-emerald-500/50 focus:border-emerald-500/50 outline-none appearance-none cursor-pointer transition-all duration-300"
+                    >
+                      <option value="auto">Otomatik (Önerilen)</option>
+                      <option value="hd1080">Maksimum (1080p/4K)</option>
+                      <option value="hd720">720p Yüksek</option>
+                      <option value="large">480p Orta</option>
+                      <option value="medium">360p Düşük</option>
+                      <option value="small">240p Çok Düşük</option>
+                    </select>
+                 </div>
+              </div>
+
+              {/* Varsayılan Ses Slider */}
+              <div className="pl-1 pt-2">
+                <div className="flex justify-between items-end mb-2">
+                  <div>
+                    <span className="font-semibold text-white/90">Açılış Sesi Düzeyi</span>
+                    <span className="text-xs text-[#949ba4] block mt-1">Watch party başladığında videonun otomatik ses seviyesi</span>
+                  </div>
+                  <span className="font-bold text-emerald-400">%{useSettingsStore.getState().wpDefaultVolume}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={useSettingsStore.getState().wpDefaultVolume}
+                  onChange={(e) => useSettingsStore.getState().setWpDefaultVolume(parseInt(e.target.value))}
+                  className="w-full h-2 bg-black/40 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+              </div>
+
+              <div className="h-px bg-white/5 my-2"></div>
+
+              <ToggleSwitch
+                label="Otomatik Katıl"
+                description="Biri odada Watch Party başlattığında otomatik olarak player ekranına geçiş yap."
+                checked={useSettingsStore.getState().wpAutoJoin}
+                onChange={() => useSettingsStore.getState().setWpAutoJoin(!useSettingsStore.getState().wpAutoJoin)}
+              />
+
+              <ToggleSwitch
+                label="Katılınca Mikrofonu Sustur"
+                description="Watch Party başlattığında veya başladığında mikrafonunu otomatik kapatır."
+                checked={useSettingsStore.getState().wpAutoMute}
+                onChange={() => useSettingsStore.getState().setWpAutoMute(!useSettingsStore.getState().wpAutoMute)}
+              />
+            </div>
+          )}
         </div>
       </div>
 

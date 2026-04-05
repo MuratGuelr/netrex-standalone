@@ -23,7 +23,7 @@ import { extractDominantGradient } from "@/src/utils/extractDominantGradient";
  * Avatar tıklandığında dosya seçilir → ImageCropModal açılır →
  * Onaylanınca Cloudinary'ye yüklenir.
  */
-const ProfileCard = memo(function ProfileCard({ user, profileColor }) {
+const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
   if (!user) return null;
 
   const fileInputRef = useRef(null);
@@ -116,7 +116,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor }) {
     }
   };
 
-  // ── Banner rengi: mevcut avatar yüklendiğinde güncelle ───────────────────────
+  // ── Banner rengi: mevcut arka plan veya avatar yüklendiğinde güncelle ─────────
   const handleImageLoaded = async (event) => {
     try {
       const imgEl = event.target;
@@ -154,12 +154,25 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor }) {
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
 
-        {/* Banner */}
+        {/* Banner — Arka plan resmi varsa onu göster, yoksa dominant renk */}
         <div
-          className="h-28 w-full transition-all duration-300 relative"
+          className="h-28 w-full transition-all duration-300 relative overflow-hidden"
           style={{ background: bannerColor || profileColor }}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/20" />
+          {bgImage ? (
+            <>
+              <img
+                src={bgImage}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                crossOrigin="anonymous"
+                onLoad={handleImageLoaded}
+              />
+              <div className="absolute inset-0 bg-black/20" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/20" />
+          )}
         </div>
 
         {/* Content */}
@@ -181,7 +194,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor }) {
                       name={user.displayName || "Kullanıcı"}
                       color={profileColor}
                       borderColor={profileColor}
-                      onImageLoad={handleImageLoaded}
+                      onImageLoad={!bgImage ? handleImageLoaded : undefined}
                     />
                   </div>
 

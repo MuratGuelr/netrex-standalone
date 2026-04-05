@@ -6,6 +6,7 @@
  */
 
 import { forwardRef } from "react";
+import { useSettingsStore } from "@/src/store/settingsStore";
 
 const AVATAR_COLORS = [
   "#6366f1",
@@ -51,12 +52,14 @@ const Avatar = forwardRef(function Avatar(
     deafened = false,
     color,
     borderColor,
+    borderless = false,
     className = "",
     onImageLoad,
     ...props
   },
   ref,
 ) {
+  const useProfileColorForSpeaking = useSettingsStore((s) => s.useProfileColorForSpeaking ?? true);
   const avatarColor = color || getColorFromString(name);
 
   // Gradient → ilk hex rengi al
@@ -144,13 +147,12 @@ const Avatar = forwardRef(function Avatar(
           flex-shrink-0
           font-semibold text-white
           transition-all duration-normal
-          ${speaking ? "ring-2 ring-nds-success animate-nds-speaking" : ""}
           ${muted || deafened ? "opacity-50 grayscale" : ""}
         `}
         style={{
           background: !src ? avatarColor : undefined,
           // ✅ box-shadow dışa doğru — border yerine
-          boxShadow: toBorderShadow(effectiveBorderColor || avatarColor),
+          boxShadow: borderless ? "none" : toBorderShadow(effectiveBorderColor || avatarColor),
         }}
       >
         {src ? (
@@ -158,6 +160,7 @@ const Avatar = forwardRef(function Avatar(
             src={src}
             alt={alt || name}
             className="w-full h-full object-cover"
+            crossOrigin="anonymous"
             referrerPolicy="no-referrer"
             onLoad={onImageLoad}
             onError={(e) => {
@@ -192,17 +195,15 @@ const Avatar = forwardRef(function Avatar(
       )}
 
       {/* Speaking Ring */}
-      {speaking && (
-        <div
-          className={`
-            absolute inset-0
-            rounded-lg
-            border-2 border-nds-success
-            animate-nds-speaking-ring
-            pointer-events-none
-          `}
-        />
-      )}
+      <div
+        className={`absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-200 ease-in-out ${speaking ? "opacity-100" : "opacity-0"}`}
+        style={{
+          borderColor: useProfileColorForSpeaking ? (effectiveBorderColor || avatarColor) : "#22c55e",
+          borderWidth: "2px",
+          borderStyle: "solid",
+          boxShadow: `0 0 10px ${useProfileColorForSpeaking ? (effectiveBorderColor || avatarColor) : "#22c55e"}60`,
+        }}
+      />
     </div>
   );
 });

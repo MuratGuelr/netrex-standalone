@@ -6,7 +6,7 @@
  */
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/src/store/authStore";
 import { toast } from "@/src/utils/toast";
@@ -49,11 +49,13 @@ const InstallUpdateSplash = dynamic(
 );
 
 import ServerMemberList from "@/src/components/server/ServerMemberList";
+import ServerSidebarSkeleton from "@/src/components/server/skeletons/ServerSidebarSkeleton";
+import ServerMemberListSkeleton from "@/src/components/server/skeletons/ServerMemberListSkeleton";
 
 export default function Home() {
   const { user, isAuth, isLoading, initializeAuth, loginAnonymously } =
     useAuthStore();
-  const { currentServer, servers } = useServerStore();
+  const { currentServer, servers, isLoading: isServerLoading, channels } = useServerStore();
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
@@ -86,26 +88,41 @@ export default function Home() {
     }
   }, [currentRoom]);
 
+  // Ref'ler: IPC callback'leri sadece 1 kez mount'ta kaydediliyor
+  // Eski: [user?.uid, currentRoom, currentTextChannel, currentServer] dependency'si
+  //       her state değişiminde onAppWillQuit/onRequestExit callback'lerini yeniden register ediyordu
+  // Yeni: [] dependency, ref'ler üzerinden güncel veri okunuyor
+  const userRef = useRef(null);
+  const currentRoomRef = useRef(null);
+  const currentTextChannelRef = useRef(null);
+  const currentServerRef = useRef(null);
+
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
+  useEffect(() => { currentTextChannelRef.current = currentTextChannel; }, [currentTextChannel]);
+  useEffect(() => { currentServerRef.current = currentServer; }, [currentServer]);
+
   // --- GRACEFUL EXIT LOGIC ---
   useEffect(() => {
     if (window.netrex && window.netrex.onAppWillQuit) {
       window.netrex.onAppWillQuit(async () => {
         console.log("🧹 Starting graceful shutdown...");
         try {
-          if (user?.uid) {
-            await updateDoc(doc(db, "users", user.uid), {
+          const uid = userRef.current?.uid;
+          if (uid) {
+            await updateDoc(doc(db, "users", uid), {
               presence: "offline",
               lastSeen: serverTimestamp(),
               gameActivity: null,
               currentRoom: null,
             });
           }
-          if (currentRoom) setCurrentRoom(null);
-          if (currentTextChannel) {
+          if (currentRoomRef.current) setCurrentRoom(null);
+          if (currentTextChannelRef.current) {
             setCurrentTextChannel(null);
             useChatStore.getState().clearCurrentChannel();
           }
-          if (currentServer) useServerStore.getState().clearCurrentServer();
+          if (currentServerRef.current) useServerStore.getState().clearCurrentServer();
           console.log("✅ Graceful shutdown completed");
         } catch (e) {
           console.error("❌ Cleanup error:", e);
@@ -134,7 +151,7 @@ export default function Home() {
         if (error) toast.info(error);
       });
     }
-  }, [user?.uid, currentRoom, currentTextChannel, currentServer]);
+  }, []); // ✅ Boş array — IPC callback'ler sadece 1 kez kaydediliyor
 
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -210,7 +227,11 @@ export default function Home() {
       }
       rightSidebar={
         currentServer ? (
-          <ServerMemberList onClose={() => setShowMemberList(false)} />
+          isServerLoading ? (
+            <ServerMemberListSkeleton />
+          ) : (
+            <ServerMemberList onClose={() => setShowMemberList(false)} />
+          )
         ) : null
       }
       showRightSidebar={showMemberList}
@@ -218,6 +239,9 @@ export default function Home() {
       hasRightSidebarContent={!!currentServer}
       sidebar={
         currentServer ? (
+          isServerLoading && channels.length === 0 ? (
+            <ServerSidebarSkeleton />
+          ) : (
           <ServerSidebar
             key={currentServer.id}
             activeTextChannelId={currentTextChannel}
@@ -299,6 +323,7 @@ export default function Home() {
             onToggleMemberList={() => setShowMemberList(!showMemberList)}
             showMemberList={showMemberList}
           />
+          )
         ) : null
       }
     >
@@ -362,7 +387,6 @@ export default function Home() {
         {/* ActiveRoom her zaman mount, sadece visibility değişiyor */}
         <div
           className={`absolute inset-0 ${currentRoom ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"}`}
-          style={{ transition: "opacity 0.2s" }}
         >
           {currentRoom && (
             <ActiveRoom
@@ -387,32 +411,16 @@ export default function Home() {
         {/* Welcome/Chat screen */}
         <div
           className={`absolute inset-0 ${!currentRoom ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"}`}
-          style={{ transition: "opacity 0.2s" }}
         >
-          <AnimatePresence mode="wait">
             {!showChatPanel ? (
-              <motion.div
-                key="welcome"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute inset-0"
-              >
+              <div key="welcome" className="absolute inset-0">
                 <WelcomeScreen
                   userName={user?.displayName || "Misafir"}
                   version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
                 />
-              </motion.div>
+              </div>
             ) : (
-              <motion.div
-                key="chat"
-                initial={{ x: "-20%", opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: "-20%", opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="absolute inset-0"
-              >
+              <div key="chat" className="absolute inset-0">
                 {currentTextChannel && (
                   <div className="h-full w-full">
                     <StandaloneChatView
@@ -422,9 +430,8 @@ export default function Home() {
                     />
                   </div>
                 )}
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
         </div>
       </div>
     </AppShell>

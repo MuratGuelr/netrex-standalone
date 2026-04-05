@@ -23,7 +23,7 @@ export default function InstallUpdateSplash() {
     <div className="fixed inset-0 z-[100000] bg-[#0a0a0f] flex flex-col items-center justify-center overflow-hidden">
       {/* Background Decor */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse"></div>
+
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
       </div>
 

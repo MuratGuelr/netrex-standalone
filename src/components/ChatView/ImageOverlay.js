@@ -44,11 +44,6 @@ export default function ImageOverlay({
       onMouseUp={handleImgMouseUp}
       onMouseLeave={handleImgMouseUp}
     >
-      {/* Dynamic Background */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-500/10 rounded-full blur-[160px] animate-pulse" />
-      </div>
-
       {/* Main Image Container */}
       <div 
         className={`relative w-full h-full flex items-center justify-center overflow-hidden ${

@@ -189,12 +189,14 @@ const PipGrid = forwardRef(({ tracks, isSelfSharing }, ref) => {
     }
   }, [tracks, isPipActive]);
 
-  // Initialize master video stream
+  // ✅ LAZY INIT: Canvas sadece PiP aktif olduğunda başlat (8MB+ RAM tasarrufu)
   useEffect(() => {
     const canvas = canvasRef.current;
     const master = masterVideoRef.current;
-    if (canvas && master) {
-        // Set fixed size once
+    if (!canvas || !master) return;
+
+    if (isPipActive) {
+        // PiP açılınca canvas boyutunu ayarla ve stream bağla
         canvas.width = 1920;
         canvas.height = 1080;
         
@@ -213,10 +215,15 @@ const PipGrid = forwardRef(({ tracks, isSelfSharing }, ref) => {
         master.srcObject = null;
         master.pause();
       }
+      // ✅ PiP kapatılınca canvas'ı sıfırla (RAM geri ver)
+      if (canvas && !isPipActive) {
+        canvas.width = 1;
+        canvas.height = 1;
+      }
       // ✅ Source video map'i temizle
       sourceVideosRef.current.clear();
     };
-  }, []);
+  }, [isPipActive]);
 
   // Expose methods
   useImperativeHandle(ref, () => ({

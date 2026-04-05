@@ -51,8 +51,9 @@ export default function RailUserPanel() {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       setMenuPos({
-        bottom: window.innerHeight - rect.top + 8,
-        left: rect.right + 12,
+        // Bir tık daha aşağı ve profile (raile) yakın
+        bottom: window.innerHeight - rect.top - 48, 
+        left: rect.right + 8,
       });
     }
     setShowMenu((v) => !v);

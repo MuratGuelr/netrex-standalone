@@ -55,14 +55,15 @@ export default function ScreenSharePreviewComponent({ trackRef }) {
       captureTimeoutRef.current = setTimeout(() => {
         if (video && canvasRef.current && !hasCapturedRef.current) {
           try {
+            // ✅ OPTIMIZATION: Düşük çözünürlüklü preview (RAM tasarrufu)
+            // Blur filtresi detayı gizlediği için yüksek kaliteye gerek yok
             const canvas = canvasRef.current;
             const ctx = canvas.getContext("2d");
-
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 360;
+            canvas.width = Math.min(video.videoWidth || 640, 320);
+            canvas.height = Math.min(video.videoHeight || 360, 180);
 
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL("image/jpeg", 0.8);
+            const imageData = canvas.toDataURL("image/jpeg", 0.4);
             setPreviewImage(imageData);
             hasCapturedRef.current = true;
 

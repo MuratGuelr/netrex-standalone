@@ -101,10 +101,27 @@ function initHotkeysCache() {
         deafen: allHotkeys.deafen || null,
         camera: allHotkeys.camera || null,
         "quick-status": allHotkeys["quick-status"] || null,
+        // ✅ Per-slot quick status hotkeys (max 6 slot)
+        "quick-status-0": allHotkeys["quick-status-0"] || null,
+        "quick-status-1": allHotkeys["quick-status-1"] || null,
+        "quick-status-2": allHotkeys["quick-status-2"] || null,
+        "quick-status-3": allHotkeys["quick-status-3"] || null,
+        "quick-status-4": allHotkeys["quick-status-4"] || null,
+        "quick-status-5": allHotkeys["quick-status-5"] || null,
     };
 }
 
+// Global olarak çağrılmaması gereken ancak hotkey ile eklenen "tts"
+const ensureHotkeyCache = (key) => {
+    if (!hotkeysCache[key]) {
+        const allHotkeys = store.get("hotkeys") || {};
+        hotkeysCache[key] = allHotkeys[key] || null;
+    }
+}
+
 initHotkeysCache();
+ensureHotkeyCache("tts-stop");
+ensureHotkeyCache("tts-toggle");
 
 function updateHotkeyCache(action, keybinding) {
     hotkeysCache[action] = keybinding;

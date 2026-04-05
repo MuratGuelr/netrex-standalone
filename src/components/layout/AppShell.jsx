@@ -23,7 +23,6 @@ import ErrorBoundary from "@/src/components/ui/ErrorBoundary";
 
 const SettingsModal = lazy(() => import("@/src/components/SettingsModal"));
 
-
 export default function AppShell({ 
   children, 
   sidebar,
@@ -34,6 +33,7 @@ export default function AppShell({
   hasRightSidebarContent = false,
   className = "" 
 }) {
+
   const [isElectron, setIsElectron] = useState(false);
   const router = useRouter();
   const { user } = useAuthStore();
@@ -69,36 +69,39 @@ export default function AppShell({
   useEffect(() => {
     setIsElectron(typeof window !== "undefined" && !!window.netrex);
     // 🚀 v5.3: Sistem seslerini RAM'e ön-yükle (Zero Latency)
-    useSoundManagerStore.getState().init();
+    // ✅ FIX: 3sn geciktir — auth init ve Firestore onSnapshot ile yarışmasın
+    const soundInitDelay = setTimeout(() => {
+      useSoundManagerStore.getState().init();
+    }, 3000);
 
-    // 🎹 Hotkey Listener
+    // 🎹 Global Hotkey Listener (Sadece Global Olanlar: TTS vs)
+    // ⚠️ Mute, deafen, camera, quick-status gibi odaya özel şeyler BottomControls.js'de dinlenir!
+    let cleanupTriggered;
     if (window.netrex) {
-        // Farklı API isimlendirmeleri ihtimaline karşı her ikisini de deneyelim
-        const handler = (action) => {
-            console.log("🎹 Hotkey Triggered:", action);
-            // Electron InputManager sends "toggle-{actionName}"
-            if (action === "toggle-quick-status") {
-                const store = useSettingsStore.getState();
-                console.log("Store Toggle Called. Last Status:", store.lastQuickStatus);
-                store.toggleLastQuickStatus();
-            }
-        };
-
-        let cleanupTriggered, cleanupPressed;
-        
-        if (window.netrex.onHotkeyTriggered) {
-            cleanupTriggered = window.netrex.onHotkeyTriggered(handler);
+      cleanupTriggered = window.netrex.onHotkeyTriggered((action) => {
+        if (action === "tts-stop") {
+          window.speechSynthesis?.cancel();
+          const evt = new CustomEvent("netrex-tts-state", { detail: { active: false, text: "" } });
+          window.dispatchEvent(evt);
+          toast.info("TTS durduruldu.");
+        } else if (action === "tts-toggle") {
+          const sStore = useSettingsStore.getState();
+          useSettingsStore.setState({ ttsEnabled: !sStore.ttsEnabled });
+          const newState = !sStore.ttsEnabled;
+          if (!newState) {
+            window.speechSynthesis?.cancel(); // Kapanıyorsa sustur
+            const evt = new CustomEvent("netrex-tts-state", { detail: { active: false, text: "" } });
+            window.dispatchEvent(evt);
+          }
+          toast.info(`Metin Okuma (TTS) ${newState ? 'açıldı' : 'kapatıldı'}.`);
         }
-        
-        if (window.netrex.onHotkeyPressed) {
-            cleanupPressed = window.netrex.onHotkeyPressed(handler);
-        }
-
-        return () => {
-            if (cleanupTriggered) cleanupTriggered();
-            if (cleanupPressed) cleanupPressed();
-        };
+      });
     }
+
+    return () => {
+        clearTimeout(soundInitDelay);
+        if (cleanupTriggered) cleanupTriggered();
+    };
   }, []);
 
   return (
@@ -112,34 +115,41 @@ export default function AppShell({
       select-none
       ${className}
     `}>
-
       {/* Main App Container */}
       <div className="flex-1 flex overflow-hidden">
         {/* Server Rail */}
         {serverRail}
 
-        {/* Left Sidebar */}
+        {/* Left Sidebar - Reals Closing & Opening for every server switch */}
         <AnimatePresence mode="wait">
           {sidebar && (
             <motion.aside
               key={sidebar.key || "sidebar"}
-              initial={{ x: -20, opacity: 0, width: 0 }}
-              animate={{ x: 0, opacity: 1, width: "var(--sidebar-width, 240px)" }}
-              exit={{ x: -20, opacity: 0, width: 0 }}
-              transition={{ duration: 0.32, ease: "easeInOut" }}
+              initial={{ opacity: 0, x: -20, width: 0 }}
+              animate={{ opacity: 1, x: 0, width: 240 }}
+              exit={{ opacity: 0, x: -20, width: 0 }}
+              transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
               className="
                 sidebar
                 h-full
-                bg-nds-bg-primary
+                bg-[#0a0a0c]
                 flex flex-col
                 flex-shrink-0
                 border-r border-nds-border-subtle
                 overflow-hidden
               "
             >
-              <div className="w-sidebar h-full flex flex-col">
+              <motion.div 
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0, transition: { duration: 0 } }}
+                 transition={{ 
+                   opacity: { delay: 0.35, duration: 0.2 },
+                 }} 
+                 className="w-sidebar h-full flex flex-col"
+              >
                  {sidebar}
-              </div>
+              </motion.div>
             </motion.aside>
           )}
         </AnimatePresence>
@@ -187,7 +197,7 @@ export default function AppShell({
                 />
               </button>
 
-              {/* Animated Sidebar Container */}
+              {/* Animated Sidebar Container - Restored its beauty :) */}
               <motion.div
                 initial={false}
                 animate={{ width: showRightSidebar ? 240 : 0 }}

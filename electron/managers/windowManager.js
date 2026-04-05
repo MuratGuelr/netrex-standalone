@@ -1,6 +1,8 @@
 const { BrowserWindow, app, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const log = require('electron-log');
+const http = require('http');
+const fs = require('fs');
 
 // ============================================
 // 🚀 OPTIMIZED WINDOW MANAGER v2.0
@@ -11,11 +13,102 @@ const log = require('electron-log');
 // 2. ✅ WebPreferences constants
 // 3. ✅ CSP header cached
 // 4. ✅ Event listeners optimized
+// 5. ✅ file:// → HTTP static server (CPU fix)
 //
 // ============================================
 
 const { getIconPath, getSplashHtml, getAlreadyRunningHtml, getExitSplashHtml } = require('./utils');
 const currentStore = new (require('electron-store'))();
+
+// ============================================
+// ✅ LOCAL STATIC SERVER (file:// CPU fix)
+// Chromium browser process file:// ile idle CPU spike yapıyor.
+// HTTP ile sunmak (dev modda olduğu gibi) bunu tamamen çözüyor.
+// ============================================
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.wasm': 'application/wasm',
+  '.map': 'application/json',
+  '.txt': 'text/plain',
+};
+
+function _startStaticServer(rootDir) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      let urlPath = '/';
+      try {
+        urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      } catch(e) { /* use default */ }
+      
+      if (urlPath === '/') urlPath = '/index.html';
+      
+      const filePath = path.join(rootDir, urlPath);
+      
+      // Güvenlik: rootDir dışına çıkmayı engelle
+      if (!filePath.startsWith(rootDir)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          // Next.js routing: /view → /view.html dene
+          if (!path.extname(filePath)) {
+            fs.readFile(filePath + '.html', (err2, data2) => {
+              if (err2) {
+                // SPA fallback: index.html döndür
+                fs.readFile(path.join(rootDir, 'index.html'), (err3, data3) => {
+                  if (err3) {
+                    res.writeHead(404);
+                    res.end('Not Found');
+                  } else {
+                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                    res.end(data3);
+                  }
+                });
+              } else {
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(data2);
+              }
+            });
+          } else {
+            res.writeHead(404);
+            res.end('Not Found');
+          }
+        } else {
+          const ext = path.extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+          res.writeHead(200, { 'Content-Type': contentType });
+          res.end(data);
+        }
+      });
+    });
+
+    // Sabit port kullan (Firebase Auth session origin'e bağlı, port değişirse oturum kaybolur)
+    const STATIC_PORT = 17760;
+    server.listen(STATIC_PORT, '127.0.0.1', () => {
+      resolve(server.address().port);
+    });
+
+    server.on('error', reject);
+  });
+}
 
 let mainWindow = null;
 let splashWindow = null;
@@ -43,11 +136,13 @@ const MAIN_WEB_PREFS = {
     nodeIntegration: false,
     contextIsolation: true,
     sandbox: false,
-    backgroundThrottling: false,
+    // backgroundThrottling: false KALDIRILDI! 
+    // Chromium compositor'ünü hiç uyutmuyordu, idle %10 CPU yiyordu.
+    // disable-renderer-backgrounding flag'i ses için yeterlidir.
     enableBlinkFeatures: '',
     spellcheck: false,
-    offscreen: false, // ✅ Audio için gerekli
-    enableWebSQL: false, // ✅ Gereksiz feature disable
+    offscreen: false,
+    enableWebSQL: false,
 };
 
 // ============================================
@@ -227,10 +322,6 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
     });
   });
 
-  // ✅ YouTube Error 153/152 Fix: Inject Referer for file:// origin
-  // YouTube rejects embeds without a valid 3rd-party referer.
-  // Only inject when referer is missing (file:// has no referer).
-  // Do NOT set Origin header — embed requests shouldn't have one.
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*.youtube.com/embed/*', '*://*.youtube-nocookie.com/embed/*'] },
     (details, callback) => {
@@ -267,8 +358,17 @@ function createWindow(isAdminUserFn, currentUserUidFn) {
     const port = process.env.PORT || 3000;
     mainWindow.loadURL(`http://localhost:${port}`);
   } else {
-    const indexPath = path.join(__dirname, "../../out/index.html");
-    mainWindow.loadFile(indexPath);
+    // ✅ CRITICAL FIX: file:// yerine local HTTP server kullan
+    // Chromium'un browser process'i file:// protokolünde idle CPU spike yapıyor.
+    // HTTP üzerinden serviste (dev modda olduğu gibi) bu sorun olmuyor.
+    const outDir = path.join(__dirname, "../../out");
+    _startStaticServer(outDir).then(port => {
+      log.info(`✅ Static server started on port ${port}`);
+      mainWindow.loadURL(`http://127.0.0.1:${port}`);
+    }).catch(err => {
+      log.error("❌ Static server failed, falling back to file://", err);
+      mainWindow.loadFile(path.join(outDir, "index.html"));
+    });
   }
 
   // ============================================

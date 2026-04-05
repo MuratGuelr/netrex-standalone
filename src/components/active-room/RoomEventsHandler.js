@@ -79,10 +79,7 @@ export default function RoomEventsHandler({
   );
 
 
-  // ✅ FIX: useRef guard to prevent duplicate event listener registration
-  const hasRegisteredEventsRef = useRef(false);
-  
-  // ✅ FIX: Store callbacks and values in refs to avoid re-registering on every change
+  // ✅ Store callbacks and values in refs to avoid re-registering on every change
   const callbacksRef = useRef({});
   const valuesRef = useRef({});
   
@@ -103,18 +100,16 @@ export default function RoomEventsHandler({
       roomName,
     };
   });
+
+  // ✅ CRITICAL: mikrofon publish guard - sadece 1 kez publish edilsin
+  const micPublishedRef = useRef(false);
   
   useEffect(() => {
     if (!room) return;
-    
-    // ✅ CRITICAL FIX: Only register events ONCE per room instance
-    if (hasRegisteredEventsRef.current) {
-      console.log("⚠️ Event listeners already registered, skipping duplicate registration");
-      return;
-    }
-    
-    hasRegisteredEventsRef.current = true;
-    console.log("✅ Registering room event listeners (ONCE)");
+
+    // Her yeni room instance'ında mic guard'ı sıfırla
+    micPublishedRef.current = false;
+    console.log("✅ Registering room event listeners");
 
     // ✅ FIX: Define callbacks INSIDE useEffect, using refs for fresh values
     const handleJoin = (participant) => {
@@ -144,22 +139,9 @@ export default function RoomEventsHandler({
       const { playSound, showNotification } = callbacksRef.current;
       const { notifyOnLeave, userDisplayName, roomDisplayName, roomName } = valuesRef.current;
       
-      // 🔇 SECURE FIX: HTML5 Audio Element (Bypass) - Anında Çal
-      // LiveKit'in AudioContext'i ile çatışmamak için bu yöntem seçildi.
-      // 50ms (algılanamaz) güvenlik payı ile anında tepki.
       setTimeout(() => {
-        try {
-          const audio = new Audio("./sounds/someone-left.mp3");
-          // Volume ayarını store'dan al
-          const volume = valuesRef.current?.sfxVolume ? valuesRef.current.sfxVolume / 100 : 0.5;
-          if (volume > 0) {
-            audio.volume = volume;
-            audio.play().catch(e => {
-              // Sessiz hata - uygulama çökmemeli
-            });
-          }
-        } catch (e) {
-          // Sessiz hata
+        if (callbacksRef.current && callbacksRef.current.playSound) {
+          callbacksRef.current.playSound("left");
         }
       }, 50);
 
@@ -170,7 +152,7 @@ export default function RoomEventsHandler({
         console.log(`👤 Participant ${participant?.identity} left - trusting SDK for cleanup`);
       }
 
-      // 🔔 Notification geri açıldı - test ediliyor
+      // 🔔 Notification geri açıldı
       if (
         notifyOnLeave &&
         participant &&
@@ -191,35 +173,34 @@ export default function RoomEventsHandler({
     const onRoomConnected = async () => {
       const { setInVoiceRoom, onConnected } = callbacksRef.current;
       
-      // 🚀 v5.2: Ses odasına bağlandı - idle detection'a bildir
       setInVoiceRoom(true);
       
-      // ✅ MemoizedMicrophoneManager kaldırıldığından mikrofonu burada publish et
-      // Bu olmadan useVoiceProcessor track bulamaz ve ses gitmez
-      try {
-        if (room?.localParticipant) {
-          // Yüksek kaliteli ses için Opus codec ayarları
-          await room.localParticipant.setMicrophoneEnabled(true, {
-            // Yüksek kalite mikrofon - gürültü bastırmayı LiveKit'e bırak
-            echoCancellation: true,
-            noiseSuppression: false,  // useVoiceProcessor zaten hallediyor
-            autoGainControl: true,
-            sampleRate: 48000,
-            channelCount: 1,
-          }, {
-            // Opus codec yüksek bitrate
-            audioBitrate: 96000, // 96 kbps - Discord benzeri kalite
-          });
-          console.log("🎤 Mikrofon yüksek kalite ile publish edildi (onRoomConnected)");
+      // ✅ CRITICAL: Guard ile sadece 1 kez mikrofon publish et
+      // Önceki kod: hem Connected event hem ConnectionStateChanged tetikleyince
+      // setMicrophoneEnabled 2-3 kez çağrılıyordu = WebRTC renegotiation = CPU spike
+      if (micPublishedRef.current) {
+        console.log("🎤 Mikrofon zaten publish edildi, atlanıyor");
+      } else {
+        micPublishedRef.current = true;
+        try {
+          if (room?.localParticipant) {
+            await room.localParticipant.setMicrophoneEnabled(true, {
+              echoCancellation: true,
+              noiseSuppression: false,
+              autoGainControl: true,
+              sampleRate: 48000,
+              channelCount: 1,
+            }, {
+              audioBitrate: 96000,
+            });
+            console.log("🎤 Mikrofon publish edildi (onRoomConnected)");
+          }
+        } catch (micError) {
+          micPublishedRef.current = false; // hata olursa tekrar denenebilsin
+          console.warn("⚠️ Mikrofon publish hatası:", micError);
         }
-      } catch (micError) {
-        console.warn("⚠️ Mikrofon publish hatası:", micError);
       }
-      
-      // Sadece development'ta log göster (spam'i önlemek için)
-      if (process.env.NODE_ENV === "development") {
-        console.log("Room connected - idle detection disabled");
-      }
+
       if (onConnected) onConnected();
     };
 
@@ -292,24 +273,18 @@ export default function RoomEventsHandler({
       }
     };
 
-    // Room state değişikliklerini izle (güvenli yöntem)
-    let lastState = room?.state;
-    const checkConnectionState = () => {
-      if (!room) return;
-      const currentState = room.state;
-      // Sadece state gerçekten değiştiğinde işlem yap
-      if (currentState !== lastState) {
-        lastState = currentState;
-        if (currentState === ConnectionState.Connected) {
-          onRoomConnected();
-        } else if (currentState === ConnectionState.Disconnected) {
-          onRoomDisconnected("Connection state changed");
-        }
-      }
-    };
-
-    // İlk kontrol
-    checkConnectionState();
+    // ✅ CRITICAL FIX: checkConnectionState + ConnectionStateChanged kaldırıldı!
+    // Eski kod: Connected event + ConnectionStateChanged + ilk checkConnectionState =
+    // onRoomConnected 3 kez çağrılıyordu = "already connected to room" log spam
+    // ve her seferinde setMicrophoneEnabled → WebRTC renegotiation → CPU spike
+    //
+    // Yeni davranış: Sadece RoomEvent.Connected dinlenir.
+    // Component zaten bağlıyken mount olursa (chat/üyeler aç-kapa),
+    // aşağıdaki tek seferlik kontrol devreye girer (guard ile korunmuş).
+    if (room.state === ConnectionState.Connected) {
+      console.log("ℹ️ Room zaten Connected, tek seferlik init");
+      onRoomConnected();
+    }
 
     // Reconnecting ve Reconnected handler'larını sakla (cleanup için)
     const onReconnecting = () => {
@@ -326,31 +301,27 @@ export default function RoomEventsHandler({
       if (onConnected) onConnected();
     };
 
-    // Event'leri dinle
+    // Event'leri dinle - Connected ve ConnectionStateChanged AYNI ANDA OLMAMALI
     room.on(RoomEvent.Connected, onRoomConnected);
     room.on(RoomEvent.Disconnected, onRoomDisconnected);
     room.on(RoomEvent.Reconnecting, onReconnecting);
     room.on(RoomEvent.Reconnected, onReconnected);
-    room.on(RoomEvent.ConnectionStateChanged, checkConnectionState);
+    // ✅ ConnectionStateChanged kaldırıldı - Connected event yeterli
     room.on(RoomEvent.ParticipantConnected, handleJoin);
     room.on(RoomEvent.ParticipantDisconnected, handleLeave);
     room.on(RoomEvent.TrackPublished, onTrackPublished);
     room.on(RoomEvent.TrackUnpublished, onTrackUnpublished);
     room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
-
-    // 🚀 v5.2: Doğru error event'leri dinle
     room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
     room.on(RoomEvent.SignalReconnecting, onSignalReconnecting);
 
     return () => {
       console.log("🧹 Cleaning up room event listeners");
-      hasRegisteredEventsRef.current = false;
-      
+
       room.off(RoomEvent.Connected, onRoomConnected);
       room.off(RoomEvent.Disconnected, onRoomDisconnected);
       room.off(RoomEvent.Reconnecting, onReconnecting);
       room.off(RoomEvent.Reconnected, onReconnected);
-      room.off(RoomEvent.ConnectionStateChanged, checkConnectionState);
       room.off(RoomEvent.ParticipantConnected, handleJoin);
       room.off(RoomEvent.ParticipantDisconnected, handleLeave);
       room.off(RoomEvent.TrackPublished, onTrackPublished);

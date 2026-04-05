@@ -5,10 +5,12 @@ import { useWatchPartyStore } from '@/src/store/watchPartyStore';
 import {
   ListMusic, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize, Minimize, Settings,
+  Play, Pause, SkipForward, SkipBack
 } from 'lucide-react';
 
 export function WatchPartyControls({
   videoFS, hasVideo, onTogglePlaylist, onTogglePrefs, activePanel,
+  onPlayPause, onSkipNext, onSkipPrev, isPlaying, permissions
 }) {
   const [volumeOpen, setVolumeOpen] = useState(false);
   const volumeRef = useRef(null);
@@ -54,46 +56,55 @@ export function WatchPartyControls({
   const active = "p-2 rounded-xl transition-all duration-150 bg-white/10 text-emerald-400";
 
   return (
-    <div className="flex items-center gap-1">
-      {/* Çalma listesi */}
-      <button
-        onClick={onTogglePlaylist}
-        className={activePanel === 'playlist' ? active : base}
-        title="Çalma Listesi"
-      >
-        <ListMusic size={iconSize} />
-      </button>
+    <div className="flex items-center justify-between w-full">
+      
+      {/* ─── SOL TARAF: Medya Kontrolleri ─── */}
+      <div className="flex items-center gap-1">
+        {hasVideo && permissions?.canControl && (
+          <>
+            <button onClick={onSkipPrev} className={base} title="Önceki Parça">
+              <SkipBack size={iconSize} />
+            </button>
+            
+            <button onClick={onPlayPause} className={`p-2 rounded-xl transition-all duration-150 ${isPlaying ? 'bg-white/10 text-white' : 'bg-emerald-500/20 text-emerald-400'} hover:bg-emerald-500/30 active:scale-90`} title={isPlaying ? "Durdur" : "Başlat"}>
+              {isPlaying ? <Pause size={iconSize} /> : <Play size={iconSize} className="ml-0.5" />}
+            </button>
 
-      {/* Ayarlar */}
-      {hasVideo && (
+            <button onClick={onSkipNext} className={base} title="Sonraki Parça">
+              <SkipForward size={iconSize} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ─── SAĞ TARAF: Ayarlar, Liste, Ses ─── */}
+      <div className="flex items-center gap-1">
+        {/* Çalma listesi */}
         <button
-          onClick={onTogglePrefs}
-          className={activePanel === 'prefs' ? active : base}
-          title="Ayarlar"
+          onClick={onTogglePlaylist}
+          className={activePanel === 'playlist' ? active : base}
+          title="Çalma Listesi"
         >
-          <Settings size={iconSize} />
+          <ListMusic size={iconSize} />
         </button>
-      )}
 
-      {/* Video modu (sadece normal mod) */}
-      {!videoFS && hasVideo && (
-        <button
-          onClick={toggleVideo}
-          className={videoMode ? active : base}
-          title={videoMode ? "Videoyu Gizle" : "Videoyu Göster"}
-        >
-          {videoMode ? <Monitor size={iconSize} /> : <MonitorOff size={iconSize} />}
-        </button>
-      )}
+        {/* Ayarlar */}
+        {hasVideo && (
+          <button
+            onClick={onTogglePrefs}
+            className={activePanel === 'prefs' ? active : base}
+            title="Ayarlar"
+          >
+            <Settings size={iconSize} />
+          </button>
+        )}
 
-      {/* Fullscreen */}
-      {(videoMode || videoFS) && (
-        <button onClick={toggleFS} className={base} title={videoFS ? "Küçült" : "Tam Ekran"}>
-          {videoFS ? <Minimize size={iconSize} /> : <Maximize size={iconSize} />}
-        </button>
-      )}
-
-      {/* Ses kontrolü */}
+        {/* Fullscreen */}
+        {(hasVideo || videoFS) && (
+          <button onClick={toggleFS} className={base} title={videoFS ? "Küçült" : "Tam Ekran"}>
+            {videoFS ? <Minimize size={iconSize} /> : <Maximize size={iconSize} />}
+          </button>
+        )}
       <div className="relative" ref={volumeRef}>
         <button
           onClick={() => setVolumeOpen((v) => !v)}
@@ -126,18 +137,15 @@ export function WatchPartyControls({
                     {displayVolume}%
                   </span>
                 </div>
-                <div className="relative h-2 flex items-center">
-                  <div className="absolute inset-x-0 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-400 rounded-full"
-                      style={{ width: `${displayVolume}%` }}
-                    />
-                  </div>
+                <div className="relative h-5 flex items-center group/vol">
                   <input
                     type="range" min={0} max={100}
                     value={displayVolume}
                     onChange={handleVolume}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+                    className="w-full h-1.5 appearance-none rounded-full cursor-pointer focus:outline-none transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(0,0,0,0.5)] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-200 hover:[&::-webkit-slider-thumb]:scale-125 active:[&::-webkit-slider-thumb]:scale-110"
+                    style={{
+                      background: `linear-gradient(to right, #34d399 ${displayVolume}%, rgba(255,255,255,0.1) ${displayVolume}%)`
+                    }}
                   />
                 </div>
               </div>
@@ -159,6 +167,11 @@ export function WatchPartyControls({
           )}
         </AnimatePresence>
       </div>
+      </div>
     </div>
-  );
+  )
+  
+  
+  
+  
 }

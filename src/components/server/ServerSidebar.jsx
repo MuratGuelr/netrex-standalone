@@ -165,8 +165,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
     <div className="w-sidebar h-full flex flex-col shrink-0 relative bg-[#0a0a0c] border-r border-white/5 overflow-hidden">
       {/* Background Effects (Void Theme) */}
       <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03] pointer-events-none" />
-      <div className="absolute -top-20 -left-20 w-60 h-60 bg-indigo-600/10 blur-[100px] pointer-events-none" />
-      <div className="absolute top-1/2 -right-20 w-40 h-40 bg-purple-600/10 blur-[80px] pointer-events-none" />
+
 
       {/* 1. DASHBOARD HEADER */}
       <div className="relative z-10 p-4 pb-2" ref={menuRef}>

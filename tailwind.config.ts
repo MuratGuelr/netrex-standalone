@@ -181,23 +181,28 @@ const config: Config = {
         "nds-slide-up": "ndsSlideUp 300ms ease-out forwards",
         "nds-slide-down": "ndsSlideDown 300ms ease-out forwards",
         
+        // Default overrides to stop infinite CPU draining
+        "pulse": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) forwards",
+        "ping": "ping 1s cubic-bezier(0, 0, 0.2, 1) forwards",
+        "bounce": "bounce 1s forwards",
+
         // State animations
-        "nds-pulse": "ndsPulse 3s ease-in-out infinite",
-        "nds-pulse-border": "ndsPulseBorder 2s ease-in-out infinite",
-        "nds-spin-slow": "spin 3s linear infinite",
-        "nds-bounce-subtle": "ndsBounceSubtle 2s ease-in-out infinite",
+        "nds-pulse": "ndsPulse 3s ease-in-out forwards",
+        "nds-pulse-border": "ndsPulseBorder 2s ease-in-out forwards",
+        "nds-spin-slow": "spin 3s linear infinite", // Spini bırakıyoruz (loading için gerekli)
+        "nds-bounce-subtle": "ndsBounceSubtle 2s ease-in-out forwards",
 
         // Speaking/Active state
-        "nds-speaking": "ndsSpeakingGlow 2s ease-in-out infinite",
-        "nds-speaking-ring": "ndsSpeakingRing 1.5s ease-out infinite",
+        "nds-speaking": "ndsSpeakingGlow 2s ease-in-out forwards",
+        "nds-speaking-ring": "ndsSpeakingRing 1.5s ease-out forwards",
 
         // Interactive
         "nds-ripple": "ndsRipple 600ms ease-out forwards",
-        "nds-shimmer": "ndsShimmer 2s linear infinite",
+        "nds-shimmer": "ndsShimmer 2s linear forwards",
 
         // Background decorations
-        "nds-float": "ndsFloat 6s ease-in-out infinite",
-        "nds-float-slow": "ndsFloat 10s ease-in-out infinite",
+        "nds-float": "ndsFloat 6s ease-in-out forwards",
+        "nds-float-slow": "ndsFloat 10s ease-in-out forwards",
       },
 
       keyframes: {

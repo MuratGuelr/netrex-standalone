@@ -79,9 +79,9 @@ export default function WelcomeScreen({
         {/* Grid Deseni */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black_40%,transparent_100%)]" />
         
-        {/* 🚀 OPTIMIZED: animate-pulse kaldırıldı - CPU tüketimini azaltır */}
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[60px] opacity-60" style={{ willChange: 'transform' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[50px] opacity-60" style={{ willChange: 'transform' }} />
+        {/* Static background orbs - no animation, no GPU layer waste */}
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[60px] opacity-60" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[50px] opacity-60" />
       </div>
 
       {/* --- Üst Sağ Kısayol Butonu --- */}

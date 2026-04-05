@@ -56,9 +56,7 @@ const MemoizedBackground = React.memo(({ disableEffects }) => {
   if (disableEffects) return null;
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Animasyonları azalttık, static render */}
-      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/[0.04] rounded-full blur-[100px] will-change-opacity" />
-      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/[0.03] rounded-full blur-[80px] will-change-opacity" />
+      {/* Animasyonları azalttık, static render (massive blur divs removed) */}
     </div>
   );
 });
@@ -155,7 +153,6 @@ const LoadingSplash = ({
             transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
             className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/15 blur-[120px]"
           />
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] contrast-150 brightness-150" />
         </div>
       )}
 
@@ -1083,9 +1080,18 @@ export default function ActiveRoom({
     }
     // İlk bağlantı hatasında sadece timeout'ta hata göster
   };
+  // ✅ Join sesi sadece 1 kez çalsın (token rotation'da tekrar çalmasın)
+  const joinSoundPlayedRef = useRef(false);
   useEffect(() => {
-    if (token) playSound("join");
+    if (token && !joinSoundPlayedRef.current) {
+      joinSoundPlayedRef.current = true;
+      playSound("join");
+    }
   }, [token]);
+  // Oda değişince sıfırla
+  useEffect(() => {
+    joinSoundPlayedRef.current = false;
+  }, [roomName]);
   const handleUserContextMenu = (e, participant) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1103,10 +1109,7 @@ export default function ActiveRoom({
   if (connectionError && !hasConnectedOnce) {
     return (
       <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4 animate-nds-fade-in">
-        {/* Animated background */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-red-500/10 rounded-full blur-[120px] animate-pulse" />
-        </div>
+
 
         {/* Error Card */}
         <div className="relative z-10 w-full max-w-md">
@@ -1328,10 +1331,7 @@ export default function ActiveRoom({
       {/* Bağlantı koptu (başarılı bağlantıdan sonra) */}
       {isReconnecting && hasConnectedOnce && (
         <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95 flex flex-col items-center justify-center backdrop-blur-md p-4">
-          {/* Animated background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-[120px] animate-pulse" />
-          </div>
+
 
           {/* Content */}
           <div className="relative z-10 flex flex-col items-center">

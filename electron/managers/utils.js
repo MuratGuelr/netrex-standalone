@@ -29,7 +29,6 @@ const COMMON_CSS = `
         user-select: none;
     }
     .aurora { position: absolute; filter: blur(120px); opacity: 0.15; z-index: 1; pointer-events: none; border-radius: 50%; }
-    .noise { position: absolute; inset: 0; background: url('https://grainy-gradients.vercel.app/noise.svg'); opacity: 0.05; pointer-events: none; z-index: 2; contrast: 150%; brightness: 150%; }
     .particles { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
     .p { position: absolute; background: white; border-radius: 50%; opacity: 0; }
     
@@ -101,7 +100,7 @@ const getSplashHtml = () => `
 </head>
 <body>
     <div class="aurora a1"></div><div class="aurora a2"></div>
-    <div class="noise"></div>
+
     <div class="particles" id="ps"></div>
     <div class="container">
         <div class="logo-box">
@@ -184,7 +183,7 @@ const getExitSplashHtml = () => `
 </head>
 <body>
     <div class="aurora a1"></div><div class="aurora a2"></div>
-    <div class="noise"></div>
+
     <div class="particles" id="ps"></div>
     <div class="container">
         <div class="logo-box">
@@ -299,7 +298,7 @@ const getHtmlTemplate = (title, bodyContent, scriptContent = "") => `
 <body>
     <div class="aurora" style="width:600px;height:600px;background:${TOKENS.purple};top:-10%;left:-10%"></div>
     <div class="aurora" style="width:500px;height:500px;background:${TOKENS.indigo};bottom:-10%;right:-10%"></div>
-    <div class="noise"></div>
+
     
     <div class="card">
         <svg width="80" height="80" viewBox="0 0 256 256" style="margin-bottom:20px">

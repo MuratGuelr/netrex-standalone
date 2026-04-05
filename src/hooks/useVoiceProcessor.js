@@ -126,6 +126,28 @@ export function useVoiceProcessor() {
     initResourcesPath();
   }, []);
 
+  // ✅ Noise ayarlarını ref'te tut - settings değişince audio graph yeniden kurulmasın
+  const noiseSettingsRef = useRef({});
+  useEffect(() => {
+    noiseSettingsRef.current = {
+      noiseSuppressionMode,
+      advancedNoiseReduction,
+      spectralFiltering,
+      aiNoiseSuppression,
+    };
+  }, [noiseSuppressionMode, advancedNoiseReduction, spectralFiltering, aiNoiseSuppression]);
+
+  // ✅ Hook unmount edildiğinde global AudioContext'i temizle
+  // (cleanup() bunu artık yapmıyor - reconnect döngüsünde tekrar kullanılıyor)
+  useEffect(() => {
+    return () => {
+      if (globalSharedAudioContext && globalSharedAudioContext.state !== 'closed') {
+        globalSharedAudioContext.close().catch(() => {});
+        globalSharedAudioContext = null;
+      }
+    };
+  }, []); // sadece unmount
+
   // ========== CLEANUP ==========
   const cleanup = useCallback(() => {
     isCleaningUpRef.current = true;
@@ -138,7 +160,6 @@ export function useVoiceProcessor() {
     // ✅ Orijinal track'i geri yükle (eğer replace edilmişse)
     if (originalSenderRef.current && processedTrackRef.current) {
       try {
-        // Track'i stop et
         processedTrackRef.current.stop();
       } catch(e) {}
       processedTrackRef.current = null;
@@ -169,16 +190,17 @@ export function useVoiceProcessor() {
         ref.current = null;
       }
     });
-    // ✅ AudioContext'i kapat (memory leak'in en büyük kaynağı!)
-    // close() çağrılmazsa tüm internal node'lar, buffer'lar ve audio thread'ler bellekte kalır
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-    }
-
-    // ✅ Global'i de temizle
-    if (globalSharedAudioContext && globalSharedAudioContext.state !== "closed") {
-      globalSharedAudioContext.close().catch(() => {});
-      globalSharedAudioContext = null;
+    
+    // ✅ FIX: Local AudioContext ref'ini temizle ama global'i KAPATMA!
+    // globalSharedAudioContext'i burada kapatmak RAM leak'e yol açar:
+    // - AudioContext kapatılırsa yeniden açmak yeni bellek alanı oluşturur
+    // - useEffect cleanup her settings değişiminde tetiklenebildiğinden
+    //   sürekli open→close→open döngüsü oluşur
+    // Global context'i sadece hook tamamen unmount edildiğinde kapat (aşağıda)
+    if (audioContextRef.current && audioContextRef.current !== globalSharedAudioContext) {
+      if (audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
     }
     audioContextRef.current = null;
   }, [setLocalIsSpeaking]);
@@ -263,7 +285,7 @@ export function useVoiceProcessor() {
       // ✅ RNNoise Setup (@timephy/rnnoise-wasm)
       // Self-contained worklet with inline WASM - no separate file loading
       // ============================================
-      if (noiseSuppressionMode === "krisp") {
+      if (noiseSettingsRef.current.noiseSuppressionMode === "krisp") {
         try {
           if (!ctx || ctx.state === "closed") {
             console.warn("⚠️ AudioContext closed, RNNoise atlanıyor");
@@ -290,8 +312,8 @@ export function useVoiceProcessor() {
       }
 
       // Filters (Standard mode only)
-      if ((noiseSuppressionMode === "standard" || !rnnoiseNodeRef.current) && 
-          (advancedNoiseReduction || spectralFiltering)) {
+      if ((noiseSettingsRef.current.noiseSuppressionMode === "standard" || !rnnoiseNodeRef.current) && 
+          (noiseSettingsRef.current.advancedNoiseReduction || noiseSettingsRef.current.spectralFiltering)) {
         const highPass = ctx.createBiquadFilter();
         highPass.type = "highpass";
         highPass.frequency.value = CONFIG.VOICE_LOW_FREQ;
@@ -308,7 +330,7 @@ export function useVoiceProcessor() {
         currentNode = lowPass;
         lowPassFilterRef.current = lowPass;
 
-        if (advancedNoiseReduction) {
+        if (noiseSettingsRef.current.advancedNoiseReduction) {
           const notch = ctx.createBiquadFilter();
           notch.type = "notch";
           notch.frequency.value = 50;
@@ -444,13 +466,11 @@ export function useVoiceProcessor() {
           
           const now = Date.now();
           const threshold = cachedThresholdRef.current;
-          const isKrisp = noiseSuppressionMode === "krisp";
-          const isStandard = noiseSuppressionMode === "standard";
-          
+          const { noiseSuppressionMode: nsMode } = noiseSettingsRef.current;
           let isSpeaking = false;
-          if (isKrisp) {
+          if (nsMode === "krisp") {
             isSpeaking = rms > threshold && !isTransient;
-          } else if (isStandard) {
+          } else if (nsMode === "standard") {
             isSpeaking = rms > threshold && (isSustainedVoice || hasPotentialVoice);
           } else {
             isSpeaking = rms > threshold;
@@ -516,10 +536,8 @@ export function useVoiceProcessor() {
   }, [
     localParticipant,
     room,
-    noiseSuppressionMode,
-    advancedNoiseReduction,
-    spectralFiltering,
-    aiNoiseSuppression,
+    // ✅ Noise ayarları KALDIRILDI - bunlar artık noiseSettingsRef üzerinden okunuyor
+    // Bu sayede ayar değişince tüm audio graph yeniden kurulmayacak
     setLocalIsSpeaking,
     cleanup,
   ]);

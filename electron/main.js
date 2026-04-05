@@ -3,7 +3,6 @@ const path = require("path");
 const fs = require("fs");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
-const { uIOhook } = require("uiohook-napi");
 
 // ============================================
 // 🚀 OPTIMIZED MAIN.JS v2.0
@@ -91,24 +90,18 @@ app.commandLine.appendSwitch('ignore-certificate-errors');
 // ✅ PERFORMANCE FLAGS - Array-based
 // ============================================
 const PERFORMANCE_FLAGS = [
-    // Background throttling disable
+    // Background throttling disable (Sesli sohbetin arka planda kopmaması için mecburidir)
+    // NOT: backgroundThrottling ve disable-background-timer-throttling KALDIRILDI!
+    // Bunlar Chromium compositor'ünü hiç uyutmuyor ve idle CPU'yu %10'a çekiyordu.
+    // disable-renderer-backgrounding tek başına WebRTC sesin arka planda çalışması için YETERLİDİR.
     'disable-renderer-backgrounding',
-    'disable-background-timer-throttling',
     'disable-backgrounding-occluded-windows',
     
-    // Audio optimization
-    ['enable-features', 'HardwareMediaKeyHandling,WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'],
-    ['disable-features', 'AudioServiceOutOfProcess'], // ✅ Audio in-process (daha hızlı)
-    ['audio-renderer-threads', '2'],
-    ['audio-buffer-size', '512'], // ✅ 128 → 512 (daha stabil)
+    // Audio optimization (Sadece gerekli olanlar. AudioServiceOutOfProcess Main Process'i yorduğu için KESİNLİKLE EKLENMEYECEK!)
+    ['enable-features', 'WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'],
     ['force-fieldtrials', 'WebRTC-Audio-Priority/Enabled/'],
     ['autoplay-policy', 'no-user-gesture-required'], // ✅ Autoplay enable
 ];
-
-// GPU flags (production only)
-if (app.isPackaged) {
-    PERFORMANCE_FLAGS.push('enable-gpu-rasterization', 'enable-zero-copy');
-}
 
 // Apply all flags
 PERFORMANCE_FLAGS.forEach(flag => {
@@ -149,7 +142,6 @@ if (!gotTheLock) {
     // Platform Specifics
     if (process.platform === "win32") {
         app.setAppUserModelId("Netrex Client");
-        // ✅ Process priority kaldırıldı - minimal etki, hata riski yüksek
     }
     
     if (process.platform === "darwin") {
@@ -261,7 +253,7 @@ app.on("before-quit", async (event) => {
 });
 
 app.on("will-quit", () => {
-   uIOhook.stop();
+   try { require("uiohook-napi").uIOhook.stop(); } catch(e) {}
 });
 
 app.on("window-all-closed", () => {

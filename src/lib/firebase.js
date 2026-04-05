@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, memoryLocalCache } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -15,7 +15,23 @@ const firebaseConfig = {
 // Singleton pattern to avoid re-initialization errors in Next.js hot-reload
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// ✅ PERFORMANCE FIX: Memory-only cache — IndexedDB persistence KAPALI
+// Varsayılan getFirestore() her onSnapshot update'inde IndexedDB'ye yazıyordu
+// → Sürekli disk I/O → CPU spike (idle'da bile %10-17)
+// memoryLocalCache ile: sıfır disk yazması, sıfır IndexedDB overhead
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: memoryLocalCache(),
+    experimentalForceLongPolling: false,
+    experimentalAutoDetectLongPolling: false,
+  });
+} catch (e) {
+  // Hot-reload durumunda Firestore zaten initialize edilmiş olabilir
+  db = getFirestore(app);
+}
+
 const storage = getStorage(app);
 
 export { auth, db, storage };

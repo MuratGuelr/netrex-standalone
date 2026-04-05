@@ -95,13 +95,13 @@ export const useServerStore = create((set, get) => ({
     if (_inviteListener) _inviteListener();
     if (_voiceStateListener) _voiceStateListener();
 
-    // Reset current server data
-    // Optimistic update: Attempt to find server in cache to prevent UI flash (Home screen)
+    // ✅ OPTIMIZATION: Optimistic update — cache'ten sunucu bilgisini hemen göster
     let nextServer = null;
     if (serverId) {
         nextServer = get().servers.find(s => s.id === serverId) || null;
     }
 
+    // ✅ FIX: Tek bir set() ile state'i güncelle — "ileri geri" glitch'ini önle
     set({ 
       currentServer: nextServer, 
       channels: [], 
@@ -118,18 +118,13 @@ export const useServerStore = create((set, get) => ({
     }
 
     try {
-      // Fetch Server Details
-      const serverDoc = await getDoc(doc(db, "servers", serverId));
-      if (!serverDoc.exists()) {
-        set({ error: "Server not found", isLoading: false });
-        // Don't leave loading true
-        return; 
-      }
-      set({ currentServer: { id: serverDoc.id, ...serverDoc.data() } });
-
-      // Start Listeners concurrently
+      // ✅ FIX: getDoc + listener'ları paralel başlat
+      // Eski: getDoc → set(currentServer) → set(listeners) = 3 render
+      // Yeni: getDoc + listeners paralel, tek set() ile birleştir
       
-      // Channels Listener
+      const serverDocPromise = getDoc(doc(db, "servers", serverId));
+      
+      // Channels Listener — hemen başlat (getDoc'u bekleme)
       const channelsQ = query(
         collection(db, "servers", serverId, "channels")
       );
@@ -153,7 +148,6 @@ export const useServerStore = create((set, get) => ({
              
              if (voiceIds.length > 0) {
                  // Firestore 'in' query supports up to 30 items
-                 // If > 30, we slice to 30 for safety (MVP)
                  const idsToQuery = voiceIds.slice(0, 30);
                  
                  const q = query(
@@ -194,34 +188,40 @@ export const useServerStore = create((set, get) => ({
         console.error("Roles listener error:", error);
       });
 
-      // Members Listener - with auto-repair for missing user data
+      // Members Listener
       const membersQ = query(collection(db, "servers", serverId, "members"));
-      const unsubMembers = onSnapshot(membersQ, async (snapshot) => {
+      let autoRepairDone = false;
+
+      const unsubMembers = onSnapshot(membersQ, (snapshot) => {
         const members = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        // Auto-repair: Check for members missing displayName OR having default "User" name and fetch from users collection
-        for (const member of members) {
-          if (!member.displayName || member.displayName === "User") {
-            try {
-              const userId = member.id || member.userId;
-              if (userId) {
+        set({ members });
+
+        // Auto-repair: Sadece ilk snapshot'ta, sadece bir kez çalış
+        if (!autoRepairDone) {
+          autoRepairDone = true;
+          const membersNeedingRepair = members.filter(m => !m.displayName || m.displayName === "User");
+          
+          if (membersNeedingRepair.length > 0) {
+            Promise.all(membersNeedingRepair.map(async (member) => {
+              try {
+                const userId = member.id || member.userId;
+                if (!userId) return;
                 const userDoc = await getDoc(doc(db, "users", userId));
-                if (userDoc.exists()) {
-                  const userData = userDoc.data();
-                  // Update the member document with user info
+                if (!userDoc.exists()) return;
+                const userData = userDoc.data();
+                const newDisplayName = userData.displayName || userData.name || "User";
+                if (newDisplayName !== "User") {
                   await updateDoc(doc(db, "servers", serverId, "members", member.id), {
-                    displayName: userData.displayName || userData.name || "User",
+                    displayName: newDisplayName,
                     photoURL: userData.photoURL || null
                   });
                 }
+              } catch (e) {
+                console.warn("Could not auto-repair member data:", e);
               }
-            } catch (e) {
-              console.warn("Could not auto-repair member data:", e);
-            }
+            })).catch(() => {});
           }
         }
-        
-        set({ members });
       }, (error) => {
         console.error("Members listener error:", error);
       });
@@ -235,7 +235,21 @@ export const useServerStore = create((set, get) => ({
         console.error("Badges listener error:", error);
       });
 
+      // ✅ FIX: getDoc sonucunu bekle ve TEK set() ile tüm listener'ları birlikte kaydet
+      const serverDoc = await serverDocPromise;
+      if (!serverDoc.exists()) {
+        // Cleanup listeners we just started
+        unsubChannels();
+        unsubRoles();
+        unsubMembers();
+        unsubBadges();
+        set({ error: "Server not found", isLoading: false, currentServer: null });
+        return; 
+      }
+
+      // ✅ TEK set() — currentServer + listeners + isLoading = 1 render
       set({
+        currentServer: { id: serverDoc.id, ...serverDoc.data() },
         isLoading: false,
         _channelListener: unsubChannels,
         _roleListener: unsubRoles,

@@ -130,23 +130,7 @@ export default function SplashScreen({
         >
           {/* Backgrounds */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <motion.div
-               animate={{ x: [0, 50, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
-               transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-               className="absolute top-[-20%] left-[-10%] w-[80%] h-[70%] rounded-full bg-indigo-600/10 blur-[120px]"
-            />
-            <motion.div
-               animate={{ x: [0, -40, 0], y: [0, 60, 0], scale: [1.2, 1, 1.2] }}
-               transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-               className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/10 blur-[120px]"
-            />
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] contrast-150 brightness-150" />
-            {mounted && (
-              <motion.div 
-                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-indigo-500/5 blur-[100px]"
-                 animate={{ x: mousePos.x, y: mousePos.y }}
-              />
-            )}
+
           </div>
 
           {/* Particles - ✅ Deterministic positions */}
