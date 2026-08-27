@@ -2,20 +2,20 @@ import "./globals.css";
 import { Providers } from "./providers";
 import ErrorBoundary from "@/src/components/ui/ErrorBoundary";
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0a0a0c",
+};
+
 export const metadata = {
   title: "Netrex | Güvenli Sesli Sohbet",
   description: "Sınırsız sesli sohbet ve metin iletişimi için tasarlanmış premium masaüstü uygulaması.",
   keywords: "sesli sohbet, voice chat, discord alternatifi, güvenli iletişim",
   authors: [{ name: "Netrex Team" }],
-  // 🌐 Mobile PWA Meta Tags
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
-  themeColor: "#0a0a0c",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
