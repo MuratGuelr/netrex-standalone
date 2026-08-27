@@ -110,14 +110,14 @@ export default function FriendsPanel({ onOpenDM }) {
         flex-shrink-0
         overflow-x-auto no-scrollbar
       ">
-        {/* Friends Icon + Title (Icon only on very small screens, full on larger) */}
-        <div className="flex items-center gap-2 pr-3 mr-2 sm:pr-4 sm:mr-2 border-r border-white/[0.06] flex-shrink-0">
+        {/* Friends Icon + Title (Only on desktop) */}
+        <div className="hidden sm:flex items-center gap-2 pr-4 mr-2 border-r border-white/[0.06] flex-shrink-0">
           <Users size={18} className="text-[#dbdee1]" />
-          <span className="text-xs sm:text-sm font-semibold text-white hidden xs:inline">Arkadaşlar</span>
+          <span className="text-sm font-semibold text-white">Arkadaşlar</span>
         </div>
 
-        {/* Tabs - horizontally scrollable without breaking */}
-        <div className="flex items-center gap-1 flex-nowrap flex-shrink-0">
+        {/* Tabs - perfectly sized for mobile and desktop */}
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap flex-shrink-0">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -127,7 +127,7 @@ export default function FriendsPanel({ onOpenDM }) {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  relative flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md
+                  relative flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md
                   text-[11px] sm:text-xs font-medium transition-all duration-150 flex-shrink-0 whitespace-nowrap
                   ${tab.highlight && !isActive
                     ? "text-green-400 hover:bg-green-500/10"

@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { motion, useDragControls, useMotionValue } from "framer-motion";
-import { LiveKitRoom, useTracks, AudioTrack } from "@livekit/components-react";
+import { LiveKitRoom, useTracks, AudioTrack, useRoomContext } from "@livekit/components-react";
 import { Track, DisconnectReason } from "livekit-client";
 import "@livekit/components-styles";
 import {
@@ -206,16 +206,42 @@ const criticalStyles = `
 `;
 
 function DeafenManager({ isDeafened, serverDeafened }) {
+  const room = useRoomContext?.();
+
   useEffect(() => {
     const shouldMute = isDeafened || serverDeafened;
-    const muteAll = () => {
+    const applyMute = () => {
+      // 1. Tüm HTML Audio elementlerini sustur
       document.querySelectorAll("audio").forEach((el) => {
         el.muted = shouldMute;
+        if (shouldMute) {
+          el.volume = 0;
+        }
       });
+
+      // 2. Doğrudan LiveKit remote tracklerini de sustur
+      if (room?.remoteParticipants) {
+        room.remoteParticipants.forEach((participant) => {
+          participant.audioTrackPublications?.forEach((pub) => {
+            if (pub.track) {
+              if (shouldMute) {
+                pub.track.setVolume?.(0);
+              }
+              if (pub.track.attachedElements) {
+                pub.track.attachedElements.forEach((el) => {
+                  el.muted = shouldMute;
+                  if (shouldMute) el.volume = 0;
+                });
+              }
+            }
+          });
+        });
+      }
     };
-    muteAll();
-    // ✅ CPU OPT: Sadece audio elementi eklendiğinde/kaldırıldığında tetikle
-    // Önceki: subtree:true ile HER DOM değişikliğinde querySelectorAll çalışıyordu
+
+    applyMute();
+
+    // Audio elementi eklendiğinde/değiştiğinde tetikle
     const obs = new MutationObserver((mutations) => {
       let hasAudioChange = false;
       for (const m of mutations) {
@@ -227,11 +253,13 @@ function DeafenManager({ isDeafened, serverDeafened }) {
         }
         if (hasAudioChange) break;
       }
-      if (hasAudioChange) muteAll();
+      if (hasAudioChange) applyMute();
     });
+
     obs.observe(document.body, { childList: true, subtree: true });
     return () => obs.disconnect();
-  }, [isDeafened, serverDeafened]);
+  }, [isDeafened, serverDeafened, room]);
+
   return null;
 }
 

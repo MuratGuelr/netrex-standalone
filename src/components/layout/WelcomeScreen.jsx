@@ -70,33 +70,33 @@ export default function WelcomeScreen({
 
   return (
     <div className={`
-      relative h-full w-full flex flex-col items-center justify-center p-8 overflow-hidden
+      relative h-full w-full flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 pb-24 sm:pb-12 overflow-y-auto custom-scrollbar
       bg-gradient-to-br from-[#111214] via-[#16171a] to-[#0f1012]
       ${className}
     `}>
-      {/* --- Arkaplan Efektleri (Hafif ve GPU hızlandırmalı) --- */}
+      {/* --- Arkaplan Efektleri --- */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Grid Deseni */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black_40%,transparent_100%)]" />
         
-        {/* Static background orbs - no animation, no GPU layer waste */}
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[60px] opacity-60" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[50px] opacity-60" />
+        {/* Static background orbs */}
+        <div className="absolute top-1/4 left-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-indigo-500/10 rounded-full blur-[60px] opacity-60" />
+        <div className="absolute bottom-1/4 right-1/4 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] bg-purple-500/10 rounded-full blur-[50px] opacity-60" />
       </div>
 
-      {/* --- Üst Sağ Kısayol Butonu --- */}
-      <div className="absolute top-8 right-8 z-20">
+      {/* --- Üst Sağ Kısayol Butonu (Sadece Masaüstü) --- */}
+      <div className="absolute top-6 right-6 z-20 hidden sm:block">
           <button 
              onClick={() => setShowShortcuts(true)}
              className="
-               group relative flex items-center justify-center w-12 h-12
+               group relative flex items-center justify-center w-11 h-11
                bg-[#1e1f22]/50 backdrop-blur-md border border-white/5 rounded-2xl
                hover:bg-white/10 hover:border-white/20 hover:scale-105
                transition-all duration-300 shadow-lg
              " 
           >
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity duration-300" />
-              <Keyboard size={20} className="text-[#949ba4] group-hover:text-white transition-colors relative z-10" />
+              <Keyboard size={18} className="text-[#949ba4] group-hover:text-white transition-colors relative z-10" />
               
               {/* Tooltip */}
               <span className="absolute right-full mr-3 px-2 py-1 bg-black/80 text-xs text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-white/10">
@@ -106,68 +106,76 @@ export default function WelcomeScreen({
       </div>
 
       {/* --- Ana İçerik --- */}
-      <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-3xl">
+      <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-3xl w-full my-auto py-4">
         
-        {/* 1. Hero İkonu (Statik) */}
-        <div className="relative mb-12">
+        {/* 1. Hero İkonu */}
+        <div className="relative mb-4 sm:mb-10">
           <div className="absolute inset-0 bg-indigo-500/10 rounded-full opacity-20" />
           
           <div className="
-            relative w-32 h-32 
+            relative w-16 h-16 sm:w-28 sm:h-28 
             bg-gradient-to-br from-[#1e1f22] to-[#111214]
-            rounded-3xl
+            rounded-2xl sm:rounded-3xl
             flex items-center justify-center 
             border border-white/10
-            shadow-[0_20px_60px_rgba(0,0,0,0.5)]
+            shadow-[0_10px_30px_rgba(0,0,0,0.5)]
           ">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-2xl sm:rounded-3xl" />
             
             <Radio 
-              size={56} 
+              size={28} 
               className="
                 text-indigo-400 
                 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]
                 relative z-10
+                sm:hidden
+              " 
+            />
+            <Radio 
+              size={48} 
+              className="
+                text-indigo-400 
+                drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]
+                relative z-10
+                hidden sm:block
               " 
             />
             
-            <Sparkles size={20} className="absolute -top-4 -right-4 text-purple-400 opacity-60" />
-            <Music size={16} className="absolute -bottom-2 -left-2 text-cyan-400 opacity-60" />
+            <Sparkles size={16} className="absolute -top-2 -right-2 text-purple-400 opacity-60" />
+            <Music size={14} className="absolute -bottom-1 -left-1 text-cyan-400 opacity-60" />
           </div>
         </div>
 
         {/* 2. Karşılama Metni */}
-        <div className="space-y-4 mb-12">
-          <h2 className="text-5xl font-bold text-white tracking-tight">
+        <div className="space-y-2 sm:space-y-4 mb-5 sm:mb-10">
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight">
             Hoş Geldin, <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">{userName}</span>
           </h2>
-          <p className="text-[#949ba4] text-lg max-w-lg mx-auto leading-relaxed">
+          <p className="text-[#949ba4] text-xs sm:text-base max-w-lg mx-auto leading-relaxed px-2">
             Hemen bir odaya katıl veya sol menüden arkadaşlarını davet et.
             Netrex ile iletişim hiç olmadığı kadar net.
           </p>
         </div>
 
         {/* 3. Özellik Kartları (Grid) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 w-full mb-6 sm:mb-10 max-w-2xl">
           {features.map((feature, index) => (
             <FeatureCard key={index} feature={feature} />
           ))}
         </div>
 
-        {/* 4. Alt Bilgi (Ayarlar İpucu) */}
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5 text-xs text-[#949ba4] hover:bg-white/10 hover:text-white transition-colors cursor-default">
-            <Settings size={14} />
-            <span>Ayarlar menüsünden ses giriş/çıkış cihazlarını test edebilirsin</span>
+        {/* 4. Alt Bilgi (Ayarlar İpucu - Mobilde daha kompakt) */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] sm:text-xs text-[#949ba4] hover:bg-white/10 hover:text-white transition-colors cursor-default mb-4">
+            <Settings size={13} className="shrink-0" />
+            <span>Ayarlar menüsünden ses cihazlarını test edebilirsin</span>
         </div>
-      </div>
 
-      {/* --- Versiyon Footer --- */}
-      <div className="absolute bottom-6 flex items-center gap-3 z-10 opacity-60 hover:opacity-100 transition-opacity">
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/20 backdrop-blur-sm rounded-lg border border-white/5">
+        {/* 5. Versiyon Bilgisi */}
+        <div className="flex items-center gap-2 px-3 py-1 bg-black/20 backdrop-blur-sm rounded-lg border border-white/5 opacity-60">
           <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.6)]" />
-          <span className="text-[11px] text-[#949ba4] font-medium tracking-wide">NETREX CLIENT</span>
-          <span className="w-px h-3 bg-white/10 mx-1" />
-          <span className="text-[11px] text-[#dbdee1] font-mono">v{version}</span>
+          <span className="text-[10px] text-[#949ba4] font-medium tracking-wide">NETREX CLIENT</span>
+          <span className="w-px h-2.5 bg-white/10 mx-0.5" />
+          <span className="text-[10px] text-[#dbdee1] font-mono">v{version}</span>
         </div>
       </div>
       

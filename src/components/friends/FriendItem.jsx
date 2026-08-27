@@ -154,19 +154,45 @@ export default function FriendItem({
       <div className="flex items-center gap-1.5 flex-shrink-0">
         {/* Friend actions */}
         {variant === "friend" && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAction(() => onRemove?.(friendshipId)); }}
-            className="
-              w-9 h-9 rounded-xl flex items-center justify-center
-              bg-[#2b2d31] border border-white/5
-              text-[#b5bac1] hover:text-red-400 hover:bg-red-500/20 hover:border-red-500/30
-              transition-all duration-200
-              opacity-0 group-hover:opacity-100
-            "
-            title="Arkadaşlıktan Çıkart"
-          >
-            <UserMinus size={16} />
-          </button>
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMessage?.(); }}
+              className="
+                w-9 h-9 rounded-xl flex items-center justify-center
+                bg-white/5 border border-white/10
+                text-[#dbdee1] hover:text-white hover:bg-white/10
+                transition-all duration-200
+              "
+              title="Mesaj Gönder"
+            >
+              <MessageCircle size={16} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onCall?.(user); }}
+              className="
+                w-9 h-9 rounded-xl flex items-center justify-center
+                bg-green-500/10 border border-green-500/20
+                text-green-400 hover:text-white hover:bg-green-500/30
+                transition-all duration-200
+              "
+              title="Sesli Ara"
+            >
+              <Phone size={16} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleAction(() => onRemove?.(friendshipId)); }}
+              className="
+                w-9 h-9 rounded-xl flex items-center justify-center
+                bg-[#2b2d31] border border-white/5
+                text-[#b5bac1] hover:text-red-400 hover:bg-red-500/20 hover:border-red-500/30
+                transition-all duration-200
+                hidden sm:flex opacity-0 group-hover:opacity-100
+              "
+              title="Arkadaşlıktan Çıkart"
+            >
+              <UserMinus size={16} />
+            </button>
+          </>
         )}
 
         {/* Incoming request actions */}

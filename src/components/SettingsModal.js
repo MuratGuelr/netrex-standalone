@@ -93,24 +93,26 @@ export default function SettingsModal({ isOpen, onClose }) {
       {/* Animated background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent pointer-events-none"></div>
 
-      <div className="glass-modal w-[900px] h-[700px] rounded-3xl shadow-nds-elevated flex overflow-hidden border border-nds-border-medium animate-nds-scale-in backdrop-blur-2xl bg-gradient-to-br from-nds-bg-deep/95 via-nds-bg-secondary/95 to-nds-bg-tertiary/95 relative">
-        {/* ESC Close Button - En üstte */}
-        <div
-          className="absolute top-6 right-6 flex flex-col items-center group cursor-pointer z-[10000]"
-          onClick={onClose}
-        >
-          <div className="w-10 h-10 rounded-xl glass-strong border border-nds-border-light flex items-center justify-center text-nds-text-tertiary group-hover:bg-gradient-to-br group-hover:from-nds-danger/20 group-hover:to-nds-danger/30 group-hover:text-nds-danger group-hover:border-nds-danger/30 transition-all duration-medium hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative group/close">
-            <X
-              size={20}
-              strokeWidth={2.5}
-              className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
-            />
-            <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300"></div>
+      <div className="glass-modal w-full h-full sm:w-[900px] sm:h-[700px] sm:rounded-3xl shadow-nds-elevated flex overflow-hidden border border-nds-border-medium animate-nds-scale-in backdrop-blur-2xl bg-gradient-to-br from-nds-bg-deep/95 via-nds-bg-secondary/95 to-nds-bg-tertiary/95 relative">
+        {/* ESC Close Button - En üstte (Sadece Masaüstü) */}
+        {!isMobileSettings && (
+          <div
+            className="absolute top-6 right-6 flex flex-col items-center group cursor-pointer z-[10000]"
+            onClick={onClose}
+          >
+            <div className="w-10 h-10 rounded-xl glass-strong border border-nds-border-light flex items-center justify-center text-nds-text-tertiary group-hover:bg-gradient-to-br group-hover:from-nds-danger/20 group-hover:to-nds-danger/30 group-hover:text-nds-danger group-hover:border-nds-danger/30 transition-all duration-medium hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] relative group/close">
+              <X
+                size={20}
+                strokeWidth={2.5}
+                className="relative z-10 group-hover/close:rotate-90 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-white/5 rounded-xl opacity-0 group-hover/close:opacity-100 transition-opacity duration-300"></div>
+            </div>
+            <span className="text-nano font-bold text-nds-text-tertiary mt-1.5 group-hover:text-nds-text-secondary transition-colors">
+              ESC
+            </span>
           </div>
-          <span className="text-nano font-bold text-nds-text-tertiary mt-1.5 group-hover:text-nds-text-secondary transition-colors">
-            ESC
-          </span>
-        </div>
+        )}
         
         {/* Top glow effect */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
@@ -118,19 +120,39 @@ export default function SettingsModal({ isOpen, onClose }) {
         {/* 📱 Mobile: Tab bar at bottom */}
         {isMobileSettings ? (
           <div className="flex flex-col w-full h-full">
-            {/* Mobile Header with close */}
+            {/* Mobile Header with quick save & close */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#1a1b1e] flex-shrink-0">
-              <h2 className="text-base font-bold text-white">Ayarlar</h2>
-              <button
-                onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#949ba4]"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">Ayarlar</h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold uppercase">
+                  {activeTab === 'account' ? 'Hesap' : activeTab === 'voice' ? 'Ses' : activeTab === 'appearance' ? 'Görünüm' : activeTab === 'application' ? 'Genel' : activeTab === 'notifications' ? 'Bildirim' : 'Hakkında'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (activeTab === "account" && accountSettingsRef.current) {
+                      accountSettingsRef.current.saveProfile();
+                    } else {
+                      toast.success("Ayarlar güncellendi!");
+                    }
+                    setTimeout(() => onClose(), 600);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold shadow-md active:scale-95 transition-all"
+                >
+                  Kaydet
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#949ba4] active:scale-95"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Mobile Content */}
-            <div ref={contentRef} className="flex-1 overflow-y-auto p-4 pb-20 relative">
+            <div ref={contentRef} className="flex-1 overflow-y-auto p-4 pb-20 relative mobile-scroll custom-scrollbar">
               <div className="relative z-10" key={activeTab}>
                 <div className="animate-page-enter">
                   {activeTab === "account" && <AccountSettings ref={accountSettingsRef} onClose={onClose} scrollToSection={settingsScrollToSection} setScrollToSection={setSettingsScrollToSection} contentRef={contentRef} />}
@@ -145,7 +167,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
 
             {/* Mobile Tab Bar — BOTTOM */}
-            <div className="flex items-center gap-1 px-2 py-2 overflow-x-auto no-scrollbar border-t border-white/10 bg-[#0a0a0c] flex-shrink-0" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
+            <div className="flex items-center justify-around gap-1 px-2 py-2 overflow-x-auto no-scrollbar border-t border-white/10 bg-[#0a0a0c] flex-shrink-0" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
               {[
                 { id: 'account', label: 'Hesap', icon: <User size={18} /> },
                 { id: 'application', label: 'Genel', icon: <AppWindow size={18} /> },
@@ -158,9 +180,9 @@ export default function SettingsModal({ isOpen, onClose }) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px] font-medium whitespace-nowrap flex-shrink-0 transition-all min-w-[52px]
+                    flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl text-[10px] font-medium whitespace-nowrap flex-shrink-0 transition-all min-w-[50px]
                     ${activeTab === tab.id 
-                      ? 'bg-indigo-500/20 text-white' 
+                      ? 'bg-indigo-500/20 text-white font-semibold' 
                       : 'text-[#949ba4]'
                     }
                   `}

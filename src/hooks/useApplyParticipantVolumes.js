@@ -3,20 +3,24 @@ import { useParticipants } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useParticipantVolumeStore } from '@/src/store/participantVolumeStore';
 import { useSpatialAudioStore } from '@/src/store/spatialAudioStore';
+import { useSettingsStore } from '@/src/store/settingsStore';
+import { useServerStore } from '@/src/store/serverStore';
 
 /**
- * 🔊 Apply Participant Volumes Hook v2.1
+ * 🔊 Apply Participant Volumes Hook v2.2
  *
  * - Volume 0–1.0  → LiveKit native setVolume() (HTML element, no extra overhead)
  * - Volume >1.0   → GainNode boost (AudioContext MediaElementSource → GainNode → destination)
- * - Spatial mode   → Skip (useSpatialAudio hook manages pipeline)
- *
- * MediaElementSource her audio element için yalnızca bir kez oluşturulabilir; ref'te cache'lenir.
+ * - Deafened      → Volume 0 & muted (Sağırlaştırma desteği)
+ * - Spatial mode  → Skip (useSpatialAudio hook manages pipeline)
  */
 export function useApplyParticipantVolumes() {
   const participants = useParticipants();
   const volumes = useParticipantVolumeStore(s => s.volumes);
   const spatialEnabled = useSpatialAudioStore(s => s.enabled);
+  const isDeafened = useSettingsStore(s => s.isDeafened);
+  const serverDeafened = useServerStore(s => s.serverDeafened || false);
+  const shouldMuteAll = isDeafened || serverDeafened;
 
   // Gain boost için AudioContext (sadece boost gerektiğinde yaratılır)
   const gainContextRef = useRef(null);
@@ -39,16 +43,13 @@ export function useApplyParticipantVolumes() {
         const micPub = participant.getTrackPublication(Track.Source.Microphone);
         if (!micPub?.track || micPub.track.kind !== 'audio') return;
 
-        const volume = volumes[participant.identity] ?? 1.0;
+        const baseVolume = volumes[participant.identity] ?? 1.0;
+        const volume = shouldMuteAll ? 0 : baseVolume;
         const identity = participant.identity;
 
         // ✅ Volume değişmediyse hiçbir şey yapma!
         if (appliedVolumesRef.current[identity] === volume) {
-          // Eğer track attached elements değişmişse ama volume aynıysa,
-          // Boost modunda element kontrolü gerekebilir. 
-          // Ancak standart setVolume için kesinlikle gerek yok.
           if (volume <= 1.0) return;
-          // Boost modunda ise node zaten varsa return, yoksa devam (re-attach durumu)
           if (gainNodesRef.current[identity]) return;
         }
 
@@ -60,10 +61,10 @@ export function useApplyParticipantVolumes() {
             micPub.track.setVolume(volume);
           }
 
-          // Daha önce GainNode varsa temizle ve audioEl'i unmute et
+          // Daha önce GainNode varsa temizle
           if (gainNodesRef.current[identity]) {
             const { source, gainNode, audioEl } = gainNodesRef.current[identity];
-            try { audioEl.muted = false; } catch(e) {}
+            try { audioEl.muted = shouldMuteAll; } catch(e) {}
             try { source.disconnect(); } catch(e) {}
             try { gainNode.disconnect(); } catch(e) {}
             delete gainNodesRef.current[identity];

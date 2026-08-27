@@ -487,15 +487,25 @@ export default function BottomControls({
         // Kamera stream'i al - Kullanıcı ayarlarına göre
         const constraints = {
           video: {
-            deviceId: videoId !== "default" ? { exact: videoId } : undefined,
-            width: { ideal: selectedResolution.width, max: selectedResolution.width },
-            height: { ideal: selectedResolution.height, max: selectedResolution.height },
-            frameRate: { ideal: selectedFps, max: selectedFps },
+            deviceId: videoId && videoId !== "default" ? { ideal: videoId } : undefined,
+            width: { ideal: selectedResolution.width },
+            height: { ideal: selectedResolution.height },
+            frameRate: { ideal: selectedFps },
             facingMode: "user",
           },
         };
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (constraintErr) {
+          console.warn("Kamera ideal constraint ile açılamadı, temel mod deneniyor:", constraintErr);
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+        }
+
         const videoTrack = stream.getVideoTracks()[0];
 
         if (!videoTrack) {
@@ -899,7 +909,12 @@ export default function BottomControls({
           }
         }
       } else {
-        // Browser: Standart getDisplayMedia (exact constraint'ler yok, sadece ideal)
+        // Browser: Standart getDisplayMedia
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          toast.info("Ekran paylaşımı mobil tarayıcılarda desteklenmemektedir.");
+          return;
+        }
+
         const constraints = {
           audio: audioConstraints || false,
           video: {
@@ -1079,7 +1094,7 @@ export default function BottomControls({
       
       {/* Floating Control Bar Container */}
       <div 
-        className={`h-controls absolute bottom-0 pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
+        className={`h-controls absolute bottom-[70px] sm:bottom-0 pb-1 sm:pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
           controlBarHidden 
             ? 'opacity-0 pointer-events-none translate-x-[calc(50vw-80px)] scale-[0.15]' 
             : 'opacity-100 translate-x-0 scale-100'
@@ -1147,8 +1162,8 @@ export default function BottomControls({
               </div>
             </button>
             
-            {/* Ekran Paylaşımı Butonu */}
-            <div className="relative" ref={screenShareButtonRef}>
+            {/* Ekran Paylaşımı Butonu (Mobilde ekran paylaşımı desteklenmediği için gizlenir) */}
+            <div className="relative hidden sm:block" ref={screenShareButtonRef}>
               <button
                 onClick={() => {
                   if (isScreenSharing) {

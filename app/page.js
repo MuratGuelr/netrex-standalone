@@ -509,6 +509,83 @@ export default function Home() {
     }
   }, [currentServer?.id]);
 
+  // 🛡️ 1. Web & Mobil Kazara Sekme Kapatma / Çıkış Koruması (beforeunload)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.netrex?.isElectron) return; // Masaüstü Electron uygulamasında tarayıcı uyarısı verilmez
+
+    const handleBeforeUnload = (e) => {
+      // Kullanıcı oturum açmışsa veya aktif bir görüşmedeyse uyar
+      if (user || currentRoom) {
+        e.preventDefault();
+        e.returnValue = "Netrex'ten ayrılmak istediğinize emin misiniz?";
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [user, currentRoom]);
+
+  // 📱 2. Mobil Geri Tuşu / Geri Kaydırma (Swipe Back) Koruması (popstate)
+  useEffect(() => {
+    if (typeof window === "undefined" || window.netrex?.isElectron) return;
+
+    // Sayfa geçmişine bir güvenlik katmanı ekle
+    window.history.pushState({ app: "netrex" }, "", window.location.href);
+
+    const handlePopState = () => {
+      // Açık modal varsa önce onu kapat
+      if (showCreateServerModal || showJoinServerModal || showAddServerSelectionModal || showVoiceSwitchModal) {
+        setShowCreateServerModal(false);
+        setShowJoinServerModal(false);
+        setShowAddServerSelectionModal(false);
+        setShowVoiceSwitchModal(false);
+        window.history.pushState({ app: "netrex" }, "", window.location.href);
+        return;
+      }
+
+      // Aktif DM sohbeti açıksa önce mesaj listesine dön
+      if (activeConversation) {
+        clearActiveConversation();
+        setShowFriendsPanel(true);
+        window.history.pushState({ app: "netrex" }, "", window.location.href);
+        return;
+      }
+
+      // Aktif metin kanalı açıksa kanaldan çık
+      if (currentTextChannel) {
+        setCurrentTextChannel(null);
+        setShowChatPanel(false);
+        window.history.pushState({ app: "netrex" }, "", window.location.href);
+        return;
+      }
+
+      // Sunucu seçiliyse ana sayfaya dön
+      if (currentServer) {
+        useServerStore.getState().selectServer(null);
+        window.history.pushState({ app: "netrex" }, "", window.location.href);
+        return;
+      }
+
+      // Ana sayfadayken geri çekilirse yanlışlıkla çıkmayı önle
+      toast.info("Uygulamadan çıkmak için tarayıcı sekmesini kapatabilirsiniz.");
+      window.history.pushState({ app: "netrex" }, "", window.location.href);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [
+    showCreateServerModal,
+    showJoinServerModal,
+    showAddServerSelectionModal,
+    showVoiceSwitchModal,
+    activeConversation,
+    currentTextChannel,
+    currentServer,
+    clearActiveConversation,
+  ]);
+
   // ✅ Tümüyle Ana Sayfaya Git (Logo Tıklandığında)
   const handleGoHome = useCallback(() => {
     setFriendsMode(false);

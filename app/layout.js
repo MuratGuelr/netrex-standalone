@@ -21,6 +21,9 @@ export const metadata = {
     statusBarStyle: "black-translucent",
     title: "Netrex",
   },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
   formatDetection: {
     telephone: false,
   },
