@@ -27,7 +27,7 @@ import {
  */
 export default function WelcomeScreen({ 
   userName = "Kullanıcı",
-  version = "1.0.0",
+  version = process.env.NEXT_PUBLIC_APP_VERSION || "8.0.0",
   shortcuts = [],
   className = "" 
 }) {

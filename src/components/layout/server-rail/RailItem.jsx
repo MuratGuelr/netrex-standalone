@@ -21,7 +21,8 @@ const RailItem = memo(function RailItem({
   onOpenSettings,
   onOpenInvite,
   onLeave,
-  isRoomActive
+  isRoomActive,
+  badgeCount = 0
 }) {
   const [localIcon, setLocalIcon] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -105,7 +106,7 @@ const RailItem = memo(function RailItem({
       <div className={`
         absolute left-0 top-1/2 -translate-y-1/2
         w-[4px] bg-white rounded-r-md
-        transition-all duration-300 ease-out z-20 shadow-[0_0_10px_rgba(255,255,255,0.5)]
+        transition-[height,opacity,transform] duration-300 ease-out z-20 shadow-[0_0_10px_rgba(255,255,255,0.5)]
         ${active 
           ? 'h-9 opacity-100 translate-x-0' 
           : 'h-2 opacity-0 -translate-x-full group-hover:h-5 group-hover:opacity-100 group-hover:translate-x-0'
@@ -116,7 +117,7 @@ const RailItem = memo(function RailItem({
       <Tooltip 
         content={isRoomActive && !active ? label : label} 
         position="right" 
-        delay={0}
+        delay={150}
       >
         <button
           onClick={onClick}
@@ -126,7 +127,7 @@ const RailItem = memo(function RailItem({
             rounded-[24px] 
             hover:rounded-[15px] 
             flex items-center justify-center
-            transition-all duration-300 ease-out
+            transition-[border-radius,background-color,box-shadow,color] duration-300 ease-out will-change-[border-radius,background-color]
             overflow-hidden
             group
             z-10
@@ -141,6 +142,20 @@ const RailItem = memo(function RailItem({
           {iconContent}
         </button>
       </Tooltip>
+
+      {/* Unread Badge - Moved OUTSIDE overflow-hidden container */}
+      {badgeCount > 0 && (
+        <div className="
+          absolute -bottom-1 -right-0
+          min-w-[20px] h-5 px-1.5 rounded-full
+          bg-[#f23f43] border-[3px] border-[#1e1f22]
+          flex items-center justify-center
+          text-[11px] font-bold text-white
+          shadow-lg z-[30] pointer-events-none
+        ">
+          {badgeCount > 99 ? '99+' : badgeCount}
+        </div>
+      )}
 
       {/* Context Menu Portal */}
       {showMenu && <RailContextMenu 
@@ -168,7 +183,8 @@ const RailItem = memo(function RailItem({
     prevProps.isOwner === nextProps.isOwner &&
     prevProps.canManage === nextProps.canManage &&
     prevProps.variant === nextProps.variant &&
-    prevProps.isRoomActive === nextProps.isRoomActive
+    prevProps.isRoomActive === nextProps.isRoomActive &&
+    prevProps.badgeCount === nextProps.badgeCount
   );
 });
 

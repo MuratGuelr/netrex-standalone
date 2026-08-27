@@ -51,6 +51,13 @@ export default function SidebarItem({ label, icon, active, onClick, color = "ind
       activeDot: "bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.6)]",
       hoverBg: "group-hover/item:from-green-500/10 group-hover/item:to-green-600/5",
     },
+    amber: {
+      activeBg: "from-amber-500/20 to-amber-600/10",
+      activeBorder: "border-amber-500/40",
+      activeIcon: "text-amber-400",
+      activeDot: "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]",
+      hoverBg: "group-hover/item:from-amber-500/10 group-hover/item:to-amber-600/5",
+    },
   };
 
   const colors = colorClasses[color] || colorClasses.indigo;

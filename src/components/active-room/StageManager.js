@@ -34,6 +34,7 @@ import {
   ArrowUpToLine,
   Signal,
   Trash2,
+  MousePointer2,
 } from "lucide-react";
 import {
   DndContext,
@@ -52,8 +53,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useWatchPartyStore } from "@/src/store/watchPartyStore";
+import CursorOverlay from "./CursorOverlay";
+import { useCursorBroadcast } from "@/src/hooks/useCursorBroadcast";
+import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
+import DMConversation from "../friends/DMConversation";
+import { useDMStore } from "@/src/store/dmStore";
 
 const MemoizedStageBackground = React.memo(
   ({ disableBackgroundEffects, activeSpeakerColor }) => {
@@ -465,6 +471,9 @@ function StageManager({
   hideIncomingVideo,
   stopScreenShare,
 }) {
+  const activeConversation = useDMStore((state) => state.activeConversation);
+  const shouldShowChat = showChatPanel && (currentTextChannel || activeConversation);
+
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef(null);
   const userStoppedWatchingRef = useRef(false); // Kullanıcı manuel olarak izlemeyi durdurdu mu?
@@ -1327,22 +1336,22 @@ function StageManager({
         className={`overflow-hidden border-[#26272d] bg-[#313338] flex flex-col min-w-0 shadow-xl z-10 transition-all duration-300 ease-in-out ${
           chatPosition === "left" ? "order-1 border-r" : "order-2 border-l"
         } ${
-          showChatPanel && currentTextChannel
+          shouldShowChat
             ? "opacity-100"
             : "opacity-0 pointer-events-none"
         }`}
         style={{
-          width: showChatPanel && currentTextChannel ? `${chatWidth}px` : "0px",
+          width: shouldShowChat ? `${chatWidth}px` : "0px",
           flexShrink: 0,
           transform:
-            showChatPanel && currentTextChannel
+            shouldShowChat
               ? "translateX(0)"
               : chatPosition === "left"
                 ? "translateX(-20px)"
                 : "translateX(20px)",
         }}
       >
-        {currentTextChannel && (
+        {(currentTextChannel || activeConversation) && (
           <>
             {/* Resizable Divider */}
             {showVoicePanel && showChatPanel && (
@@ -1358,15 +1367,27 @@ function StageManager({
                 </div>
               </div>
             )}
-            <ChatView
-              channelId={currentTextChannel}
-              username={username}
-              userId={userId}
-            />
+            {currentTextChannel ? (
+              <ChatView
+                channelId={currentTextChannel}
+                username={username}
+                userId={userId}
+              />
+            ) : (
+              <DMConversation 
+                 onBack={() => {}} 
+                 onStartCall={async (conversationId) => {
+                     const store = useDMStore.getState();
+                     if (activeConversation) {
+                         await store.startCall(conversationId || activeConversation.id, userId);
+                     }
+                 }}
+              />
+            )}
           </>
         )}
       </div>
-      {!showVoicePanel && (!showChatPanel || !currentTextChannel) && (
+      {!showVoicePanel && (!showChatPanel || (!currentTextChannel && !activeConversation)) && (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-[#313338]">
           <Users size={32} className="opacity-50 mb-4" />
           <p>Görünüm gizli.</p>
@@ -1419,6 +1440,87 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
   );
 }
 
+// 🤝 POINTER CAPTURE COMPONENT
+// Viewer'ın mouse hareketlerini yakalayıp yayıncıya gönderir
+function PointerCapture({ targetParticipant, containerRef }) {
+  const { localParticipant } = useLocalParticipant();
+  const lastSentRef = useRef(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !localParticipant) return;
+
+    const handleMouseMove = (e) => {
+      const now = Date.now();
+      if (now - lastSentRef.current < 33) return; // 30fps throttle
+      lastSentRef.current = now;
+
+      const rect = container.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+
+      // Sınırlar dışındaysa gönderme
+      if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+      try {
+        const metadata = localParticipant.metadata ? JSON.parse(localParticipant.metadata) : {};
+        const data = new TextEncoder().encode(JSON.stringify({
+          type: 'cursor_position',
+          participantId: localParticipant.identity,
+          targetId: targetParticipant?.identity,
+          x,
+          y,
+          screenWidth: rect.width,
+          screenHeight: rect.height,
+          displayName: metadata.displayName || localParticipant.name || localParticipant.identity,
+          color: metadata.profileColor || '#6366f1'
+        }));
+
+        localParticipant.publishData(data, {
+          topic: 'cursor_position',
+          reliable: false
+        });
+      } catch (e) {}
+    };
+
+    const handleMouseLeave = () => {
+      try {
+        const data = new TextEncoder().encode(JSON.stringify({
+          type: 'cursor_hide',
+          participantId: localParticipant.identity
+        }));
+        localParticipant.publishData(data, {
+          topic: 'cursor_hide',
+          reliable: true
+        });
+      } catch (e) {}
+    };
+
+    container.addEventListener('mousemove', handleMouseMove, { passive: true });
+    container.addEventListener('mouseleave', handleMouseLeave);
+    
+    return () => {
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [localParticipant, containerRef, targetParticipant]);
+
+  return (
+    <>
+       <div className="absolute inset-0 z-40 cursor-crosshair group/pointer-capture">
+          {/* ✨ Görsel Geri Bildirim: Kullanıcı işaretleme yaparken kenarlarda hafif bir parıltı */}
+          <div className="absolute inset-0 border-2 border-emerald-500/30 pointer-events-none opacity-0 group-hover/pointer-capture:opacity-100 transition-opacity duration-300" />
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-emerald-500/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-lg pointer-events-none animate-in slide-in-from-top-4">
+             <div className="flex items-center gap-1.5">
+                <MousePointer2 size={10} className="animate-bounce" />
+                <span>İşaretçi Aktif</span>
+             </div>
+          </div>
+       </div>
+    </>
+  );
+}
+
 // --- STAGE OVERLAY COMPONENTS ---
 const StageOverlay = React.memo(
   ({
@@ -1436,6 +1538,11 @@ const StageOverlay = React.memo(
     toggleFullscreen,
     setVolume,
     compact,
+    onRequestPointing,
+    hasPointingPermission,
+    isPointingRequested,
+    allowedPointers,
+    onRevokePointing
   }) => {
     // COMPACT MODE: thumbnail'larda sadece küçük bir isim badge'i göster
     if (compact) {
@@ -1494,6 +1601,83 @@ const StageOverlay = React.memo(
                   ? `${participant?.name || participant?.identity || "Kullanıcı"} yayını`
                   : `${participant?.name || participant?.identity || "Kullanıcı"} kamerası`}
             </span>
+            
+            {/* 🤝 Collaborative Pointing Request Button */}
+            {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && (
+              <button
+                onClick={onRequestPointing}
+                disabled={hasPointingPermission}
+                className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all duration-200 border ${
+                   hasPointingPermission 
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-default" 
+                    : isPointingRequested
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      : "bg-white/5 text-[#b5bac1] border-white/5 hover:bg-white/10 hover:text-white group-hover:border-white/10"
+                }`}
+                title={hasPointingPermission ? "Ekran üzerinde işaretleme yapabilirsiniz" : "Ekran sahibinden işaretçi izni iste"}
+              >
+                <div className="relative flex items-center">
+                   {isPointingRequested && !hasPointingPermission && (
+                      <div className="absolute inset-0 bg-amber-400 rounded-full blur-sm opacity-40 animate-pulse" />
+                   )}
+                   <MousePointer2 size={14} className={hasPointingPermission ? "text-emerald-400" : ""} />
+                </div>
+                <span>
+                   {hasPointingPermission 
+                     ? "İstediğini Gösterebilirsin" 
+                     : isPointingRequested 
+                       ? "Yanıt bekleniyor..." 
+                       : "İşaretle"}
+                </span>
+              </button>
+            )}
+
+            {/* 🖥️ Overlay Aç butonu (Sharer side) */}
+            {isLocalSharing && trackRef.source === Track.Source.ScreenShare && (
+              <button
+                onClick={() => {
+                  if (window.netrex?.updatePointerOverlay) {
+                    // Boş data ile tetikle — overlay oluşturulup gösterilecek (forceShow=true)
+                    window.netrex.updatePointerOverlay([], true);
+                  }
+                }}
+                className="ml-2 px-2 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1 transition-all duration-200 border bg-indigo-500/10 text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20 hover:text-indigo-200"
+                title="Masaüstü imleç overlay'ini aç"
+              >
+                <MousePointer2 size={12} />
+                <span>Overlay</span>
+              </button>
+            )}
+
+            {/* 🤝 Managed Pointers (Sharer side) — Ekranını paylaşırken kimlerin izni olduğunu gör */}
+            {isLocalSharing && (
+               <div className="flex items-center gap-1.5 ml-3">
+                  {Object.entries(allowedPointers || {})
+                    .filter(([_, data]) => data)
+                    .map(([id, data]) => (
+                       <div 
+                        key={id}
+                        className="group/pointer-item relative"
+                       >
+                          <div 
+                            className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-[10px] text-emerald-400 font-bold shadow-lg backdrop-blur-md cursor-help overflow-hidden"
+                            title={`${data.displayName || id} işaretleme yapabiliyor`}
+                          >
+                             {data.displayName ? data.displayName.charAt(0).toUpperCase() : id.slice(0, 2).toUpperCase()}
+                          </div>
+                          {/* Revoke Button on Hover */}
+                          <button
+                            onClick={() => onRevokePointing && onRevokePointing(id)}
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/pointer-item:opacity-100 transition-opacity shadow-lg hover:scale-110"
+                            title="İzni Geri Al"
+                          >
+                             <X size={10} strokeWidth={4} />
+                          </button>
+                       </div>
+                    ))
+                  }
+               </div>
+            )}
           </div>
           <div className="flex gap-2 pointer-events-auto">
             {isLocalSharing && trackRef.source !== Track.Source.Camera && (
@@ -1626,6 +1810,7 @@ function ScreenShareStage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [showCursor, setShowCursor] = useState(true);
+  const { localParticipant } = useLocalParticipant();
   const containerRef = useRef(null);
   const audioRef = useRef(null);
   const mouseMoveTimeoutRef = useRef(null);
@@ -1641,6 +1826,26 @@ function ScreenShareStage({
   // 🚀 FIX: Yayın ses ayarı her zaman görünmeli (remote screen share ise)
   // Kullanıcı ses track'i gelmeden önce de ayarı görebilmeli.
   const isAudioDisabled = isLocalSharing || (trackRef.source !== Track.Source.ScreenShare && !audioTrackRef);
+
+  // 🖱️ Cursor Broadcast — yayıncı ise cursor'unu gönder
+  const { 
+    requestPointing, 
+    grantPointing, 
+    denyPointing, 
+    myPermissions,
+    pointingRequests,
+    allowedPointers 
+  } = useCursorBroadcast({ isScreenSharing: isLocalSharing });
+
+  // 🤝 Collaborative Pointing State
+  // Viewer bizzat kendi iznini kontrol eder (yayıncı Id'sine göre)
+  const hasPointingPermission = myPermissions[participant?.identity] || false;
+  
+  // Viewer yayındaki kişiye istek gönderip göndermediğini anlık bilebilmeli
+  const pendingRequests = useCursorShareStore(s => s.pendingRequests) || {};
+  const isPointingRequested = pendingRequests[participant?.identity] && !isLocalSharing; 
+
+  // Şimdilik toast ve myPermissions yeterli.
 
   useEffect(() => {
     const audioEl = audioRef.current;
@@ -1831,7 +2036,7 @@ function ScreenShareStage({
       )}
 
       <div
-        onDoubleClick={onDoubleClickProp || onStopWatching}
+        onDoubleClick={toggleFullscreen}
         className={`flex-1 relative flex items-center justify-center overflow-hidden ${
           !showCursor ? "cursor-none" : ""
         }`}
@@ -1858,9 +2063,24 @@ function ScreenShareStage({
           <audio ref={audioRef} autoPlay />
         )}
 
+        {/* 🖱️ Remote Cursor Overlay — Herkes görür (Yayıncı izleyicileri, izleyiciler yayıncıyı/diğerlerini) */}
+        {trackRef.source === Track.Source.ScreenShare && (
+          <CursorOverlay 
+            containerRef={containerRef} 
+            sharerId={participant?.identity}
+          />
+        )}
+        {/* 🤝 Pointer Capture — SADECE izleyiciyseniz VE izniniz varsa mouse hareketlerinizi göndeririz */}
+        {!isLocalSharing && hasPointingPermission && trackRef.source === Track.Source.ScreenShare && (
+           <PointerCapture 
+              targetParticipant={participant}
+              containerRef={containerRef}
+           />
+        )}
+
         <StageOverlay
-          showOverlay={showOverlay}
-          showCursor={showCursor}
+          showOverlay={(!isLocalSharing && hasPointingPermission && isFullscreen) ? false : showOverlay}
+          showCursor={(!isLocalSharing && hasPointingPermission && isFullscreen) ? true : showCursor}
           isLocalSharing={isLocalSharing}
           isAudioDisabled={isAudioDisabled}
           volume={volume}
@@ -1873,6 +2093,11 @@ function ScreenShareStage({
           toggleFullscreen={toggleFullscreen}
           setVolume={setVolume}
           compact={compact}
+          onRequestPointing={() => requestPointing(participant?.identity)}
+          hasPointingPermission={hasPointingPermission}
+          isPointingRequested={isPointingRequested}
+          allowedPointers={allowedPointers}
+          onRevokePointing={(pid) => denyPointing(pid)}
         />
       </div>
     </div>

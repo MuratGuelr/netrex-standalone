@@ -28,14 +28,16 @@ export default function VideoSettingsSection({ videoInputs }) {
 
   // Kamera Önizleme
   useEffect(() => {
-    let stream;
+    let active = true;
+    let activeStream = null;
+
     // Eğer kamera devre dışıysa veya kullanıcı henüz önizlemeyi başlatmadıysa stream başlatma
     if (!enableCamera || !isPreviewActive) return;
 
     const initVideo = async () => {
       if (videoInputs.length === 0) return;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             deviceId:
               videoId !== "default"
@@ -45,18 +47,30 @@ export default function VideoSettingsSection({ videoInputs }) {
             height: { ideal: 360 },
           },
         });
+
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        activeStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       } catch (e) {
         console.error("Kamera önizleme hatası:", e);
-        setIsPreviewActive(false);
+        if (active) {
+          setIsPreviewActive(false);
+        }
       }
     };
 
     initVideo();
     return () => {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+      active = false;
+      if (activeStream) {
+        activeStream.getTracks().forEach((t) => t.stop());
+      }
     };
   }, [videoId, videoInputs, enableCamera, isPreviewActive]);
 

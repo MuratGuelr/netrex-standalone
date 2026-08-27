@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { motion } from "framer-motion";
+import { motion, useDragControls, useMotionValue } from "framer-motion";
 import { LiveKitRoom, useTracks, AudioTrack } from "@livekit/components-react";
 import { Track, DisconnectReason } from "livekit-client";
 import "@livekit/components-styles";
@@ -26,17 +26,25 @@ import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useAuthStore } from "@/src/store/authStore";
 import { useChatStore } from "@/src/store/chatStore";
 import { useServerStore } from "@/src/store/serverStore";
+import { useDMStore } from "@/src/store/dmStore";
+import { getLiveKitToken, getLiveKitServerInfo } from "@/src/lib/platformBridge";
 import { useApplyParticipantVolumes } from "@/src/hooks/useApplyParticipantVolumes";
-import { db } from "@/src/lib/firebase";
+import { useSpatialAudio } from "@/src/hooks/useSpatialAudio";
+import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
+import SpatialCanvas from "./active-room/SpatialCanvas";
+import { db, rtdb } from "@/src/lib/firebase";
+import { ref, set, remove, onDisconnect, get } from "firebase/database";
 import {
   doc,
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   arrayUnion,
   arrayRemove,
   onSnapshot,
   serverTimestamp,
+  runTransaction,
 } from "firebase/firestore";
 import { styleInjection } from "./active-room/ActiveRoomStyles";
 
@@ -49,6 +57,8 @@ import ConnectionStatusIndicator from "./active-room/ConnectionStatusIndicator";
 import RoomEventsHandler from "./active-room/RoomEventsHandler";
 import ModerationHandler from "./active-room/ModerationHandler";
 import WatchPartyManager from "./active-room/WatchPartyManager";
+import CallInviteModal from "@/src/components/friends/CallInviteModal";
+import OverlayBridge from "./active-room/OverlayBridge";
 
 // --- STYLES ---
 // Styles moved to active-room/ActiveRoomStyles.js
@@ -103,23 +113,122 @@ function VoiceProcessorHandler() {
   return <VoiceProcessorInner />;
 }
 
+// 🎧 Spatial Audio Handler — LiveKitRoom içinde çalışmalı
+function SpatialAudioHandler() {
+  useSpatialAudio();
+  return null;
+}
+
+// 🎧 Spatial Canvas Wrapper — Floating draggable panel
+function SpatialCanvasWrapper({ channelId, localUserId }) {
+  const spatialEnabled = useSpatialAudioStore(s => s.enabled);
+  const showWindow = useSpatialAudioStore(s => s.showWindow);
+  const setShowWindow = useSpatialAudioStore(s => s.setShowWindow);
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const dragControls = useDragControls();
+
+  const [winSize, setWinSize] = useState({ w: typeof window !== "undefined" ? window.innerWidth : 1920, h: typeof window !== "undefined" ? window.innerHeight : 1080 });
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    // Bounds clamping function
+    const clampPos = (w, h) => {
+      const contentW = isExpanded ? 670 : 350;
+      const contentH = isExpanded ? 730 : 410;
+      
+      const minX = -w + contentW + 32; 
+      const minY = -h + contentH + 160;
+      
+      const curX = dragX.get();
+      const curY = dragY.get();
+
+      if (curX < minX) import("framer-motion").then(({ animate }) => animate(dragX, minX, { type: 'spring', damping: 25, stiffness: 300 }));
+      else if (curX > 16) import("framer-motion").then(({ animate }) => animate(dragX, 16, { type: 'spring', damping: 25, stiffness: 300 }));
+
+      if (curY < minY) import("framer-motion").then(({ animate }) => animate(dragY, minY, { type: 'spring', damping: 25, stiffness: 300 }));
+      else if (curY > 96) import("framer-motion").then(({ animate }) => animate(dragY, 96, { type: 'spring', damping: 25, stiffness: 300 }));
+    };
+
+    clampPos(window.innerWidth, window.innerHeight);
+
+    const handleResize = () => {
+      setWinSize({ w: window.innerWidth, h: window.innerHeight });
+      clampPos(window.innerWidth, window.innerHeight);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isExpanded, dragX, dragY]);
+
+  if (!spatialEnabled || !showWindow) return null;
+
+  return (
+    <motion.div
+      style={{ x: dragX, y: dragY }}
+      className="fixed right-4 bottom-24 z-[300] bg-[#111214]/95 border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-2xl"
+      drag
+      dragControls={dragControls}
+      dragListener={false}
+      dragMomentum={false}
+      dragConstraints={{ 
+        left: -winSize.w + (isExpanded ? 670 : 350) + 32, 
+        right: 16, 
+        top: -winSize.h + (isExpanded ? 730 : 410) + 160, 
+        bottom: 96 
+      }}
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+    >
+      <SpatialCanvas
+        channelId={channelId}
+        localUserId={localUserId}
+        isExpanded={isExpanded}
+        onToggleExpand={() => setIsExpanded(!isExpanded)}
+        dragControls={dragControls}
+        onClose={() => setShowWindow(false)}
+      />
+    </motion.div>
+  );
+}
+
 // Inline styles backup to ensure animations work even if import fails
+// ✅ CPU OPT: boxShadow kaldırıldı - sadece opacity animasyonu
 const criticalStyles = `
   @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 15px var(--pulse-color); border-color: var(--pulse-color); }
-    50% { box-shadow: 0 0 25px var(--pulse-color); border-color: var(--pulse-color); }
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 0.2; }
   }
 `;
 
 function DeafenManager({ isDeafened, serverDeafened }) {
   useEffect(() => {
+    const shouldMute = isDeafened || serverDeafened;
     const muteAll = () => {
       document.querySelectorAll("audio").forEach((el) => {
-        el.muted = isDeafened || serverDeafened;
+        el.muted = shouldMute;
       });
     };
     muteAll();
-    const obs = new MutationObserver(muteAll);
+    // ✅ CPU OPT: Sadece audio elementi eklendiğinde/kaldırıldığında tetikle
+    // Önceki: subtree:true ile HER DOM değişikliğinde querySelectorAll çalışıyordu
+    const obs = new MutationObserver((mutations) => {
+      let hasAudioChange = false;
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeName === "AUDIO" || (node.querySelector && node.querySelector("audio"))) {
+            hasAudioChange = true;
+            break;
+          }
+        }
+        if (hasAudioChange) break;
+      }
+      if (hasAudioChange) muteAll();
+    });
     obs.observe(document.body, { childList: true, subtree: true });
     return () => obs.disconnect();
   }, [isDeafened, serverDeafened]);
@@ -141,17 +250,22 @@ const LoadingSplash = ({
     <div className="flex flex-col items-center justify-center h-full bg-[#0a0a0c] relative overflow-hidden z-50">
       <MemoizedBackground disableEffects={disableBackgroundEffects} />
 
+      <style>{`
+        @keyframes cpuFriendlyOrbit1 { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(50px, 30px) scale(1.2); } 100% { transform: translate(0, 0) scale(1); } }
+        @keyframes cpuFriendlyOrbit2 { 0% { transform: translate(0, 0) scale(1.2); } 50% { transform: translate(-40px, 60px) scale(1); } 100% { transform: translate(0, 0) scale(1.2); } }
+        @keyframes cpuFriendlySpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes cpuFriendlyLoading { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
+      `}</style>
+
       {!disableBackgroundEffects && (
         <div className="absolute inset-0 pointer-events-none">
-          <motion.div
-            animate={{ x: [0, 50, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
-            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+          <div
             className="absolute top-[-20%] left-[-10%] w-[80%] h-[70%] rounded-full bg-indigo-600/15 blur-[120px]"
+            style={{ animation: 'cpuFriendlyOrbit1 10s linear infinite', willChange: 'transform' }}
           />
-          <motion.div
-            animate={{ x: [0, -40, 0], y: [0, 60, 0], scale: [1.2, 1, 1.2] }}
-            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          <div
             className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[60%] rounded-full bg-purple-600/15 blur-[120px]"
+            style={{ animation: 'cpuFriendlyOrbit2 15s linear infinite', willChange: 'transform' }}
           />
         </div>
       )}
@@ -159,7 +273,7 @@ const LoadingSplash = ({
       <div className="relative z-10 flex flex-col items-center gap-10 max-w-lg text-center px-4">
         {/* Animated Logo Frame */}
         <div className="relative w-28 h-28 mb-4">
-          <motion.div
+          <div
             className="absolute inset-0 rounded-[35px]"
             style={{
               width: 140,
@@ -171,10 +285,8 @@ const LoadingSplash = ({
               WebkitMask: `linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)`,
               WebkitMaskComposite: "xor",
               maskComposite: "exclude",
-            }}
-            animate={{ rotate: 360 }}
-            transition={{
-              rotate: { duration: 12, repeat: Infinity, ease: "linear" },
+              animation: 'cpuFriendlySpin 12s linear infinite',
+              willChange: 'transform'
             }}
           />
           <div
@@ -224,14 +336,9 @@ const LoadingSplash = ({
         {/* Indeterminate Loading Bar */}
         <div className="flex flex-col items-center gap-4">
           <div className="relative w-48 h-[6px] bg-[#2a2b36] rounded-full overflow-hidden border border-white/20 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
-            <motion.div
+            <div
               className="absolute top-0 left-0 h-full w-[40%] rounded-full z-10 bg-gradient-to-r from-transparent via-[#c084fc] to-transparent shadow-[0_0_15px_rgba(192,132,252,0.6)]"
-              animate={{ x: ["-150%", "350%"] }}
-              transition={{
-                duration: 1.8,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
+              style={{ animation: 'cpuFriendlyLoading 1.8s ease-in-out infinite', willChange: 'transform' }}
             />
           </div>
           <span className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] text-center">
@@ -251,6 +358,7 @@ export default function ActiveRoom({
   onLeave,
   currentTextChannel,
   userId,
+  isDMCall, // new prop check
 }) {
   // --- GLOBAL INPUT LISTENER (CPU OPTIMIZATION) ---
   useEffect(() => {
@@ -283,8 +391,11 @@ export default function ActiveRoom({
   const { user } = useAuthStore();
   const [token, setToken] = useState("");
   const [showSettingsLocal, setShowSettingsLocal] = useState(false);
+  const [showCallInviteModal, setShowCallInviteModal] = useState(false);
 
   const serverId = useServerStore((state) => state.currentServer?.id);
+  const currentServerName = useServerStore((state) => state.currentServer?.name);
+  const activeConversation = useDMStore((state) => state.activeConversation);
 
   // Voice State and Settings Modal - Global Store'dan al
   const isMuted = useSettingsStore((state) => state.isMuted);
@@ -403,7 +514,7 @@ export default function ActiveRoom({
             serverIndexRef.current = firebaseIndex;
             try {
               const serverInfo =
-                await window.netrex.getLiveKitServerInfo(firebaseIndex);
+                await getLiveKitServerInfo(firebaseIndex);
               if (serverInfo && serverInfo.url) {
                 const sanitizedIndex = serverInfo.serverIndex;
                 setServerIndex(sanitizedIndex);
@@ -526,12 +637,12 @@ export default function ActiveRoom({
     return channel?.name || roomName;
   }, [displayName, channels, roomName]);
 
-  // currentTextChannel null olduğunda paneli kapat
+  // currentTextChannel veya activeConversation null olduğunda paneli kapat
   useEffect(() => {
-    if (!currentTextChannel && showChatPanel) {
+    if (!currentTextChannel && !activeConversation && showChatPanel) {
       setShowChatPanel(false);
     }
-  }, [currentTextChannel, showChatPanel, setShowChatPanel]);
+  }, [currentTextChannel, activeConversation, showChatPanel, setShowChatPanel]);
 
   // currentTextChannel ile currentChannel senkronizasyonu
   useEffect(() => {
@@ -584,7 +695,7 @@ export default function ActiveRoom({
 
     (async () => {
       try {
-        if (window.netrex) {
+        {
           // 🚀 v5.2: Server pool - önce sunucu bilgisini al
           let currentServerIndex = serverIndex;
           let currentServerUrl = serverUrl;
@@ -592,7 +703,7 @@ export default function ActiveRoom({
           try {
             // V5.5 HIZLANDIRMA: Electron IPC ve Firebase Network çağrılarını Paralelleştir
             const serverInfoPromise =
-              window.netrex.getLiveKitServerInfo(currentServerIndex);
+              getLiveKitServerInfo(currentServerIndex);
 
             // Firebase sorgusunu önden başlat ki bağlantı süresinden tasarruf edelim (%30-50 hız artışı)
             const poolRef = doc(db, "system", "livekitPool");
@@ -645,7 +756,7 @@ export default function ActiveRoom({
                   console.log(`📡 Firebase aktif sunucu: ${firebaseIndex}`);
 
                   const activeServerInfo =
-                    await window.netrex.getLiveKitServerInfo(firebaseIndex);
+                    await getLiveKitServerInfo(firebaseIndex);
                   if (activeServerInfo && activeServerInfo.url) {
                     currentServerUrl = activeServerInfo.url;
                     currentServerIndex = activeServerInfo.serverIndex;
@@ -687,7 +798,7 @@ export default function ActiveRoom({
           const identity = userId;
 
           // Get token with stable identity, display name, and server index
-          const t = await window.netrex.getLiveKitToken(
+          const t = await getLiveKitToken(
             roomName,
             identity,
             username,
@@ -719,53 +830,105 @@ export default function ActiveRoom({
       }
     };
   }, [roomName, username, userId, hasConnectedOnce, isRotatingSession]); // ✅ Removed serverIndex/serverUrl - they're set INSIDE this effect
+  // 🛡️ GLOBAL PRESENCE DEDUPLICATION
+  // ──────────────────────────────────────────────────
+  // user_voice_state/{userId} = { roomName, timestamp }
+  // Kullanıcının hangi odada olduğunu global olarak takip eder.
+  // Yeni odaya bağlanmadan önce eski odadan otomatik temizler.
+  // ──────────────────────────────────────────────────
+
+  const presenceQueueRef = useRef(Promise.resolve());
+  const queuePresenceUpdate = useCallback((updateFn) => {
+    presenceQueueRef.current = presenceQueueRef.current
+      .then(() => updateFn())
+      .catch((err) => console.error("Presence queue error:", err));
+    return presenceQueueRef.current;
+  }, []);
+
+  /**
+   * Kullanıcıyı eski odasından temizle (varsa).
+   * user_voice_state/{userId} dökümanını kontrol eder.
+   */
+  const cleanupOldRoomPresence = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const stateRef = ref(rtdb, `user_voice_state/${userId}`);
+      const stateSnap = await get(stateRef);
+      
+      if (stateSnap.exists()) {
+        const oldRoomName = stateSnap.val().roomName;
+        
+        if (oldRoomName) {
+          console.log(`🧹 Eski oda presence temizleniyor (RTDB): ${oldRoomName}`);
+          const presenceRef = ref(rtdb, `room_presence/${oldRoomName}/${userId}`);
+          await remove(presenceRef);
+        }
+      }
+    } catch (error) {
+      console.warn("Eski oda presence temizleme hatası:", error);
+    }
+  }, [userId]);
+
+  /**
+   * user_voice_state/{userId} dökümanını güncelle
+   */
+  const setVoiceState = useCallback(async (newRoomName) => {
+    if (!userId) return;
+    try {
+      const stateRef = ref(rtdb, `user_voice_state/${userId}`);
+      if (newRoomName) {
+        await set(stateRef, {
+          roomName: newRoomName,
+          timestamp: Date.now()
+        });
+        // 🚀 HAYALET KULLANICI ÖNLEYİCİ: Bağlantı koparsa RTDB'den sil
+        onDisconnect(stateRef).remove();
+      } else {
+        await remove(stateRef);
+      }
+    } catch (error) {
+      console.warn("Voice state güncelleme hatası:", error);
+    }
+  }, [userId]);
+
+  /**
+   * Belirtilen odadan kullanıcıyı çıkar
+   */
+  const removeFromRoomPresence = useCallback(async (targetRoomName) => {
+    if (!userId || !targetRoomName) return;
+    try {
+      const presenceRef = ref(rtdb, `room_presence/${targetRoomName}/${userId}`);
+      await remove(presenceRef);
+    } catch (error) {
+      console.error("Room presence çıkarma hatası:", error);
+    }
+  }, [userId]);
 
   // Component unmount veya room değiştiğinde cleanup
   useEffect(() => {
     return () => {
-      // Component unmount olduğunda Firebase'den temizle - Optimize: cleanup
+      // Component unmount olduğunda Firebase'den temizle
       if (userId && roomName) {
-        const presenceRef = doc(db, "room_presence", roomName);
-        updateDoc(presenceRef, {
-          users: arrayRemove({
-            userId,
-            username,
-            photoURL: user?.photoURL || null,
-          }),
-        }).catch((error) => {
-          // Document yoksa veya zaten silinmişse sessizce devam et
-          if (error.code !== "not-found") {
-            console.error("Room presence cleanup hatası (unmount):", error);
-          }
-        });
+        removeFromRoomPresence(roomName);
+        setVoiceState(null);
       }
     };
-  }, [roomName, username, userId]);
+  }, [roomName, username, userId, removeFromRoomPresence, setVoiceState]);
 
-  const handleManualLeave = async () => {
+  const handleManualLeave = useCallback(async () => {
     playSound("left");
 
-    // Firebase'den kullanıcıyı çıkar (room presence) - Optimize: timestamp yok
+    // Firebase'den kullanıcıyı çıkar (room presence + voice state)
     if (userId && roomName) {
-      try {
-        const presenceRef = doc(db, "room_presence", roomName);
-        await updateDoc(presenceRef, {
-          users: arrayRemove({
-            userId,
-            username,
-            photoURL: user?.photoURL || null,
-          }),
-        });
-      } catch (error) {
-        console.error("Room presence çıkarma hatası:", error);
-      }
+      await removeFromRoomPresence(roomName);
+      await setVoiceState(null);
     }
 
     onLeave();
-  };
+  }, [userId, roomName, onLeave, playSound, removeFromRoomPresence, setVoiceState]);
 
   // Bağlantı başarılı olduğunda
-  const handleConnected = async () => {
+  const handleConnected = useCallback(async () => {
     hasConnectedOnceRef.current = true;
     setHasConnectedOnce(true);
     setIsReconnecting(false);
@@ -777,129 +940,59 @@ export default function ActiveRoom({
     }
     console.log("LiveKit bağlantısı başarılı");
 
-    // Firebase'e kullanıcıyı ekle (room presence) - Optimize: sadece userId ve username
+    // 🛡️ ÖNCELİKLE: Eski odadan temizle (duplicate prevention)
+    await cleanupOldRoomPresence();
+
+    // Firebase'e kullanıcıyı ekle (room presence)
     if (userId && roomName) {
       try {
-        const presenceRef = doc(db, "room_presence", roomName);
-        // photoURL'i de ekle
+        const presenceRef = ref(rtdb, `room_presence/${roomName}/${userId}`);
         const userData = {
           userId,
           username,
           photoURL: user?.photoURL || null,
+          isMuted: useSettingsStore.getState().isMuted,
+          isDeafened: useSettingsStore.getState().isDeafened,
         };
-        await updateDoc(presenceRef, {
-          users: arrayUnion(userData),
-        }).catch(async (error) => {
-          // Document yoksa oluştur
-          if (error.code === "not-found") {
-            await setDoc(presenceRef, {
-              users: [userData],
-            });
-          }
-        });
+        
+        await set(presenceRef, userData);
+        // 🚀 HAYALET KULLANICI ÖNLEYİCİ: Bağlantı koparsa RTDB'den odadaki kaydı sil
+        onDisconnect(presenceRef).remove();
+
+        // 🛡️ Voice state'i güncelle — artık bu odadayım
+        await setVoiceState(roomName);
       } catch (error) {
         console.error("Room presence ekleme hatası:", error);
       }
     }
-  };
+  }, [userId, roomName, username, user?.photoURL, cleanupOldRoomPresence, queuePresenceUpdate, setVoiceState]);
 
-  // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
-  const handleDisconnect = async (reason) => {
-    console.log("LiveKit bağlantısı koptu:", reason);
+  // Sync isMuted and isDeafened in real-time with debouncing
+  useEffect(() => {
+    if (!hasConnectedOnce || isReconnecting || !userId || !roomName) return;
 
-    // 🚀 v5.2: Disconnect reason'ı kontrol et - quota/limit hatası olabilir
-    // LiveKit quota aşıldığında doğrudan disconnect eder, "error" event'i fırlatmaz
+    const delayDebounceFn = setTimeout(async () => {
+       try {
+         const presenceRef = ref(rtdb, `room_presence/${roomName}/${userId}`);
+         const snapshot = await get(presenceRef);
+         if (snapshot.exists()) {
+            const currentData = snapshot.val();
+            if (currentData.isMuted !== isMuted || currentData.isDeafened !== isDeafened) {
+                await set(presenceRef, { ...currentData, isMuted, isDeafened });
+            }
+         }
+       } catch(e) {
+         console.error("Room presence mute state sync error:", e);
+       }
+    }, 250); // 250ms debounce
 
-    // Enum kontrolü (daha güvenli)
-    const reasonNum = Number(reason);
-
-    // KESİNLİKLE ROTATION YAPILMAMASI GEREKEN DURUMLAR
-    // 1: CLIENT_INITIATED (Kullanıcı kendi çıktı)
-    // 2: DUPLICATE_IDENTITY (Başka yerden girdi)
-    // 10: ROOM_CLOSED (Oda kapandı - normal kapanış)
-    if (
-      reasonNum === DisconnectReason.CLIENT_INITIATED ||
-      reasonNum === DisconnectReason.DUPLICATE_IDENTITY ||
-      reasonNum === DisconnectReason.ROOM_CLOSED
-    ) {
-      console.log(`ℹ️ Normal disconnect (${reason}), rotation yapılmayacak.`);
-      return;
-    }
-
-    // ROTATION YAPILMASI GEREKEN KRİTİK DURUMLAR
-    // 3: SERVER_SHUTDOWN (Sunucu kapandıysa/restart atıldıysa kesin değişim gerekir)
-    // NOT: JOIN_FAILURE (7) tek başına yeterli değil, internet kopukluğu da olabilir.
-    // O yüzden sadece SERVER_SHUTDOWN'u enum olarak kabul ediyoruz.
-    const isCriticalDisconnect = reasonNum === DisconnectReason.SERVER_SHUTDOWN;
-
-    // String kontrolü (EN ÖNEMLİ KISIM)
-    // Kullanıcının belirttiği kesin "kota/limit" hataları buraya eklenmeli
-    const reasonStr = String(reason || "").toLowerCase();
-    const quotaDisconnectReasons = [
-      "quota",
-      "rate limit",
-      "limit exceeded",
-      "limit reached",
-      "resource exhausted",
-      "too many requests",
-      "429",
-      "connection limit",
-      "participant limit",
-      "minutes limit",
-      "minutes exceeded",
-      "free tier",
-      "server_shutdown",
-    ];
-
-    // Sadece tam eşleşme varsa (veya server shutdown ise)
-    const isQuotaTextMatch = quotaDisconnectReasons.some((q) =>
-      reasonStr.includes(q),
-    );
-
-    if ((isCriticalDisconnect || isQuotaTextMatch) && serverPoolMode) {
-      console.warn(
-        `⚠️ Critical Disconnect (${reason}) indicates STRICT quota error, triggering pool rotation...`,
-      );
-
-      let errorDesc = `Disconnect: ${reason}`;
-      if (reasonNum === DisconnectReason.SERVER_SHUTDOWN)
-        errorDesc += " (server_shutdown)";
-      if (isQuotaTextMatch) errorDesc += " (quota_limit_detected)";
-
-      // handleError quota kontrolünü ve rotation'ı yapacak
-      await handleError(new Error(errorDesc));
-      return;
-    }
-
-    // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
-    if (hasConnectedOnce) {
-      setIsReconnecting(true);
-    }
-
-    // Firebase'den kullanıcıyı çıkar (cleanup) - Optimize: bağlantı koptuğunda da temizle
-    if (userId && roomName) {
-      try {
-        const presenceRef = doc(db, "room_presence", roomName);
-        await updateDoc(presenceRef, {
-          users: arrayRemove({
-            userId,
-            username,
-            photoURL: user?.photoURL || null,
-          }),
-        });
-      } catch (error) {
-        // Document yoksa veya zaten silinmişse sessizce devam et
-        if (error.code !== "not-found") {
-          console.error("Room presence cleanup hatası:", error);
-        }
-      }
-    }
-    // İlk bağlantı başarısız olduysa zaten timeout'ta hata gösterilecek
-  };
+    return () => clearTimeout(delayDebounceFn);
+  }, [isMuted, isDeafened, hasConnectedOnce, isReconnecting, userId, roomName]);
 
   // Bağlantı hatası (sadece kritik hatalar için)
   // 🚀 v5.2: Server pool - hata durumunda sonraki sunucuya geç
-  const handleError = async (error) => {
+  // Hoisted above handleDisconnect to allow dependency reference
+  const handleError = useCallback(async (error) => {
     console.error("LiveKit bağlantı hatası:", error);
 
     const errorMessage = error?.message || "";
@@ -961,7 +1054,7 @@ export default function ActiveRoom({
       );
 
       try {
-        // 🔥 FIX: Kendi rotation'ımızı işaretle - onSnapshot'ın çift tetiklemesini önle
+        // 🔥 FIX: Kendi rotation'ımızı işaretle - onSnapshot'ın tekrar tetiklenmesini önle
         isLocalRotationRef.current = true;
 
         const poolRef = doc(db, "system", "livekitPool");
@@ -1029,7 +1122,7 @@ export default function ActiveRoom({
         }
 
         const serverInfo =
-          await window.netrex.getLiveKitServerInfo(targetIndex);
+          await getLiveKitServerInfo(targetIndex);
 
         if (serverInfo && serverInfo.url) {
           console.log(
@@ -1065,7 +1158,7 @@ export default function ActiveRoom({
           });
 
           console.log(
-            `🔄 LiveKit server rotated: ${serverIndex} → ${serverInfo.serverIndex}`,
+            `🔄 LiveKit server rotated: ${serverIndexRef.current} → ${serverInfo.serverIndex}`,
           );
           return; // Hata gösterme, yeniden dene
         }
@@ -1075,13 +1168,93 @@ export default function ActiveRoom({
     }
 
     // Sadece başarılı bağlantıdan sonra hata olursa göster
-    if (hasConnectedOnce) {
+    if (hasConnectedOnceRef.current) {
       setConnectionError(
         `${errorMessage || "Bağlantı hatası oluştu."} (URL: ${serverUrl})`,
       );
     }
     // İlk bağlantı hatasında sadece timeout'ta hata göster
-  };
+  }, [serverUrl]);
+
+  // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
+  const handleDisconnect = useCallback(async (reason) => {
+    console.log("LiveKit bağlantısı koptu:", reason);
+
+    // 🚀 v5.2: Disconnect reason'ı kontrol et - quota/limit hatası olabilir
+    // LiveKit quota aşıldığında doğrudan disconnect eder, "error" event'i fırlatmaz
+
+    // Enum kontrolü (daha güvenli)
+    const reasonNum = Number(reason);
+
+    // KESİNLİKLE ROTATION YAPILMAMASI GEREKEN DURUMLAR
+    // 1: CLIENT_INITIATED (Kullanıcı kendi çıktı)
+    // 2: DUPLICATE_IDENTITY (Başka yerden girdi)
+    // 10: ROOM_CLOSED (Oda kapandı - normal kapanış)
+    if (
+      reasonNum === DisconnectReason.CLIENT_INITIATED ||
+      reasonNum === DisconnectReason.DUPLICATE_IDENTITY ||
+      reasonNum === DisconnectReason.ROOM_CLOSED
+    ) {
+      console.log(`ℹ️ Normal disconnect (${reason}), rotation yapılmayacak.`);
+      return;
+    }
+
+    // ROTATION YAPILMASI GEREKEN KRİTİK DURUMLAR
+    // 3: SERVER_SHUTDOWN (Sunucu kapandıysa/restart atıldıysa kesin değişim gerekir)
+    // NOT: JOIN_FAILURE (7) tek başına yeterli değil, internet kopukluğu da olabilir.
+    // O yüzden sadece SERVER_SHUTDOWN'u enum olarak kabul ediyoruz.
+    const isCriticalDisconnect = reasonNum === DisconnectReason.SERVER_SHUTDOWN;
+
+    // String kontrolü (EN ÖNEMLİ KISIM)
+    // Kullanıcının belirttiği kesin "kota/limit" hataları buraya eklenmeli
+    const reasonStr = String(reason || "").toLowerCase();
+    const quotaDisconnectReasons = [
+      "quota",
+      "rate limit",
+      "limit exceeded",
+      "limit reached",
+      "resource exhausted",
+      "too many requests",
+      "429",
+      "connection limit",
+      "participant limit",
+      "minutes limit",
+      "minutes exceeded",
+      "free tier",
+      "server_shutdown",
+    ];
+
+    // Sadece tam eşleşme varsa (veya server shutdown ise)
+    const isQuotaTextMatch = quotaDisconnectReasons.some((q) =>
+      reasonStr.includes(q),
+    );
+
+    if ((isCriticalDisconnect || isQuotaTextMatch) && serverPoolModeRef.current) {
+      console.warn(
+        `⚠️ Critical Disconnect (${reason}) indicates STRICT quota error, triggering pool rotation...`,
+      );
+
+      let errorDesc = `Disconnect: ${reason}`;
+      if (reasonNum === DisconnectReason.SERVER_SHUTDOWN)
+        errorDesc += " (server_shutdown)";
+      if (isQuotaTextMatch) errorDesc += " (quota_limit_detected)";
+
+      // handleError quota kontrolünü ve rotation'ı yapacak
+      await handleError(new Error(errorDesc));
+      return;
+    }
+
+    // Sadece başarılı bağlantıdan sonra koparsa "Bağlantı Koptu" göster
+    if (hasConnectedOnceRef.current) {
+      setIsReconnecting(true);
+    }
+
+    // Firebase'den kullanıcıyı çıkar (cleanup + voice state)
+    if (userId && roomName) {
+      await removeFromRoomPresence(roomName);
+      await setVoiceState(null);
+    }
+  }, [userId, roomName, handleError, removeFromRoomPresence, setVoiceState]);
   // ✅ Join sesi sadece 1 kez çalsın (token rotation'da tekrar çalmasın)
   const joinSoundPlayedRef = useRef(false);
   useEffect(() => {
@@ -1150,11 +1323,10 @@ export default function ActiveRoom({
                   hasConnectedOnceRef.current = false;
                   setToken(""); // Token'ı sıfırla ki yeniden fetch etsin
 
-                  if (window.netrex) {
+                  {
                     const identity = userId;
                     // Token alma işlemini yeniden başlat
-                    window.netrex
-                      .getLiveKitToken(
+                    getLiveKitToken(
                         roomName,
                         identity,
                         username,
@@ -1284,6 +1456,14 @@ export default function ActiveRoom({
         setShowChatPanel={setShowChatPanel}
       />
       <VoiceProcessorHandler />
+      <SpatialAudioHandler />
+      <OverlayBridge
+        channelName={roomDisplayName}
+        serverName={currentServerName}
+        isDMCall={isDMCall}
+        onLeave={handleManualLeave}
+        onMuteToggle={toggleMute}
+      />
       <SettingsUpdater
         isMuted={isMuted}
         serverMuted={serverMuted}
@@ -1313,6 +1493,7 @@ export default function ActiveRoom({
         isDeafened={isDeafened}
         isMuted={isMuted}
         playSound={playSound}
+        onKicked={onLeave}
       />
 
       {/* LiveKit bağlantısı kurulana kadar loading overlay */}
@@ -1411,7 +1592,7 @@ export default function ActiveRoom({
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 group">
             {/* Kanal icon container - Premium */}
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-transparent flex items-center justify-center border border-indigo-500/20 shadow-lg backdrop-blur-sm group-hover:border-indigo-500/40 transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.25)] group-hover:scale-105">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-transparent flex items-center justify-center border border-indigo-500/20 shadow-lg backdrop-blur-sm group-hover:border-indigo-500/40 transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.25)]">
                 <Volume2
                   size={18}
                   className="text-indigo-400 group-hover:text-indigo-300 transition-colors duration-300"
@@ -1503,10 +1684,21 @@ export default function ActiveRoom({
               deafenedBy={deafenedBy}
               mutedAt={mutedAt}
               deafenedAt={deafenedAt}
+              isDMCall={isDMCall}
+              onInviteClick={() => setShowCallInviteModal(true)}
             />
           )
         )}
       />
+      
+      {/* Odaya Davet Modal Placeholder (Gerçek implementasyon yapılacak) */}
+      {showCallInviteModal && isDMCall && (
+        <CallInviteModal 
+          roomId={roomName}
+          onClose={() => setShowCallInviteModal(false)}
+        />
+      )}
+
       {contextMenu && (
         <UserContextMenu
           x={contextMenu.x}
@@ -1521,6 +1713,9 @@ export default function ActiveRoom({
       {serverId && (
         <WatchPartyManager serverId={serverId} channelId={roomName} />
       )}
+
+      {/* 🎧 Spatial Audio Canvas — Floating panel */}
+      <SpatialCanvasWrapper channelId={roomName} localUserId={userId} />
     </LiveKitRoom>
   );
 }

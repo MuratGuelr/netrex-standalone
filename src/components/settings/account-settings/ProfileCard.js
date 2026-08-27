@@ -9,7 +9,7 @@ import {
   uploadImageToCloudinary,
   deleteImageFromCloudinary,
 } from "@/src/utils/imageUpload";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { db, auth } from "@/src/lib/firebase";
 import { updateProfile } from "firebase/auth";
 import { useServerStore } from "@/src/store/serverStore";
@@ -17,6 +17,23 @@ import { useAuthStore } from "@/src/store/authStore";
 import ImageCropModal from "@/src/components/ui/ImageCropModal";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { extractDominantGradient } from "@/src/utils/extractDominantGradient";
+
+// ✅ Küfür/Hakaret Filtresi (Profanity Filter List)
+const BANNED_WORDS = [
+  "amk", "aq", "sg", "oç", "orospu", "pic", "piç", "siktir", "yarak", "yarrak", 
+  "amcik", "amcık", "fuck", "bitch", "cunt", "nigger", "nigga", "asshole",
+  "admin", "netrex", "system", "moderator", "mod", "destek", "support",
+  "yarram", "sikim", "sikerim", "göt", "gotveren", "ibne", "kahpe", "pezevenk",
+  "şerefsiz", "serefsiz", "yavşak", "yavsak", "gavat", "kaltak", "orosbu", 
+  "orosp", "sikiş", "sikis", "döl", "porn", "porno", "sex", "seks", "am", 
+  "sik", "memeler"
+];
+
+// Kelimenin sansürlü listeyi içerip içermediğini kontrol et
+const containsProfanity = (text) => {
+  const normalizedText = text.toLowerCase().replace(/1/g, 'i').replace(/0/g, 'o').replace(/3/g, 'e').replace(/@/g, 'a').replace(/\s+/g, '');
+  return BANNED_WORDS.some(word => normalizedText.includes(word));
+};
 
 /**
  * ✅ ProfileCard - Optimized account profile header
@@ -32,6 +49,11 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
   const [isUploading, setIsUploading] = useState(false);
   const setProfileColor = useSettingsStore((s) => s.setProfileColor);
   const autoThemeFromImage = useSettingsStore((s) => s.autoThemeFromImage);
+
+  // Düzenleme stateleri
+  const [editingField, setEditingField] = useState(null); // 'displayName' veya 'username'
+  const [tempValue, setTempValue] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
 
   // ── Dosya seç → doğrula → kırpma modalını aç ────────────────────────────────
   const handleFileSelect = (e) => {
@@ -148,6 +170,94 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
     }
   };
 
+  const handleSaveName = async (field) => {
+    if (!tempValue.trim() || tempValue.trim() === user[field]) {
+      setEditingField(null);
+      return;
+    }
+
+    const value = tempValue.trim();
+
+    // Uzunluk Sınırları (Length Constraints)
+    if (field === "username") {
+      if (value.length < 3 || value.length > 20) {
+        toast.error("Kullanıcı adı 3 ile 20 karakter arasında olmalıdır.");
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+        toast.error("Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir.");
+        return;
+      }
+    } else if (field === "displayName") {
+      if (value.length < 2 || value.length > 32) {
+        toast.error("Görünen ad 2 ile 32 karakter arasında olmalıdır.");
+        return;
+      }
+    }
+
+    // Küfür & Yasaklı Kelime Koruması (Profanity Filter)
+    if (containsProfanity(value)) {
+      toast.error("İsim uygunsuz veya ayrılmış kelimeler içeriyor.");
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      if (field === "username") {
+        // Uniqueness check
+        const q = query(
+          collection(db, "users"),
+          where("username", "==", value.toLowerCase())
+        );
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          toast.error("Bu kullanıcı adı zaten alınmış!");
+          setIsSavingName(false);
+          return;
+        }
+      }
+
+      const updateData = {};
+      
+      if (field === "username") {
+        updateData.username = value.toLowerCase();
+      } else {
+        updateData.displayName = value;
+      }
+
+      await updateDoc(doc(db, "users", user.uid), updateData);
+
+      // Auth update for displayName
+      if (field === "displayName" && auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: value }).catch(() => {});
+      }
+
+      // Sunucu üyeliklerinde (Server Members) güncelle
+      const { servers } = useServerStore.getState();
+      if (Array.isArray(servers) && servers.length > 0) {
+        const tasks = servers.map((s) =>
+          updateDoc(doc(db, "servers", s.id, "members", user.uid), updateData)
+            .catch((err) => console.warn(`Server member update failed for ${s.id}:`, err))
+        );
+        await Promise.allSettled(tasks);
+      }
+
+      // Update local store
+      useAuthStore.setState((prev) => ({
+        ...prev,
+        user: { ...prev.user, ...updateData },
+      }));
+
+      toast.success(`${field === "username" ? "Kullanıcı adı" : "Görünen ad"} başarıyla güncellendi!`);
+      setEditingField(null);
+    } catch (error) {
+      console.error("Name update error:", error);
+      toast.error("İsim güncellenemedi.");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
   return (
     <>
       <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg mb-8 relative group/card hover:shadow-xl transition-all duration-300">
@@ -229,7 +339,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
                   {user.displayName || "Misafir Kullanıcı"}
                 </h2>
                 <span className="text-sm text-[#949ba4] font-medium">
-                  #{user.uid?.substring(0, 4)}
+                  {user.username ? `@${user.username}` : `#${user.uid?.substring(0, 4)}`}
                 </span>
               </div>
             </div>
@@ -237,16 +347,99 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
 
           {/* Bilgi kartları */}
           <div className="glass-strong rounded-xl p-5 space-y-4 border border-white/10 relative z-10">
+            {/* Display Name */}
             <div className="flex justify-between items-center group">
-              <div>
+              <div className="flex-1">
                 <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1.5 flex items-center gap-1.5">
                   <User size={12} className="text-indigo-400" /> Görünen Ad
                 </label>
-                <div className="text-white text-sm font-medium">
-                  {user.displayName || "Belirtilmemiş"}
-                </div>
+                {editingField === "displayName" ? (
+                   <div className="flex gap-2">
+                     <input 
+                       value={tempValue}
+                       maxLength={32}
+                       onChange={(e) => setTempValue(e.target.value)}
+                       className="bg-[#111214] text-white text-sm px-3 py-1.5 rounded-lg border border-indigo-500/50 outline-none w-full"
+                       autoFocus
+                       onKeyDown={(e) => {
+                         if (e.key === "Enter") handleSaveName("displayName");
+                         if (e.key === "Escape") setEditingField(null);
+                       }}
+                     />
+                     <button 
+                       disabled={isSavingName}
+                       onClick={() => handleSaveName("displayName")}
+                       className="px-3 py-1.5 bg-indigo-500 text-white text-xs font-bold rounded-lg hover:bg-indigo-600 transition-colors"
+                     >
+                       Kaydet
+                     </button>
+                   </div>
+                ) : (
+                  <div className="text-white text-sm font-medium">
+                    {user.displayName || "Belirtilmemiş"}
+                  </div>
+                )}
               </div>
+              {editingField !== "displayName" && (
+                <button 
+                  onClick={() => { setEditingField("displayName"); setTempValue(user.displayName || ""); }}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-[#b5bac1] hover:text-white transition-colors"
+                >
+                  Düzenle
+                </button>
+              )}
             </div>
+
+            <div className="h-px bg-white/10" />
+
+            {/* Username */}
+            <div className="flex justify-between items-center group">
+              <div className="flex-1">
+                <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-1.5 flex items-center gap-1.5">
+                  <User size={12} className="text-purple-400" /> Kullanıcı Adı (Benzersiz)
+                </label>
+                {editingField === "username" ? (
+                   <div className="flex gap-2">
+                     <input 
+                       value={tempValue}
+                       maxLength={20}
+                       onChange={(e) => setTempValue(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))}
+                       className="bg-[#111214] text-white text-sm px-3 py-1.5 rounded-lg border border-purple-500/50 outline-none w-full"
+                       placeholder="benzersiz_ad"
+                       autoFocus
+                       onKeyDown={(e) => {
+                         if (e.key === "Enter") handleSaveName("username");
+                         if (e.key === "Escape") setEditingField(null);
+                       }}
+                     />
+                     <button 
+                       disabled={isSavingName}
+                       onClick={() => handleSaveName("username")}
+                       className="px-3 py-1.5 bg-purple-500 text-white text-xs font-bold rounded-lg hover:bg-purple-600 transition-colors"
+                     >
+                       Kaydet
+                     </button>
+                   </div>
+                ) : (
+                  <div className="text-white text-sm font-medium flex items-center gap-1">
+                    {user.username ? (
+                      `@${user.username}`
+                    ) : (
+                      <span className="text-yellow-400/80 italic text-xs">Ayarlanmadı (Zorunlu)</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {editingField !== "username" && (
+                <button 
+                  onClick={() => { setEditingField("username"); setTempValue(user.username || ""); }}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-[#b5bac1] hover:text-white transition-colors"
+                >
+                  Düzenle
+                </button>
+              )}
+            </div>
+
             <div className="h-px bg-white/10" />
             <div className="flex justify-between items-center group">
               <div>

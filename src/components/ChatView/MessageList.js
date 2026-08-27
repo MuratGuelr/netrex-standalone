@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { Loader2, Hash } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageItem from "./MessageItem";
+import { getEffectivePresence } from "@/src/hooks/usePresence";
 
 export default function MessageList({
   messages,
@@ -15,6 +17,8 @@ export default function MessageList({
   channelId,
   userId,
   members = [],
+  // ✅ CPU OPT: O(n) find → O(1) Map lookup (500 mesaj × 100 üye = 50K → 500 karşılaştırma tasarrufu)
+  _memberMapInternal,
   editingMessageId,
   editingText,
   setEditingText,
@@ -26,7 +30,11 @@ export default function MessageList({
   formatTime,
   formatDateHeader,
   isMessageInSequence,
-  setSelectedImage
+  setSelectedImage,
+  // ✅ CPU OPT: memberMap'i burada oluştur - her mesaj render'ında find() yerine Map.get() kullanılacak
+  memberMap: memberMapProp,
+  isDM,
+  dmPartner
 }) {
   if (isLoading) {
     return (
@@ -61,20 +69,37 @@ export default function MessageList({
   }
 
   if (messages.length === 0) {
+    const avatarLetter = (dmPartner?.displayName || currentChannel?.name || "?")[0].toUpperCase();
+    
     return (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex-1 flex flex-col justify-end pb-12 select-none px-4"
       >
-        <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 shadow-[0_8px_32px_rgba(99,102,241,0.15)] border border-white/10 backdrop-blur-sm">
-          <Hash size={44} className="text-white/90" />
+        <div className="w-20 h-20 relative mb-6 group">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative w-20 h-20 bg-[#1e1f22] rounded-3xl flex items-center justify-center shadow-2xl border border-white/10 backdrop-blur-sm overflow-hidden">
+            {isDM && dmPartner?.photoURL ? (
+              <img src={dmPartner.photoURL} alt="" className="w-full h-full object-cover" />
+            ) : isDM ? (
+              <span className="text-3xl font-bold text-white">{avatarLetter}</span>
+            ) : (
+              <Hash size={44} className="text-white/90" />
+            )}
+          </div>
+          {isDM && (
+            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-[#141518] ${getEffectivePresence(dmPartner) === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+          )}
         </div>
+
         <h1 className="text-3xl font-extrabold text-white mb-3 tracking-tight">
-          {currentChannel?.name || "sohbet"} kanalına hoş geldin!
+          {isDM ? `${dmPartner?.displayName} kişisine hoş geldin!` : `${currentChannel?.name || "sohbet"} kanalına hoş geldin!`}
         </h1>
         <p className="text-white/60 text-base max-w-lg leading-relaxed">
-          Bu kanalın başlangıcı. Arkadaşlarına bir "Merhaba" diyerek sohbeti başlatabilirsin.
+          {isDM 
+            ? `Burası ${dmPartner?.displayName} ile sohbetinin başlangıcı. Bir mesaj göndererek sohbeti başlatabilirsin!`
+            : "Bu kanalın başlangıcı. Arkadaşlarına bir \"Merhaba\" diyerek sohbeti başlatabilirsin."}
         </p>
       </motion.div>
     );
@@ -132,7 +157,7 @@ export default function MessageList({
           )
         }}
         itemContent={(index, message) => {
-          const member = members.find((m) => m.id === message.userId);
+          const member = memberMapProp?.get(message.userId) || members.find((m) => m.id === message.userId);
           return (
             <div className="px-4">
               <MessageItem

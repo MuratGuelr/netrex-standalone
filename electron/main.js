@@ -24,7 +24,20 @@ const {
     getMainWindow,
     getSplashWindow,
     setQuitting,
-    showMainWindow
+    showMainWindow,
+    updatePointerOverlay,
+    setPointerOverlayInteractive,
+    closePointerOverlay,
+    // Voice Overlay
+    createVoiceOverlayWindow,
+    updateVoiceOverlay,
+    setVoiceOverlayInteractive,
+    closeVoiceOverlay,
+    destroyVoiceOverlay,
+    moveVoiceOverlay,
+    getVoiceOverlayPosition,
+    startAntiCheatCheck,
+    stopAntiCheatCheck
 } = require("./managers/windowManager");
 
 const { createTray } = require("./managers/trayManager");
@@ -97,8 +110,14 @@ const PERFORMANCE_FLAGS = [
     'disable-renderer-backgrounding',
     'disable-backgrounding-occluded-windows',
     
-    // Audio optimization (Sadece gerekli olanlar. AudioServiceOutOfProcess Main Process'i yorduğu için KESİNLİKLE EKLENMEYECEK!)
-    ['enable-features', 'WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg'],
+    // Hardware Acceleration & Paint Thrashing Preventers (Massive Hover UI CPU Drops fixed!)
+    'enable-gpu-rasterization',
+    'enable-zero-copy',
+    'disable-features=CalculateNativeWinOcclusion',
+    
+    // Audio optimization & EAC Bypass (Easy Anti Cheat çökmelerini önlemek için AudioService ana prosese alındı)
+    ['disable-features', 'AudioServiceOutOfProcess'],
+    ['enable-features', 'WebRTC-Audio-Priority,WebRTC-H264-With-OpenH264-FFmpeg,CanvasOopRasterization'],
     ['force-fieldtrials', 'WebRTC-Audio-Priority/Enabled/'],
     ['autoplay-policy', 'no-user-gesture-required'], // ✅ Autoplay enable
 ];
@@ -145,16 +164,51 @@ if (!gotTheLock) {
     }
     
     if (process.platform === "darwin") {
-      const { systemPreferences } = require('electron');
+      const { systemPreferences, Menu } = require('electron');
       systemPreferences.askForMediaAccess("microphone");
       systemPreferences.askForMediaAccess("camera");
+      
+      const template = [
+        {
+          label: "Netrex",
+          submenu: [
+            { role: 'about', label: 'Hakkında' },
+            { type: 'separator' },
+            { role: 'hide', label: 'Gizle' },
+            { role: 'hideOthers', label: 'Diğerlerini Gizle' },
+            { role: 'unhide', label: 'Tümünü Göster' },
+            { type: 'separator' },
+            { role: 'quit', label: 'Çıkış' }
+          ]
+        },
+        {
+          label: "Düzenle",
+          submenu: [
+            { role: 'undo', label: 'Geri Al' },
+            { role: 'redo', label: 'Yinele' },
+            { type: 'separator' },
+            { role: 'cut', label: 'Kes' },
+            { role: 'copy', label: 'Kopyala' },
+            { role: 'paste', label: 'Yapıştır' },
+            { role: 'selectAll', label: 'Tümünü Seç' }
+          ]
+        }
+      ];
+      Menu.setApplicationMenu(Menu.buildFromTemplate(template));
     }
 
     // Input Listeners
     const inputManager = setupInputListeners(getMainWindow, getHotkeysCache, getIsRecordingMode);
 
     // Initialize Managers
-    registerIpcHandlers(getMainWindow, showMainWindow, inputManager, setQuitting);
+    registerIpcHandlers(
+      getMainWindow, 
+      showMainWindow, 
+      inputManager, 
+      setQuitting, 
+      { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive },
+      { createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, getVoiceOverlayPosition, startAntiCheatCheck, stopAntiCheatCheck }
+    );
     
     // Setup Updates
     setupUpdateManager(getMainWindow);
@@ -258,6 +312,13 @@ app.on("will-quit", () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("activate", () => {
+  const mainWindow = getMainWindow();
+  if (mainWindow && !mainWindow.isVisible()) {
+    showMainWindow(mainWindow);
+  }
 });
 
 // ============================================

@@ -20,13 +20,13 @@ import ScreenSharePreviewComponent from "./ScreenSharePreview";
 
 // ✅ Client-side audio level based speaking detection
 // LiveKit sunucusunun isSpeaking eşiği yüksek - düşük sesler algılanmıyor.
-// participant.audioLevel (0.0-1.0) ile kendi tespitimizi yapıyoruz.
 const AUDIO_LEVEL_THRESHOLD = 0.005; // Çok hassas - kullanıcının duyduğu sesleri yakala
-const AUDIO_LEVEL_CHECK_INTERVAL = 80; // ms
+const AUDIO_LEVEL_CHECK_INTERVAL = 100; // ms - ✅ CPU VE TEPKİ ORTA NOKTASI: Aniden sönme başlar, Re-render ref ile kilitlenir.
 
 function useRemoteAudioLevelSpeaking(participant, isLocal) {
   const [isAudioSpeaking, setIsAudioSpeaking] = useState(false);
   const speakingTimeoutRef = useRef(null);
+  const lastStateRef = useRef(false); // ✅ CPU OPT: Gereksiz setState önle
   
   useEffect(() => {
     // Lokal kullanıcı için bu hook kullanılmaz
@@ -39,13 +39,21 @@ function useRemoteAudioLevelSpeaking(participant, isLocal) {
           clearTimeout(speakingTimeoutRef.current);
           speakingTimeoutRef.current = null;
         }
-        setIsAudioSpeaking(true);
+        // ✅ CPU OPT: Sadece state değiştiğinde setState çağır
+        if (!lastStateRef.current) {
+          lastStateRef.current = true;
+          setIsAudioSpeaking(true);
+        }
       } else {
         if (!speakingTimeoutRef.current) {
           speakingTimeoutRef.current = setTimeout(() => {
-            setIsAudioSpeaking(false);
+            // ✅ CPU OPT: Sadece state değiştiğinde setState çağır
+            if (lastStateRef.current) {
+              lastStateRef.current = false;
+              setIsAudioSpeaking(false);
+            }
             speakingTimeoutRef.current = null;
-          }, 150); // 150ms hysteresis
+          }, 50); // Çift debounce / gereksiz bekletme kaldırıldı (Hızlı tepkime süresi)
         }
       }
     }, AUDIO_LEVEL_CHECK_INTERVAL);
@@ -75,8 +83,9 @@ const UserCard = ({
   members,
 }) => {
   const { identity, name, metadata } = useParticipantInfo({ participant });
-  const livekitIsSpeaking = useIsSpeaking(participant);
-  // ✅ Client-side audio level detection (LiveKit'in sunucu VAD'ından daha hassas)
+
+  // ✅ CPU OPT: LiveKit VAD'in (useIsSpeaking) saniyede yüzlerce kez zorlayıcı State güncellemelerini Kestik! 
+  // Orijinal hook'ları devre dışı bırakıp, sadece 250ms'lik (4 FPS) kontrollü sınırlı AudioLevel kullanacağız.
   const audioLevelSpeaking = useRemoteAudioLevelSpeaking(participant, participant.isLocal);
 
 
@@ -115,6 +124,8 @@ const UserCard = ({
   const storeIsMuted = useSettingsStore((s) => s.isMuted);
   const storeIsDeafened = useSettingsStore((s) => s.isDeafened);
   const useProfileColorForSpeaking = useSettingsStore((s) => s.useProfileColorForSpeaking ?? true);
+  const localVolume = useSettingsStore((s) => s.userVolumes[participant.identity] ?? 100);
+  const isLocallyMuted = !participant.isLocal && localVolume === 0;
 
   // ✅ OPTIMIZATION: useTracks parent'tan Map olarak geliyor (O(1) lookup)
   const screenShareTrack = screenShareTrackMap?.get(participant.sid) || null;
@@ -191,64 +202,74 @@ const UserCard = ({
     [isMuted, isDeafened],
   );
 
-  // ✅ FIX v2.0: Speaking state - anında açılsın, gecikmeli kapansın
-  const [debouncedIsSpeaking, setDebouncedIsSpeaking] = useState(false);
+  // ✅ CPU OPT: React State YERİNE DOM Ref Manipulasyonu! (0 Re-Render)
   const speakingTimerRef = useRef(null);
+  
+  // Hedef DOM Elemanları
+  const speakingIndicatorRef = useRef(null);
+  const backgroundGlowRef = useRef(null);
+  const videoBorderRef = useRef(null);
+  const ringHighQualityRef = useRef(null);
+  const ringPotatoRef = useRef(null);
+
+  const setSpeakingStore = useSpeakingStore(s => s.setSpeaking);
 
   useEffect(() => {
-    // ✅ Lokal: voiceProcessor'dan gelen localIsSpeaking kullan
-    // ✅ Uzak: LiveKit VAD VEYA client-side audioLevel - hangisi duyarlıysa
     const rawIsSpeaking = participant.isLocal
       ? localIsSpeaking
-      : (livekitIsSpeaking || audioLevelSpeaking);
+      : audioLevelSpeaking;
     const isSpeakingNow = rawIsSpeaking && !isMuted && !isDeafened;
 
+    const applySpeakingStyles = (speaking) => {
+      if (speakingIndicatorRef.current) speakingIndicatorRef.current.style.opacity = speaking ? "1" : "0";
+      if (backgroundGlowRef.current) backgroundGlowRef.current.style.opacity = speaking ? (isPotatoMode ? "0.08" : "0.12") : "0";
+      if (videoBorderRef.current) {
+        videoBorderRef.current.style.opacity = speaking ? "1" : "0";
+        if (speaking) videoBorderRef.current.style.borderColor = isPotatoMode ? borderColor : "rgba(255, 255, 255, 0.2)";
+      }
+      if (ringHighQualityRef.current) ringHighQualityRef.current.style.opacity = speaking ? "1" : "0";
+      if (ringPotatoRef.current) ringPotatoRef.current.style.opacity = speaking ? "0.8" : "0";
+    };
+
     if (isSpeakingNow) {
-      // ✅ Konuşma ANINDA başlasın - debounce yok
       if (speakingTimerRef.current) {
         clearTimeout(speakingTimerRef.current);
         speakingTimerRef.current = null;
       }
-      setDebouncedIsSpeaking(true);
+      applySpeakingStyles(true);
     } else {
-      // ✅ Kapanma 200ms gecikmeli - çok kısa kesintilerde titreme olmasın
-      if (!speakingTimerRef.current) {
-        speakingTimerRef.current = setTimeout(() => {
-          setDebouncedIsSpeaking(false);
-          speakingTimerRef.current = null;
-        }, 200);
+      if (speakingTimerRef.current) {
+        clearTimeout(speakingTimerRef.current);
+        speakingTimerRef.current = null;
       }
+      applySpeakingStyles(false);
+    }
+    
+    // Global store senkronizasyonu
+    if (participant.identity) {
+      setSpeakingStore(participant.identity, isSpeakingNow);
     }
 
     return () => {
+      if (participant.identity) {
+        setSpeakingStore(participant.identity, false);
+      }
       if (speakingTimerRef.current) {
         clearTimeout(speakingTimerRef.current);
         speakingTimerRef.current = null;
       }
     };
   }, [
-    livekitIsSpeaking,
     audioLevelSpeaking,
     localIsSpeaking,
     isMuted,
     isDeafened,
+    participant.identity,
     participant.isLocal,
+    isPotatoMode,
+    borderColor,
+    setSpeakingStore
   ]);
-
-  const isSpeaking = debouncedIsSpeaking;
-  const setSpeakingStore = useSpeakingStore(s => s.setSpeaking);
-
-  // ✅ Ses durumunu diğer bileşenlerin (Sidebar vs.) görebilmesi için global store'a senkronize et
-  useEffect(() => {
-    if (participant.identity) {
-      setSpeakingStore(participant.identity, isSpeaking);
-    }
-    return () => {
-      if (participant.identity) {
-         setSpeakingStore(participant.identity, false);
-      }
-    }
-  }, [isSpeaking, participant.identity, setSpeakingStore]);
 
   const avatarSize = useMemo(() => {
     if (compact) return "w-10 h-10 text-base";
@@ -313,45 +334,45 @@ const UserCard = ({
   );
 
   // ✅ SPEAKING INDICATOR STYLE (Animasyonlu + Statik)
+  // ✅ CPU OPT: Renkleri memo'la, isSpeaking'e bağımlı değil (CSS transition halleder)
   const activeBorderColor = useProfileColorForSpeaking ? borderColor : "#34d399";
   const activeGlowColor = useProfileColorForSpeaking ? userColor : "#34d399";
 
-  const speakingIndicatorStyle = useMemo(() => {
+  // ✅ CPU OPT: Statik stiller isSpeaking'den bağımsız - sadece renk değişince yeniden hesaplanır
+  // isSpeaking değişiklikleri CSS transition ile handle edilir (JS re-render yok)
+  const speakingIndicatorBaseStyle = useMemo(() => {
     if (isPotatoMode) {
-      // 🥔 PATATES MODU: Statik border, animasyon yok
       return {
-        opacity: isSpeaking ? 1 : 0,
         border: `2px solid ${activeBorderColor}`,
-        transition: "opacity 200ms ease-out", // Sadece opacity transition
-      };
-    } else {
-      // 🎨 NORMAL MOD: Animasyonlu + glow
-      return {
-        opacity: isSpeaking ? 1 : 0,
-        border: `2px solid ${activeBorderColor}cc`,
-        boxShadow: `0 0 20px ${activeBorderColor}40, 0 0 10px ${activeBorderColor}20`,
-      };
-    }
-  }, [isSpeaking, activeBorderColor, isPotatoMode]);
-
-  // ✅ BACKGROUND GLOW STYLE (Sadece normal modda)
-  const backgroundGlowStyle = useMemo(() => {
-    if (isPotatoMode) {
-      // 🥔 PATATES: Hafif statik glow (animasyon yok)
-      return {
-        background: activeBorderColor,
-        opacity: isSpeaking ? 0.08 : 0, // Çok hafif
         transition: "opacity 200ms ease-out",
       };
     } else {
-      // 🎨 NORMAL: Animasyonlu glow
+      // ✅ CPU OPT: boxShadow kaldırıldı - sadece border + opacity (GPU-composited)
       return {
-        background: activeGlowColor,
-        opacity: isSpeaking ? 0.15 : 0,
-        animation: isSpeaking ? "pulse-glow 3s forwards ease-in-out" : "none",
+        border: `2px solid ${activeBorderColor}cc`,
+        transition: "opacity 200ms ease-out",
       };
     }
-  }, [isSpeaking, isPotatoMode, activeGlowColor, activeBorderColor]);
+  }, [activeBorderColor, isPotatoMode]);
+
+  // ✅ BACKGROUND GLOW STYLE (Sadece normal modda)
+  // ✅ CPU OPT: Statik base + CSS transition ile opacity toggle (pulse-glow animasyonu kaldırıldı)
+  const backgroundGlowBaseStyle = useMemo(() => {
+    if (isPotatoMode) {
+      return {
+        background: activeBorderColor,
+        transition: "opacity 250ms ease-out",
+      };
+    } else {
+      // ✅ CPU OPT: CSS animation (pulse-glow) kaldırıldı - büyük CPU tasarrufu
+      // Yerine sabit opacity + transition kullanılıyor (görsel fark minimal)
+      return {
+        background: activeGlowColor,
+        transition: "opacity 250ms ease-out",
+      };
+    }
+  }, [isPotatoMode, activeGlowColor, activeBorderColor]);
+
   // ✅ AVATAR TRANSFORM STYLE
   const avatarTransformStyle = useMemo(
     () => ({
@@ -364,7 +385,7 @@ const UserCard = ({
   );
 
   return (
-    <div className="w-full h-full p-1 will-change-transform">
+    <div className="w-full h-full p-1">
       <div
         onContextMenu={onContextMenu}
         onDoubleClick={(e) => {
@@ -381,15 +402,19 @@ const UserCard = ({
         style={borderStyle}
       >
         {/* 🚀 Speaking Indicator Layer - Her modda göster */}
+        {/* ✅ CPU OPT: SIFIR RE-RENDER - Ref ve doğrudan DOM Manipülasyonuna geçirildi */}
         <div
-          className="absolute inset-0 rounded-xl pointer-events-none z-20 will-change-opacity"
-          style={speakingIndicatorStyle}
+          ref={speakingIndicatorRef}
+          className="absolute inset-0 rounded-xl pointer-events-none z-20"
+          style={{ ...speakingIndicatorBaseStyle, opacity: 0 }}
         />
 
         {/* 🔮 Background Glow - Her modda göster (patates'te minimal) */}
+        {/* ✅ CPU OPT: SIFIR RE-RENDER - Ref ile JS dışı DOM güncellenir */}
         <div
-          className="absolute inset-0 pointer-events-none will-change-opacity z-0"
-          style={backgroundGlowStyle}
+          ref={backgroundGlowRef}
+          className="absolute inset-0 pointer-events-none z-0"
+          style={{ ...backgroundGlowBaseStyle, opacity: 0 }}
         />
 
         <div className="relative mb-2 w-full h-full flex flex-col items-center justify-center z-10">
@@ -410,23 +435,20 @@ const UserCard = ({
                 style={videoStyle}
               />
 
-              {/* ✅ PATATES: Basit border, animasyon yok */}
-              {isSpeaking && (
-                <div
-                  className="absolute inset-0 rounded-xl border-2 pointer-events-none"
-                  style={{
-                    borderColor: isPotatoMode
-                      ? borderColor
-                      : "rgba(255, 255, 255, 0.2)",
-                    transition: isPotatoMode ? "none" : "border-color 200ms",
-                  }}
-                ></div>
-              )}
+              {/* ✅ PATATES: Basit border, animasyon yok. Ref ile handle edildi */}
+              <div
+                ref={videoBorderRef}
+                className="absolute inset-0 rounded-xl border-2 pointer-events-none"
+                style={{
+                  opacity: 0,
+                  transition: isPotatoMode ? "none" : "border-color 200ms, opacity 200ms",
+                }}
+              ></div>
 
               {/* Hover overlay - Ekran Paylaşımı İzleme */}
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-black/60 opacity-0 group-hover/camera:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-1.5 ${shouldBlur ? "backdrop-blur-sm" : ""}`}
+                  className={`absolute inset-0 bg-[#00000090] opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     // Yayını izle + kamera da açıksa onu da ekle
@@ -438,22 +460,17 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="w-12 h-12 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 flex items-center justify-center">
-                    <Tv size={22} className="text-[#5865f2] drop-shadow-lg" />
-                  </div>
-                  <span className="text-sm font-bold text-white drop-shadow-lg">
+                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/camera:translate-y-0 transition-all duration-300 hover:bg-[#4752c4] hover:scale-105">
+                    <Tv size={13} strokeWidth={2.5} />
                     Yayını İzle
-                  </span>
-                  <span className="text-[10px] text-white/60">
-                    Tıkla ve ekran paylaşımını aç
-                  </span>
+                  </div>
                 </div>
               )}
 
               {/* Hover overlay - Kamerayı Büyüt */}
               {!hasScreenShare && shouldShowVideo && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-black/40 opacity-0 group-hover/camera:opacity-100 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer z-50 gap-1.5 ${shouldBlur ? "backdrop-blur-sm" : ""}`}
+                  className={`absolute inset-0 bg-[#00000085] opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setPinnedStreamIds?.((prev) =>
@@ -466,15 +483,10 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
-                    <Maximize size={20} className="text-white drop-shadow-lg" />
+                  <div className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-lg backdrop-blur-md border border-white/10 transform translate-y-2 group-hover/camera:translate-y-0 transition-all duration-300 hover:scale-105">
+                    <Maximize size={13} strokeWidth={2.5} />
+                    Büyüt
                   </div>
-                  <span className="text-sm font-bold text-white drop-shadow-lg">
-                    Kamerayı Büyüt
-                  </span>
-                  <span className="text-[10px] text-white/60">
-                    Kamerayı tam boyut izle
-                  </span>
                 </div>
               )}
             </div>
@@ -488,23 +500,26 @@ const UserCard = ({
               }}
             >
               {/* ✅ RING ANIMASYONLARI - Sadece high quality'de */}
+              {/* ✅ CPU OPT: Conditional render kaldırıldı, DOM Manipulasyonu ile Ref'ten idare ediliyor */}
               {!isPotatoMode && shouldAnimateRings && (
                 <div
-                  className={`absolute inset-0 rounded-2xl border-2 z-20 transition-opacity duration-200 ease-in-out ${isSpeaking ? "opacity-100" : "opacity-0"}`}
+                  ref={ringHighQualityRef}
+                  className="absolute inset-0 rounded-2xl border-2 z-20 transition-opacity duration-200 ease-in-out"
                   style={{
                     borderColor: activeBorderColor,
-                    boxShadow: `0 0 10px ${activeBorderColor}60, inset 0 0 6px ${activeBorderColor}40`,
+                    opacity: 0
                   }}
                 />
               )}
 
               {/* 🥔 PATATES: Statik ring (animasyon yok) */}
-              {isSpeaking && isPotatoMode && (
+              {isPotatoMode && (
                 <div
+                  ref={ringPotatoRef}
                   className="absolute inset-0 rounded-2xl border-2 z-20"
                   style={{
                     borderColor: activeBorderColor,
-                    opacity: 0.8,
+                    opacity: 0,
                     transition: "opacity 200ms ease-out",
                   }}
                 />
@@ -523,7 +538,7 @@ const UserCard = ({
 
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? "backdrop-blur-md" : ""}`}
+                  className={`absolute inset-0 bg-[#00000095] opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setPinnedStreamIds?.((prev) =>
@@ -536,15 +551,10 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="w-12 h-12 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-300">
-                    <Tv size={20} className="text-[#5865f2] drop-shadow-md" />
-                  </div>
-                  <span className="text-[12px] font-bold text-white/90 tracking-wide drop-shadow-md mt-2">
+                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/avatar:translate-y-0 transition-all duration-300 hover:bg-[#4752c4] hover:scale-105">
+                    <Tv size={13} strokeWidth={2.5} />
                     Yayını İzle
-                  </span>
-                  <span className="text-[9px] text-white/50 mt-0.5">
-                    Ekran paylaşımını aç
-                  </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -561,9 +571,9 @@ const UserCard = ({
             }`}
           >
             <div className="flex items-center gap-1.5">
-              {(isMuted || isDeafened) &&
+              {(isMuted || isDeafened || isLocallyMuted) &&
                 hasVisibleContent &&
-                (isDeafened ? (
+                ((isDeafened || isLocallyMuted) ? (
                   <VolumeX size={compact ? 10 : 14} className="text-red-500" />
                 ) : (
                   <MicOff size={compact ? 10 : 14} className="text-red-500" />
@@ -581,14 +591,15 @@ const UserCard = ({
           )}
 
           {hasScreenShare && screenShareTrack && (
-            <div className="absolute top-2 left-2 z-40 bg-red-600/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-sm">
+            <div className="absolute top-2.5 left-2.5 z-40 bg-red-600 px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black text-white shadow-lg tracking-wider border border-red-500/50 flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               CANLI
             </div>
           )}
         </div>
 
         {/* 🔇 Mute/Deafen Overlay */}
-        {(isMuted || isDeafened) && (
+        {(isMuted || isDeafened || isLocallyMuted) && (
           <div
             className={`absolute z-30 pointer-events-none rounded-xl overflow-hidden transition-opacity duration-300 ${
               shouldShowVideo && videoTrack
@@ -618,7 +629,7 @@ const UserCard = ({
               <div
                 className={`bg-zinc-900 border border-white/10 flex items-center justify-center rounded-full ${shouldShowVideo && videoTrack ? "p-1.5" : compact ? "p-2" : "p-4"}`}
               >
-                {isDeafened ? (
+                {(isDeafened || isLocallyMuted) ? (
                   <VolumeX
                     size={
                       shouldShowVideo && videoTrack ? 16 : compact ? 18 : 32
@@ -652,9 +663,11 @@ const UserCard = ({
                       ? "SUNUCU TARAFINDAN SAĞIRLAŞTIRILDI"
                       : remoteState.serverMuted
                         ? "SUNUCU TARAFINDAN SUSTURULDU"
-                        : isDeafened
-                          ? "SAĞIRLAŞTIRDI"
-                          : "SUSTURDU"}
+                        : isLocallyMuted
+                          ? "SESİ SENDE KAPALI"
+                          : isDeafened
+                            ? "SAĞIRLAŞTIRDI"
+                            : "SUSTURDU"}
                   </span>
                   
                   {(remoteState.serverDeafened || remoteState.serverMuted) && (remoteState.deafenedBy || remoteState.mutedBy) && (

@@ -9,7 +9,8 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { ref, onValue, off } from "firebase/database";
+import { db, rtdb } from "@/src/lib/firebase";
 import {
   Volume2,
   Hash,
@@ -223,10 +224,10 @@ export default function RoomList({
     };
 
     const unsubscribes = roomNames.map((roomName) => {
-      const presenceRef = doc(db, "room_presence", roomName);
-      return onSnapshot(presenceRef, (snap) => {
-        const data = snap.data();
-        const currentUsers = data?.users || [];
+      const presenceRef = ref(rtdb, `room_presence/${roomName}`);
+      const unsub = onValue(presenceRef, (snap) => {
+        const data = snap.val();
+        const currentUsers = data ? Object.values(data) : [];
         const prevUsers = batchedPresence[roomName]?.users || [];
 
         // Bildirim: yeni gelen kullanıcıları tespit et
@@ -261,14 +262,13 @@ export default function RoomList({
         }
 
         // ✅ Batch: state'i güncellemek yerine biriktir
-        batchedPresence[roomName] = data || { users: [] };
+        batchedPresence[roomName] = { users: currentUsers };
         scheduleFlush();
       }, (error) => {
-        if (error.code === "not-found") {
           batchedPresence[roomName] = { users: [] };
           scheduleFlush();
-        }
       });
+      return () => off(presenceRef, 'value', unsub);
     });
 
     return () => {

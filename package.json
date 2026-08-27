@@ -6,7 +6,10 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
+    "dev:web": "cross-env NEXT_PUBLIC_BUILD_TARGET=web next dev",
     "build": "next build",
+    "build:web": "cross-env NEXT_PUBLIC_BUILD_TARGET=web next build",
+    "start:web": "next start",
     "postbuild": "node scripts/fix-electron-paths.js",
     "preelectron-pack": "node scripts/copy-env.js",
     "start": "next start",
@@ -61,7 +64,14 @@
       "target": "AppImage"
     },
     "mac": {
-      "target": "dmg"
+      "target": ["dmg", "zip"],
+      "icon": "public/logo.png",
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Netrex, sesli sohbet için mikrofonunuza ihtiyaç duyar.",
+        "NSCameraUsageDescription": "Netrex, görüntülü sohbet için kameranıza ihtiyaç duyar.",
+        "NSAccessibilityUsageDescription": "Netrex, global klavye kısayolları (bas-konuş) için erişilebilirlik iznine ihtiyaç duyar."
+      }
     }
   },
   "dependencies": {

@@ -195,13 +195,13 @@ const Avatar = forwardRef(function Avatar(
       )}
 
       {/* Speaking Ring */}
+      {/* ✅ CPU OPT: boxShadow kaldırıldı - sadece border (GPU-composited) */}
       <div
         className={`absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-200 ease-in-out ${speaking ? "opacity-100" : "opacity-0"}`}
         style={{
           borderColor: useProfileColorForSpeaking ? (effectiveBorderColor || avatarColor) : "#22c55e",
           borderWidth: "2px",
           borderStyle: "solid",
-          boxShadow: `0 0 10px ${useProfileColorForSpeaking ? (effectiveBorderColor || avatarColor) : "#22c55e"}60`,
         }}
       />
     </div>

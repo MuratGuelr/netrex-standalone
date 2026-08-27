@@ -1,8 +1,9 @@
 import { memo, useCallback, useMemo, useState, useEffect } from "react";
-import { MicOff, Headphones, ShieldAlert } from "lucide-react";
+import { MicOff, Headphones, ShieldAlert, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { doc, updateDoc, serverTimestamp, arrayRemove, getDoc } from "firebase/firestore";
+import { ref, remove } from "firebase/database";
+import { db, rtdb } from "@/src/lib/firebase";
 
 /**
  * ✅ OPTIMIZED ModerationPanel
@@ -15,8 +16,10 @@ const ModerationPanel = memo(({
   localParticipant,
   statusFlags,
   currentServerId,
+  roomName,
   canMute,
-  canDeafen
+  canDeafen,
+  canKick
 }) => {
   // ✅ OPTIMISTIC UI: Beklemeyi ortadan kaldır
   const [localMute, setLocalMute] = useState(null);
@@ -130,6 +133,46 @@ const ModerationPanel = memo(({
     }
   }, [isDeafened, participant.identity, participant.name, localParticipant, updateFirebaseStatus]);
 
+  const handleVoiceKick = useCallback(async (e) => {
+    e.stopPropagation();
+    
+    const payload = JSON.stringify({
+      type: "MODERATION_COMMAND",
+      targetId: participant.identity,
+      moderatorName: localParticipant.name || localParticipant.identity,
+      action: "VOICE_KICK",
+      value: true
+    });
+
+    try {
+      if (localParticipant) {
+        // 1. LiveKit Data Channel ile atma komutu gönder
+        localParticipant.publishData(new TextEncoder().encode(payload), { reliable: true });
+
+        // 2. Firestore üzerinde EXPLICIT temizlik yap (Anlık UI güncellemesi için)
+        const targetUid = participant.identity;
+        
+        // A. Kullanıcının kendi dokümanını temizle
+        const userRef = doc(db, "users", targetUid);
+        await updateDoc(userRef, {
+          currentRoom: null,
+          gameActivity: null
+        });
+
+        // B. Oda varlığı (room_presence) listesinden çıkar
+        if (roomName) {
+          const presenceRef = ref(rtdb, `room_presence/${roomName}/${targetUid}`);
+          await remove(presenceRef);
+        }
+
+        toast.success(`${participant.name || participant.identity} sesli kanaldan atıldı`);
+      }
+    } catch (error) {
+      console.error("Voice kick cleanup failed:", error);
+      toast.error("Atma işlemi sırasında sunucu hatası oluştu.");
+    }
+  }, [participant.identity, participant.name, localParticipant, roomName]);
+
   return (
     <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.04] space-y-2.5">
       <div className="flex items-center gap-2">
@@ -215,6 +258,24 @@ const ModerationPanel = memo(({
             </div>
           </div>
         )}
+
+        {/* Voice Kick */}
+        {canKick && (
+          <>
+            <div className="h-px bg-white/[0.06] mx-1 my-1" />
+            <div 
+              className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer group"
+              onClick={handleVoiceKick}
+            >
+              <div className="w-6 h-6 rounded-md flex items-center justify-center bg-red-500/10 text-red-400 group-hover:bg-red-500/20">
+                <LogOut size={13} />
+              </div>
+              <span className="text-[13px] font-medium text-red-400 group-hover:text-red-300">
+                Sesli Kanaldan At
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -230,7 +291,8 @@ const ModerationPanel = memo(({
     prevProps.statusFlags.mutedBy === nextProps.statusFlags.mutedBy &&
     prevProps.statusFlags.deafenedBy === nextProps.statusFlags.deafenedBy &&
     prevProps.canMute === nextProps.canMute &&
-    prevProps.canDeafen === nextProps.canDeafen
+    prevProps.canDeafen === nextProps.canDeafen &&
+    prevProps.canKick === nextProps.canKick
   );
 });
 

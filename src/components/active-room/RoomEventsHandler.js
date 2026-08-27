@@ -5,8 +5,34 @@ import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
-import { doc, updateDoc, arrayRemove } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { doc, updateDoc, deleteDoc, arrayRemove, runTransaction } from "firebase/firestore";
+import { ref, remove } from "firebase/database";
+import { db, rtdb } from "@/src/lib/firebase";
+
+const stopAllLocalScreenShares = (room) => {
+  try {
+    const tracks = room?.localParticipant?.getTrackPublications();
+    if (tracks) {
+      tracks.forEach(trackPub => {
+        if (trackPub.track && (
+          trackPub.source === Track.Source.ScreenShare || 
+          trackPub.source === Track.Source.ScreenShareAudio
+        )) {
+          try {
+            // Stop physical hardware capture:
+            trackPub.track.mediaStreamTrack?.stop();
+            trackPub.track.stop();
+            console.log("🛑 Screen share track stopped physically:", trackPub.trackSid);
+          } catch(e) {
+            console.warn("⚠️ Failed to stop screen share track:", e);
+          }
+        }
+      });
+    }
+  } catch(e) {
+    console.error("⚠️ Failed to stop screen shares:", e);
+  }
+};
 
 export default function RoomEventsHandler({
   onConnected,
@@ -217,12 +243,59 @@ export default function RoomEventsHandler({
 
     // 🚀 v5.2: LiveKit SDK'da generic "error" eventi yoktur
     // Hatalar genellikle MediaDevicesError veya disconnect olarak gelir
-    // MediaDevicesError'u da yakalayıp onError'a yönlendir
-    const onMediaDevicesError = (error) => {
-      console.error("Room MediaDevicesError:", error);
-      // Media device hataları pool rotation tetiklememeli
-      // Sadece log'la
+    const onMediaDevicesError = async (error) => {
+      console.error("Room MediaDevicesError (EAC Bypass Auto-Recovery tetikleniyor):", error);
+      
+      if (room && room.localParticipant && micPublishedRef.current) {
+        try {
+          console.log("🔄 EAC Auto-Recovery: Mikrofon yeniden başlatılıyor...");
+          await room.localParticipant.setMicrophoneEnabled(false);
+          
+          setTimeout(async () => {
+             try {
+                await room.localParticipant.setMicrophoneEnabled(true, {
+                  echoCancellation: true,
+                  noiseSuppression: false,
+                  autoGainControl: true,
+                  sampleRate: 48000,
+                  channelCount: 1,
+                }, { audioBitrate: 96000 });
+                console.log("✅ EAC Auto-Recovery: Mikrofon başarıyla kurtarıldı!");
+             } catch(e) {
+                console.warn("⚠️ EAC Auto-Recovery: Mikrofon tekrar açılamadı:", e);
+             }
+          }, 1000);
+        } catch(e) {
+           console.warn("⚠️ EAC Auto-Recovery hatası:", e);
+        }
+      }
     };
+    
+    // ✅ EAC DeviceChange Auto-Recovery (Windows aygıt listesi değiştiğinde veya oyun mikrofonu çaldığında)
+    const onDeviceChange = async () => {
+      console.log("🔄 Donanım değişikliği tespit edildi (EAC DeviceChange), mikrofon kontrol ediliyor...");
+      if (room && room.localParticipant && micPublishedRef.current) {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(false);
+          setTimeout(async () => {
+            try {
+              await room.localParticipant.setMicrophoneEnabled(true, {
+                 echoCancellation: true,
+                 noiseSuppression: false,
+                 autoGainControl: true,
+                 sampleRate: 48000,
+                 channelCount: 1,
+              }, { audioBitrate: 96000 });
+              console.log("✅ EAC Donanım Kurtarma başarılı!");
+            } catch(e) {}
+          }, 1000);
+        } catch (e) {}
+      }
+    };
+    
+    if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+      navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
+    }
     
     // SignalReconnecting - bağlantı sinyalı koptuğunda
     const onSignalReconnecting = () => {
@@ -329,37 +402,41 @@ export default function RoomEventsHandler({
       room.off(RoomEvent.TrackSubscribed, onTrackSubscribed);
       room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
       room.off(RoomEvent.SignalReconnecting, onSignalReconnecting);
+      
+      if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+        navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
+      }
     };
   }, [room]); // ✅ ONLY room dependency - all other values accessed via refs
 
   // Uygulama kapatıldığında cleanup (beforeunload event + Electron IPC)
   useEffect(() => {
     const cleanup = async () => {
-      // LiveKit room'u disconnect et
-      if (room && room.state !== ConnectionState.Disconnected) {
-        try {
-          await room.disconnect();
-          console.log("✅ LiveKit room disconnect edildi (app close)");
-        } catch (error) {
-          console.error("❌ LiveKit disconnect hatası:", error);
+      if (room) {
+        stopAllLocalScreenShares(room);
+        // LiveKit room'u disconnect et
+        if (room.state !== ConnectionState.Disconnected) {
+          try {
+            await room.disconnect();
+            console.log("✅ LiveKit room disconnect edildi (app close)");
+          } catch (error) {
+            console.error("❌ LiveKit disconnect hatası:", error);
+          }
         }
       }
 
       // Firebase'den kullanıcıyı çıkar (keepalive ile gönder - async işlemler tamamlanabilir)
       if (userId && roomName && username) {
         try {
-          const presenceRef = doc(db, "room_presence", roomName);
-          // beforeunload'da async işlemler tamamlanmayabilir, bu yüzden fetch ile keepalive kullan
-          const userData = { 
-            userId, 
-            username,
-            photoURL: user?.photoURL || null
-          };
-          // Firestore REST API ile cleanup (daha güvenilir)
-          await updateDoc(presenceRef, {
-            users: arrayRemove(userData),
-          });
-          console.log("✅ Firestore presence temizlendi (app close)");
+          const presenceRef = ref(rtdb, `room_presence/${roomName}/${userId}`);
+          await remove(presenceRef);
+          console.log("✅ RTDB presence temizlendi (app close)");
+
+          // 🛡️ user_voice_state'i de temizle
+          try {
+            const stateRef = ref(rtdb, `user_voice_state/${userId}`);
+            await remove(stateRef);
+          } catch(e) {}
         } catch (error) {
           // Document yoksa veya zaten silinmişse sessizce devam et
           if (error.code !== "not-found") {
@@ -409,8 +486,11 @@ export default function RoomEventsHandler({
       if (unregisterCleanup) unregisterCleanup();
       
       // Critical: Explicitly disconnect room on unmount to prevent ghost participants
-      if (room && room.state !== ConnectionState.Disconnected) {
+      if (room) {
+        stopAllLocalScreenShares(room);
+        if (room.state !== ConnectionState.Disconnected) {
           room.disconnect();
+        }
       }
     };
   }, [room, roomName, userId, username]);

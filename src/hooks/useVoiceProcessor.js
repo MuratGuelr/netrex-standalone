@@ -8,7 +8,7 @@ const CONFIG = {
   SAMPLE_RATE: 48000,
   RELEASE_TIME: 100,
   RELEASE_TIME_RNNOISE: 80,
-  UI_RELEASE_TIME: 120,
+  UI_RELEASE_TIME: 60, // Krisp uzatma kuyruğunu hissiyat olarak yok et
   IMPACT_HOLD_MS: 50,
   MIN_RMS: 0.001,
   MAX_RMS: 0.10,
@@ -96,6 +96,7 @@ export function useVoiceProcessor() {
   const gateGainNodeRef = useRef(null);
   const originalSenderRef = useRef(null);
   const processedTrackRef = useRef(null);
+  const originalTrackRef = useRef(null);
   
   const lastSpeakingTimeRef = useRef(0);
   const isCleaningUpRef = useRef(false);
@@ -159,11 +160,19 @@ export function useVoiceProcessor() {
 
     // ✅ Orijinal track'i geri yükle (eğer replace edilmişse)
     if (originalSenderRef.current && processedTrackRef.current) {
+      const sender = originalSenderRef.current;
+      const originalTrack = originalTrackRef.current;
+      if (originalTrack) {
+        sender.replaceTrack(originalTrack).catch(e => {
+          console.warn("⚠️ Orijinal mikrofon restore edilemedi:", e);
+        });
+      }
       try {
         processedTrackRef.current.stop();
       } catch(e) {}
       processedTrackRef.current = null;
       originalSenderRef.current = null;
+      originalTrackRef.current = null;
     }
 
     // MediaStream objesini referanslardan temizle
@@ -266,6 +275,7 @@ export function useVoiceProcessor() {
       }
       
       originalStreamTrack = track.mediaStreamTrack;
+      originalTrackRef.current = originalStreamTrack;
 
       // ✅ Orijinal track'ten MediaStream oluştur (analiz + işleme için)
       cloneStreamRef.current = new MediaStream([originalStreamTrack]);
@@ -536,8 +546,10 @@ export function useVoiceProcessor() {
   }, [
     localParticipant,
     room,
-    // ✅ Noise ayarları KALDIRILDI - bunlar artık noiseSettingsRef üzerinden okunuyor
-    // Bu sayede ayar değişince tüm audio graph yeniden kurulmayacak
+    noiseSuppressionMode,
+    advancedNoiseReduction,
+    spectralFiltering,
+    aiNoiseSuppression,
     setLocalIsSpeaking,
     cleanup,
   ]);

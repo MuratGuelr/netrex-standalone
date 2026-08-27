@@ -75,7 +75,7 @@ class ErrorBoundary extends React.Component {
           </div>
           
           <div className="mt-12 text-xs text-[#5c5e66]">
-            Netrex Release v5.0.0
+            Netrex Release v{process.env.NEXT_PUBLIC_APP_VERSION || "8.0.0"}
           </div>
         </div>
       );

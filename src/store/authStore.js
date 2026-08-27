@@ -3,6 +3,7 @@ import { toast } from "@/src/utils/toast";
 import {
   GoogleAuthProvider,
   signInWithCredential,
+  signInWithPopup,
   signInAnonymously,
   onAuthStateChanged,
   signOut,
@@ -70,6 +71,17 @@ export const useAuthStore = create((set) => ({
             ? existingData.displayName
             : firebaseUser.displayName || "User";
 
+        // MIGRATION: Eğer kullanıcı adı yoksa, otomatik isimden türetilmiş rastgele unique bir username bas
+        let generatedUsername = existingData?.username || null;
+        let needsUsernameUpdate = false;
+        
+        if (!generatedUsername) {
+          const baseName = displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          generatedUsername = `${baseName || "user"}_${randomSuffix}`;
+          needsUsernameUpdate = true;
+        }
+
         // ── 4. State'e Firestore'dan gelen photoURL'yi yaz ──────────
         // ✅ FIX: Önce UI state'i hemen set et - setDoc'u bekleme
         // Eski: await setDoc(...) → sonra set({ isAuth: true }) → splash 1-2sn daha açık kalıyor
@@ -78,6 +90,7 @@ export const useAuthStore = create((set) => ({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName,
+          username: generatedUsername,
           photoURL, // ← Firestore'dan
           isAnonymous: firebaseUser.isAnonymous,
           emailVerified: firebaseUser.emailVerified,
@@ -87,13 +100,19 @@ export const useAuthStore = create((set) => ({
 
         // Firestore yazımını arka planda yap (non-blocking)
         // ✅ lastSeen KALDIRILDI - usePresence zaten 3sn sonra yazıyor (duplicate write önlendi)
+        const syncData = {
+          uid: firebaseUser.uid,
+          displayName,
+          email: firebaseUser.email,
+        };
+
+        if (needsUsernameUpdate) {
+          syncData.username = generatedUsername;
+        }
+
         setDoc(
           userRef,
-          {
-            uid: firebaseUser.uid,
-            displayName,
-            email: firebaseUser.email,
-          },
+          syncData,
           { merge: true },
         ).catch(err => {
           console.warn("Background user sync failed:", err);
@@ -117,6 +136,22 @@ export const useAuthStore = create((set) => ({
     }
   },
 
+  // 🌐 Web Google Login — signInWithPopup (Electron'da kullanılmaz)
+  loginWithGooglePopup: async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+      toast.success("Google ile giriş başarılı!");
+    } catch (error) {
+      // Kullanıcı popup'ı kapattıysa hata verme
+      if (error.code === 'auth/popup-closed-by-user') return;
+      if (error.code === 'auth/cancelled-popup-request') return;
+      console.error("Google Popup Login Error:", error);
+      toast.error("Google ile giriş başarısız: " + error.message);
+    }
+  },
+
   loginAnonymously: async (username) => {
     try {
       const result = await signInAnonymously(auth);
@@ -124,11 +159,16 @@ export const useAuthStore = create((set) => ({
         await updateProfile(result.user, { displayName: username });
 
         try {
+          const cleanName = (username || "user").toLowerCase().replace(/[^a-z0-9]/g, '');
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          const finalUsername = `${cleanName}_${randomSuffix}`;
+
           await setDoc(
             doc(db, "users", result.user.uid),
             {
               uid: result.user.uid,
               displayName: username,
+              username: finalUsername,
               email: result.user.email,
               photoURL: null, // anonim kullanıcı → başlangıçta null
               lastSeen: serverTimestamp(),
@@ -136,15 +176,16 @@ export const useAuthStore = create((set) => ({
             { merge: true },
           );
 
-          const user = {
+          const generatedUserObj = {
             uid: result.user.uid,
             email: result.user.email,
             displayName: username,
+            username: finalUsername,
             photoURL: null,
             isAnonymous: true,
             emailVerified: false,
           };
-          set({ user, isAuth: true });
+          set({ user: generatedUserObj, isAuth: true });
         } catch (firestoreError) {
           console.error("Error saving anonymous user:", firestoreError);
           toast.error("Kullanıcı oluşturulamadı. Lütfen tekrar deneyin.");

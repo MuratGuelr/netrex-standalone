@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { useServerStore } from "@/src/store/serverStore";
+import { useAuthStore } from "@/src/store/authStore";
+import { useFriendStore } from "@/src/store/friendStore";
 import VolumeSlider from "@/src/components/VolumeSlider";
 import ModerationPanel from "@/src/components/ModerationPanel";
 import QuickStatusManager from "@/src/components/settings/QuickStatusManager";
@@ -27,9 +29,12 @@ export default function UserContextMenu({
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const { currentServer } = useServerStore();
+  const { user } = useAuthStore();
+  const { friends, incomingRequests, outgoingRequests, sendFriendRequest } = useFriendStore();
 
   const canMute = useServerPermission("MUTE_MEMBERS");
   const canDeafen = useServerPermission("DEAFEN_MEMBERS");
+  const canKick = useServerPermission("KICK_VOICE_MEMBERS");
 
   // ✅ Cached metadata parse
   const targetMetadata = useMemo(() => {
@@ -138,9 +143,17 @@ export default function UserContextMenu({
       <div className="flex items-center gap-3 px-2 pb-3 border-b border-white/[0.06]">
         <div className="relative">
           <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-md opacity-40"></div>
-          <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white/10">
-            {(participant.name || participant.identity)?.charAt(0).toUpperCase()}
-          </div>
+          {targetMetadata.photoURL ? (
+            <img 
+              src={targetMetadata.photoURL} 
+              alt={participant.name || participant.identity}
+              className="relative w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+            />
+          ) : (
+            <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white/10">
+              {(participant.name || participant.identity)?.charAt(0).toUpperCase()}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <span className="text-sm font-bold text-white truncate block">
@@ -154,18 +167,50 @@ export default function UserContextMenu({
       <div className="px-1 py-1">
         {!isLocal ? (
           <div className="space-y-4 py-2">
+            
+            {/* Friend Request Action */}
+            {user && participant.identity && (
+               <div className="px-2">
+                 {(() => {
+                   const isFriend = (friends || []).some(f => f.friendId === participant.identity);
+                   const isPending = 
+                     (incomingRequests || []).some(r => r.senderId === participant.identity) ||
+                     (outgoingRequests || []).some(r => r.receiverId === participant.identity);
+                   
+                   if (isFriend) return null;
+                   
+                   return (
+                     <button
+                       onClick={() => {
+                         if (!isPending) {
+                           sendFriendRequest(user.uid, participant.identity);
+                           onClose();
+                         }
+                       }}
+                       disabled={isPending}
+                       className="w-full py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all text-xs font-bold ring-1 ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                       {isPending ? "İstek Gönderildi" : "Arkadaş Ekle"}
+                     </button>
+                   );
+                 })()}
+               </div>
+            )}
+
             {/* ✅ Isolated VolumeSlider */}
             <VolumeSlider participantIdentity={participant.identity} />
 
             {/* ✅ Isolated ModerationPanel */}
-            {(canMute || canDeafen) && (
+            {(canMute || canDeafen || canKick) && (
               <ModerationPanel
                 participant={participant}
                 localParticipant={localParticipant}
                 statusFlags={statusFlags}
                 currentServerId={currentServer?.id}
+                roomName={roomName}
                 canMute={canMute}
                 canDeafen={canDeafen}
+                canKick={canKick}
               />
             )}
           </div>

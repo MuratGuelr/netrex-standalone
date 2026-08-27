@@ -42,7 +42,11 @@ export default function ChatInput({
               </button>
             </div>
             <div className="flex flex-col gap-1.5 pt-1">
-              <span className="text-white text-sm font-bold truncate max-w-[150px] tracking-tight">{pendingImageFile?.name || "Pasted Image"}</span>
+              <span className="text-white text-sm font-bold truncate max-w-[150px] tracking-tight">
+                {pendingImageFile?.name && (pendingImageFile.name.startsWith("{") || pendingImageFile.name.match(/^[0-9a-fA-F-]{36}/) || pendingImageFile.name === "image.png")
+                  ? "Pano Resmi (Yapıştırıldı)"
+                  : pendingImageFile?.name || "Eklenen Resim"}
+              </span>
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 w-fit">
                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                  <span className="text-emerald-400 text-[10px] font-black uppercase tracking-widest">Hazır</span>

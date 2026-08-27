@@ -43,6 +43,8 @@ export default function ChatView({ channelId, username, userId }) {
   } = useChatStore();
   const { currentServer, members } = useServerStore();
   const currentUser = useAuthStore((s) => s.user);
+  // ✅ CPU OPT: O(n) find → O(1) Map lookup her mesaj render'ında
+  const memberMap = useMemo(() => new Map((members || []).map(m => [m.id, m])), [members]);
 
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -599,6 +601,7 @@ export default function ChatView({ channelId, username, userId }) {
               channelId={channelId}
               userId={userId}
               members={members}
+              memberMap={memberMap}
               editingMessageId={editingMessageId}
               editingText={editingText}
               setEditingText={setEditingText}

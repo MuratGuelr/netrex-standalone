@@ -2,18 +2,21 @@ import { useEffect, useRef } from 'react';
 import { useParticipants } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useParticipantVolumeStore } from '@/src/store/participantVolumeStore';
+import { useSpatialAudioStore } from '@/src/store/spatialAudioStore';
 
 /**
- * 🔊 Apply Participant Volumes Hook v2.0
+ * 🔊 Apply Participant Volumes Hook v2.1
  *
  * - Volume 0–1.0  → LiveKit native setVolume() (HTML element, no extra overhead)
  * - Volume >1.0   → GainNode boost (AudioContext MediaElementSource → GainNode → destination)
+ * - Spatial mode   → Skip (useSpatialAudio hook manages pipeline)
  *
  * MediaElementSource her audio element için yalnızca bir kez oluşturulabilir; ref'te cache'lenir.
  */
 export function useApplyParticipantVolumes() {
   const participants = useParticipants();
   const volumes = useParticipantVolumeStore(s => s.volumes);
+  const spatialEnabled = useSpatialAudioStore(s => s.enabled);
 
   // Gain boost için AudioContext (sadece boost gerektiğinde yaratılır)
   const gainContextRef = useRef(null);
@@ -25,6 +28,9 @@ export function useApplyParticipantVolumes() {
 
   useEffect(() => {
     if (!participants || participants.length === 0) return;
+
+    // 🎧 Spatial mod aktifse bu hook devre dışı — useSpatialAudio yönetir
+    if (spatialEnabled) return;
 
     participants.forEach(participant => {
       if (participant.isLocal) return;
@@ -54,16 +60,19 @@ export function useApplyParticipantVolumes() {
             micPub.track.setVolume(volume);
           }
 
-          // Daha önce GainNode varsa temizle
+          // Daha önce GainNode varsa temizle ve audioEl'i unmute et
           if (gainNodesRef.current[identity]) {
-            try { gainNodesRef.current[identity].gainNode.gain.value = 1.0; } catch(e) {}
+            const { source, gainNode, audioEl } = gainNodesRef.current[identity];
+            try { audioEl.muted = false; } catch(e) {}
+            try { source.disconnect(); } catch(e) {}
+            try { gainNode.disconnect(); } catch(e) {}
             delete gainNodesRef.current[identity];
           }
 
         } else {
-          // ─── Boost mod: GainNode ile 100%+ ses ───
-          const audioEl = micPub.track.attachedElements?.[0];
-          if (!audioEl) return;
+          // ─── Boost mod: GainNode ile 100%+ ses (createMediaStreamSource kullanarak) ───
+          const currentAudioEl = micPub.track.attachedElements?.[0];
+          if (!currentAudioEl) return;
 
           // AudioContext yarat
           if (!gainContextRef.current || gainContextRef.current.state === 'closed') {
@@ -74,20 +83,31 @@ export function useApplyParticipantVolumes() {
 
           if (!gainNodesRef.current[identity]) {
             try {
-              const source = ctx.createMediaElementSource(audioEl);
+              // Mute original HTML audio element so we don't have double audio
+              currentAudioEl.muted = true;
+
+              const mediaStream = micPub.track.mediaStream || new MediaStream([micPub.track.mediaStreamTrack]);
+              const source = ctx.createMediaStreamSource(mediaStream);
               const gainNode = ctx.createGain();
-              gainNode.gain.value = volume;
+              gainNode.gain.setValueAtTime(volume, ctx.currentTime);
               source.connect(gainNode);
               gainNode.connect(ctx.destination);
-              gainNodesRef.current[identity] = { source, gainNode, audioEl };
-              audioEl.volume = 1.0;
+              
+              gainNodesRef.current[identity] = { source, gainNode, audioEl: currentAudioEl };
             } catch(e) {
               if (process.env.NODE_ENV === 'development') {
                 console.warn(`⚠️ GainNode kurulumu başarısız ${identity}:`, e);
               }
             }
           } else {
-            gainNodesRef.current[identity].gainNode.gain.value = volume;
+            const nodeInfo = gainNodesRef.current[identity];
+            // If audio element changed, unmute old one and mute new one
+            if (nodeInfo.audioEl !== currentAudioEl) {
+              try { nodeInfo.audioEl.muted = false; } catch(e) {}
+              nodeInfo.audioEl = currentAudioEl;
+            }
+            try { currentAudioEl.muted = true; } catch(e) {}
+            nodeInfo.gainNode.gain.setValueAtTime(volume, ctx.currentTime);
           }
         }
       } catch (error) {
@@ -96,7 +116,7 @@ export function useApplyParticipantVolumes() {
         }
       }
     });
-  }, [participants, volumes]);
+  }, [participants, volumes, spatialEnabled]);
 
   // ✅ Katılımcı ayrıldığında cache'den sil
   useEffect(() => {
@@ -111,9 +131,10 @@ export function useApplyParticipantVolumes() {
   // Cleanup
   useEffect(() => {
     return () => {
-      Object.values(gainNodesRef.current).forEach(({ gainNode, source }) => {
+      Object.values(gainNodesRef.current).forEach(({ gainNode, source, audioEl }) => {
         try { gainNode.disconnect(); } catch(e) {}
         try { source.disconnect(); } catch(e) {}
+        try { audioEl.muted = false; } catch(e) {}
       });
       gainNodesRef.current = {};
 

@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld("netrex", {
   // SCREEN SHARE
   // ============================================
   getDesktopSources: () => ipcRenderer.invoke("get-desktop-sources"),
+  getMousePosition: () => ipcRenderer.invoke("get-mouse-position"),
 
   // ✅ getDisplayMedia kaldırıldı - preload'da çalışmaz, renderer'da olmalı
 
@@ -146,5 +147,28 @@ contextBridge.exposeInMainWorld("netrex", {
   // EXIT
   // ============================================
   onRequestExit: createEventHandler("request-exit", (_, event) => [event]),
+  // ============================================
+  // POINTER OVERLAY
+  // ============================================
+  updatePointerOverlay: (pointers, forceShow) => ipcRenderer.send("update-pointer-overlay", pointers, forceShow),
+  onPointerOverlayUpdate: createEventHandler("update-pointer-overlay-data", (_, pointers) => [pointers]),
+  setOverlayInteractive: (interactive) => ipcRenderer.send("set-overlay-interactive", interactive),
+  closePointerOverlay: () => ipcRenderer.send("close-pointer-overlay"),
+  revokePointer: (id) => ipcRenderer.send("revoke-pointer-overlay", id),
+  revokeAllPointers: () => ipcRenderer.send("revoke-all-pointers"),
+  onPointerOverlayRevoked: createEventHandler("pointer-overlay-revoked", (_, id) => [id]),
+  onPointerOverlayRevokeAll: createEventHandler("pointer-overlay-revoke-all", () => []),
+  // ============================================
+  // VOICE OVERLAY (Oyun İçi Overlay)
+  // ============================================
+  updateVoiceOverlay: (data) => ipcRenderer.send("update-voice-overlay", data),
+  onVoiceOverlayUpdate: createEventHandler("voice-overlay-data", (_, data) => [data]),
+  voiceOverlayAction: (action, payload) => ipcRenderer.send("voice-overlay-action", action, payload),
+  onVoiceOverlayAction: createEventHandler("voice-overlay-action-response", (_, action, payload) => [action, payload]),
+  setVoiceOverlayInteractive: (interactive) => ipcRenderer.send("set-voice-overlay-interactive", interactive),
+  setVoiceOverlayEnabled: (enabled, settings) => ipcRenderer.send("set-voice-overlay-enabled", enabled, settings),
+  closeVoiceOverlay: () => ipcRenderer.send("close-voice-overlay"),
+  onVoiceOverlayAntiCheat: createEventHandler("voice-overlay-anticheat", (_, detected) => [detected]),
+
   forceQuitApp: () => ipcRenderer.invoke("app-quit-force"),
 });

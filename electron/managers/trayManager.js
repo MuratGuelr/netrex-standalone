@@ -18,13 +18,13 @@ let tray = null;
 let cachedIcon = null;
 let cachedIconPath = null;
 
+const { getIconPath } = require("./utils");
+
 // ============================================
 // ✅ ICON CACHE - Disk I/O → Memory
 // ============================================
 function getOrCreateIcon() {
-    const iconPath = app.isPackaged
-        ? path.join(process.resourcesPath, "logo.ico")
-        : path.join(__dirname, "../../public/logo.ico");
+    const iconPath = getIconPath();
 
     // ✅ Cache hit - aynı path ve icon varsa kullan
     if (cachedIconPath === iconPath && cachedIcon) {

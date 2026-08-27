@@ -25,7 +25,7 @@ export const useSoundManagerStore = create((set, get) => ({
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
-      const sounds = ['mute', 'unmute', 'deafen', 'undeafen', 'join', 'left', 'message'];
+      const sounds = ['mute', 'unmute', 'deafen', 'undeafen', 'join', 'left', 'someone-left', 'message', 'friend-notificaiton', 'discord-ping'];
       const cache = {};
 
       const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';

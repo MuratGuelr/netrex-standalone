@@ -21,7 +21,7 @@ const VoiceParticipantItem = memo(
     return (
       <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-default">
         {/* Avatar */}
-        <div className="relative flex-shrink-0">
+        <div className={`relative flex-shrink-0 transition-opacity duration-200 ${(participant.isMuted || participant.isDeafened) ? 'opacity-50' : 'opacity-100'}`}>
           <Avatar
             size="sm"
             src={participant.photoURL || null}
@@ -31,19 +31,10 @@ const VoiceParticipantItem = memo(
             borderless={true}
             speaking={isSpeaking}
           />
-          {(participant.isMuted || participant.isDeafened) && (
-            <div className="absolute -bottom-0.5 -right-0.5 bg-[#111214] rounded-full p-[2px]">
-              {participant.isDeafened ? (
-                <Headphones size={8} className="text-red-400" />
-              ) : (
-                <MicOff size={8} className="text-red-400" />
-              )}
-            </div>
-          )}
         </div>
 
         {/* Username & Status */}
-        <div className="flex-1 min-w-0 flex items-center gap-2">
+        <div className={`flex-1 min-w-0 flex items-center gap-2 transition-opacity duration-200 ${(participant.isMuted || participant.isDeafened) ? 'opacity-50' : 'opacity-100'}`}>
           <span className="text-xs text-[#949ba4] font-medium truncate">
             {displayName}
           </span>
@@ -60,14 +51,30 @@ const VoiceParticipantItem = memo(
           )}
         </div>
 
-        {/* Speaking Indicator */}
-        {!participant.isMuted && !participant.isDeafened && !isSpeaking && (
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shadow-[0_0_4px_rgba(16,185,129,0.3)]" />
-        )}
-        {/* If actually speaking, hide the mic-dot since the ring covers it nicely, or keep a bright one? Let's hide it or make it pulse */}
-        {isSpeaking && (
-           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse" />
-        )}
+        {/* Status Indicators Container */}
+        <div className="flex items-center gap-1.5 shrink-0 pl-1">
+          {/* Deafen Icon */}
+          {participant.isDeafened && (
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-red-500/10 shadow-[0_0_8px_rgba(239,68,68,0.15)] transition-all">
+               <Headphones size={13} strokeWidth={2.5} className="text-red-400 drop-shadow-sm" />
+            </div>
+          )}
+
+          {/* Mute Icon (Also shown if deafened because deafen implies mute) */}
+          {(participant.isMuted || participant.isDeafened) && (
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-red-500/10 shadow-[0_0_8px_rgba(239,68,68,0.15)] transition-all">
+               <MicOff size={13} strokeWidth={2.5} className="text-red-400 drop-shadow-sm" />
+            </div>
+          )}
+          
+          {/* Speaking Indicator */}
+          {!participant.isMuted && !participant.isDeafened && !isSpeaking && (
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shadow-[0_0_4px_rgba(16,185,129,0.3)] ml-0.5" />
+          )}
+          {isSpeaking && (
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] ml-0.5 animate-pulse" />
+          )}
+        </div>
       </div>
     );
   },

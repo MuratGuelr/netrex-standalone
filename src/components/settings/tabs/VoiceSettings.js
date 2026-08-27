@@ -14,14 +14,19 @@ export default function VoiceSettings({ isSettingsModalOpen }) {
 
   useEffect(() => {
     const getDevices = async () => {
+      let tempStream;
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         const devs = await navigator.mediaDevices.enumerateDevices();
         setAudioInputs(devs.filter((d) => d.kind === "audioinput"));
         setAudioOutputs(devs.filter((d) => d.kind === "audiooutput"));
         setVideoInputs(devs.filter((d) => d.kind === "videoinput"));
       } catch (err) {
-        console.error(err);
+        console.error("Device permission/enumeration error:", err);
+      } finally {
+        if (tempStream) {
+          tempStream.getTracks().forEach((track) => track.stop());
+        }
       }
     };
     getDevices();

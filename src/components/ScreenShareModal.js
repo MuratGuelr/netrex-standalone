@@ -42,28 +42,45 @@ export default function ScreenShareModal({ isOpen, onClose, onStart }) {
 
   // Modal açıldığında kaynakları yükle
   useEffect(() => {
-    if (isOpen && window.netrex) {
-      setStep(1);
-      setSources([]);
-      setSelectedSourceId(null);
-      // ✅ FIX: Hemen ekranlar sekmesiyle başla (async beklenmeden)
-      setActiveTab("screens");
-      // Varsayılan olarak ses kapalı başlasın (otomatik açılmasın)
-      setWithAudio(false);
-      setAudioMode("system");
+    if (!isOpen) return;
 
-      window.netrex.getDesktopSources().then((srcs) => {
-        setSources(srcs);
-        // İlk mevcut ekranı otomatik seç
-        const firstScreen = srcs.find((s) => s.id.startsWith("screen"));
-        if (firstScreen) {
-          setSelectedSourceId(firstScreen.id);
-        } else if (srcs.length > 0) {
-          // Ekran yoksa ilk kaynağı seç
-          setSelectedSourceId(srcs[0].id);
-        }
+    // 🌐 Web: Tarayıcının kendi ekran seçicisini kullan
+    if (!window.netrex) {
+      // Web'de getDisplayMedia tarayıcının native picker'ını açar
+      // Direkt onStart'ı çağır, tarayıcı kendi seçicisini gösterecek
+      onStart?.({
+        sourceId: null, // Web'de source ID yok
+        resolution: 1080,
+        fps: 15,
+        withAudio: false,
+        audioMode: "system",
+        isWebMode: true, // Web olduğunu belirt
       });
+      onClose?.();
+      return;
     }
+    
+    // Electron: desktopCapturer ile kaynak listesi al
+    setStep(1);
+    setSources([]);
+    setSelectedSourceId(null);
+    // ✅ FIX: Hemen ekranlar sekmesiyle başla (async beklenmeden)
+    setActiveTab("screens");
+    // Varsayılan olarak ses kapalı başlasın (otomatik açılmasın)
+    setWithAudio(false);
+    setAudioMode("system");
+
+    window.netrex.getDesktopSources().then((srcs) => {
+      setSources(srcs);
+      // İlk mevcut ekranı otomatik seç
+      const firstScreen = srcs.find((s) => s.id.startsWith("screen"));
+      if (firstScreen) {
+        setSelectedSourceId(firstScreen.id);
+      } else if (srcs.length > 0) {
+        // Ekran yoksa ilk kaynağı seç
+        setSelectedSourceId(srcs[0].id);
+      }
+    });
   }, [isOpen]);
 
   // Tab genişliklerini ve pozisyonlarını ölç

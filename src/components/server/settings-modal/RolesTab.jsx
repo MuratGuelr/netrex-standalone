@@ -15,6 +15,7 @@ const PERMISSIONS = [
   { id: "BAN_MEMBERS", label: "Üyeleri Yasakla" },
   { id: "MUTE_MEMBERS", label: "Üyeleri Sustur" },
   { id: "DEAFEN_MEMBERS", label: "Üyeleri Sağırlaştır" },
+  { id: "KICK_VOICE_MEMBERS", label: "Sesli Kanaldan At" },
   { id: "MANAGE_WATCH_PARTY", label: "Watch Party'yi Yönet" },
 ];
 

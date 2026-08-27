@@ -24,6 +24,9 @@ export default function UpdateNotification() {
   const [show, setShow] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // 🌐 Web'de auto-update gösterme
+  if (typeof window !== 'undefined' && !window.netrex) return null;
+
   const handleRestart = () => {
     if (window.netrex) {
         toast.info("Netrex güncelleniyor, lütfen bekleyin...");

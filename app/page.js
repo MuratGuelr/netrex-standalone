@@ -6,7 +6,7 @@
  */
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/src/store/authStore";
 import { toast } from "@/src/utils/toast";
@@ -30,6 +30,12 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useChatStore } from "@/src/store/chatStore";
 import { useUpdateStore } from "@/src/store/updateStore";
 
+// ✅ Friends & DM System
+import { useFriendStore } from "@/src/store/friendStore";
+import { useDMStore } from "@/src/store/dmStore";
+import { FriendsPanel, DMSidebar, DMConversation } from "@/src/components/friends";
+import { useSoundEffects } from "@/src/hooks/useSoundEffects";
+
 const ActiveRoom = dynamic(() => import("@/src/components/ActiveRoom"), {
   loading: () => <LoadingScreen message="Oda yükleniyor..." />,
 });
@@ -40,7 +46,6 @@ const StandaloneChatView = dynamic(
   },
 );
 
-// ✅ SettingsModal KALDIRILDI - AppShell global olarak render ediyor
 import UpdateNotification from "@/src/components/UpdateNotification";
 import InfoModal from "@/src/components/InfoModal";
 import VoiceChannelSwitchModal from "@/src/components/VoiceChannelSwitchModal";
@@ -51,6 +56,42 @@ const InstallUpdateSplash = dynamic(
 import ServerMemberList from "@/src/components/server/ServerMemberList";
 import ServerSidebarSkeleton from "@/src/components/server/skeletons/ServerSidebarSkeleton";
 import ServerMemberListSkeleton from "@/src/components/server/skeletons/ServerMemberListSkeleton";
+import IncomingCallModal from "@/src/components/friends/IncomingCallModal";
+import OutgoingCallModal from "@/src/components/friends/OutgoingCallModal";
+
+// Güvenli ve Temizlenen Loop Ses Component'i
+const LoopingAudio = ({ src }) => {
+  const audioRef = useRef(null);
+  const sfxVolume = useSettingsStore(state => state.sfxVolume);
+
+  // Uygulamanın ses ayarına göre volume belirle
+  useEffect(() => {
+    if (audioRef.current && sfxVolume !== undefined) {
+      audioRef.current.volume = Math.max(0, Math.min(1, sfxVolume / 100));
+    }
+  }, [sfxVolume]);
+
+  // Memory Leak olmaması için kesin cleanup
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    
+    // Play with catch to avoid DOM Exception on sudden unmounts
+    if (audioEl) {
+      audioEl.play().catch(e => {
+        // Silently ignore play interruptions
+      });
+    }
+
+    return () => {
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = "";
+      }
+    };
+  }, [src]);
+
+  return <audio ref={audioRef} src={src} loop />;
+};
 
 export default function Home() {
   const { user, isAuth, isLoading, initializeAuth, loginAnonymously } =
@@ -64,10 +105,269 @@ export default function Home() {
   const showChatPanel = useChatStore((state) => state.showChatPanel);
   const setShowChatPanel = useChatStore((state) => state.setShowChatPanel);
 
+  // ✅ Friends & DM State
+  const [friendsMode, setFriendsMode] = useState(false); // Ayrı sekme: ServerRail'den aktif edilir
+  const [showFriendsPanel, setShowFriendsPanel] = useState(true);
+  const { 
+    conversations,
+    activeConversation, 
+    openOrCreateConversation, 
+    selectConversation, 
+    clearActiveConversation,
+    acceptCall,
+    endCall,
+    markDMAsRead,
+    unreadDMCounts
+  } = useDMStore();
+  
+  const { 
+    friends, 
+    incomingRequests, 
+    startFriendListener, 
+    startRequestListener, 
+    stopListeners: stopFriendListeners 
+  } = useFriendStore();
+  const { startConversationListener, stopListeners: stopDMListeners } = useDMStore();
+  const { playSound } = useSoundEffects();
+
+  // Çağrı yaşını (zaman aşımı için) güvenli hesapla
+  const getCallAge = useCallback((ts) => {
+    if (!ts) return 0; // If pending serverTimestamp, treat as new
+    const now = Date.now();
+    let time = 0;
+    
+    if (typeof ts === 'object' && ts.toMillis) {
+      time = ts.toMillis();
+    } else if (typeof ts === 'number') {
+      time = ts;
+    } else if (ts instanceof Date) {
+      time = ts.getTime();
+    } else {
+      time = new Date(ts).getTime();
+    }
+    
+    return isNaN(time) ? 0 : now - time;
+  }, []);
+
+  // Arayan taraf biz değilsek ve 'ringing' statüsünde ise modalı göster (60 saniye limitli)
+  const incomingCallConvo = conversations.find(c => {
+    const data = c.callData;
+    if (data?.status === 'ringing' && data?.callerId !== user?.uid) {
+      return getCallAge(data.timestamp) < 65000; // 60s + 5s buffer
+    }
+    return false;
+  });
+
+  // Arayan taraf BİZ isek ve çalma durumundaysa modalı göster (İptal için)
+  const outgoingCallConvo = conversations.find(c => {
+    const data = c.callData;
+    if (data?.status === 'ringing' && data?.callerId === user?.uid) {
+      return getCallAge(data.timestamp) < 65000;
+    }
+    return false;
+  });
+
+  // 🔔 Bildirim ve Ses Sistemi için Yardımcı Fonksiyon
+  const triggerNotification = useCallback((title, options = {}) => {
+    // Ses çal (Her zaman çal)
+    if (options.sound) playSound(options.sound);
+
+    // Bildirim gönder
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        try {
+          const notification = new Notification(title, {
+            body: options.body || "",
+            icon: options.icon || "/icons/icon-512x512.png",
+            silent: true, // Zaten biz kendi sesimizi çalıyoruz
+          });
+          
+          notification.onclick = () => {
+            window.focus();
+            if (options.onClick) options.onClick();
+          };
+        } catch (err) {
+          console.error("Bildirim hatası:", err);
+        }
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission();
+      }
+    }
+    
+    // Uygulama içi Toast (Opsiyonel)
+    if (options.showToast) {
+       toast.info(`${title}: ${options.body}`);
+    }
+  }, [playSound]);
+
+  // --- 1. DM BİLDİRİMLERİ ---
+  const prevUnreadTotal = useRef(0);
+  const prevUnreadCounts = useRef({});
+  useEffect(() => {
+    const currentTotal = Object.values(unreadDMCounts).reduce((acc, count) => acc + count, 0);
+    
+    // Sesi her durumda çal, bildirimi sadece başkası attıysa gönder
+    if (currentTotal > prevUnreadTotal.current) {
+      conversations.forEach(convo => {
+        const count = unreadDMCounts[convo.id] || 0;
+        const prevCount = prevUnreadCounts.current[convo.id] || 0;
+
+        if (count > prevCount && convo.lastMessage?.senderId !== user?.uid) {
+           triggerNotification(convo.otherUser?.displayName || "Yeni Mesaj", {
+             body: convo.lastMessage?.text || "Bir fotoğraf gönderdi",
+             sound: "message"
+           });
+        }
+      });
+    }
+
+    prevUnreadCounts.current = { ...unreadDMCounts };
+    prevUnreadTotal.current = currentTotal;
+  }, [unreadDMCounts, conversations, user?.uid, triggerNotification]);
+
+  // --- 2. ARKADAŞLIK İSTEĞİ BİLDİRİMLERİ ---
+  const prevRequestsLength = useRef(0);
+  useEffect(() => {
+    if (incomingRequests.length > prevRequestsLength.current) {
+      const newRequest = incomingRequests[0];
+      if (newRequest && newRequest.senderData) {
+        // Sound & Browser Notification
+        triggerNotification("Yeni Arkadaşlık İsteği", {
+          body: `${newRequest.senderData.displayName} size bir istek gönderdi.`,
+          sound: "friend-notificaiton"
+        });
+
+        // Custom Interactive Toast
+        toast((t) => (
+          <div className="flex flex-col gap-2 min-w-[280px]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10">
+                {newRequest.senderData.photoURL ? (
+                  <img src={newRequest.senderData.photoURL} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                    {newRequest.senderData.displayName[0].toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-white leading-tight">{newRequest.senderData.displayName}</p>
+                <p className="text-[11px] text-[#949ba4]">Arkadaşlık isteği gönderdi</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-1">
+              <button
+                onClick={async () => {
+                  await useFriendStore.getState().acceptRequest(newRequest.id);
+                  toast.dismiss(t.id);
+                }}
+                className="flex-1 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-bold transition-colors"
+              >
+                Kabul Et
+              </button>
+              <button
+                onClick={async () => {
+                  await useFriendStore.getState().rejectRequest(newRequest.id);
+                  toast.dismiss(t.id);
+                }}
+                className="flex-1 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold transition-colors"
+              >
+                Yoksay
+              </button>
+            </div>
+          </div>
+        ), { duration: 6000, position: "bottom-right" });
+      }
+    }
+    prevRequestsLength.current = incomingRequests.length;
+  }, [incomingRequests, triggerNotification]);
+
+  // --- 3. ARKADAŞLIK KABUL EDİLDİ BİLDİRİMİ ---
+  const prevFriendsLength = useRef(0);
+  useEffect(() => {
+    // Sadece arkadaşlar listesi büyüdüğünde kontrol et
+    if (friends.length > prevFriendsLength.current) {
+      // En son eklenen arkadaşı bul (acceptedAt'e göre)
+      const sorted = [...friends].sort((a, b) => (b.acceptedAt || 0) - (a.acceptedAt || 0));
+      const latestFriend = sorted[0];
+      
+      if (latestFriend && latestFriend.friendData) {
+        const timeSinceAccepted = Date.now() - (latestFriend.acceptedAt?.toMillis?.() || latestFriend.acceptedAt || 0);
+        // Sadece son 10 saniye içinde kabul edilenler için bildirim yap
+        if (timeSinceAccepted < 10000) {
+          triggerNotification("Arkadaşlık İsteği Kabul Edildi", {
+            body: `${latestFriend.friendData.displayName} artık arkadaşınız!`,
+            sound: "undeafen" // Farklı bir ses
+          });
+        }
+      }
+    }
+    prevFriendsLength.current = friends.length;
+  }, [friends, triggerNotification]);
+
+  // Çağrı durumu 'accepted' olduğunda arayanı da odaya al
+  useEffect(() => {
+    if (!conversations.length || !user?.uid) return;
+    
+    conversations.forEach(c => {
+      if (c.callData?.status === 'accepted' && c.callData?.callerId === user.uid) {
+        playSound("join");
+        selectConversation(c); // ✅ Açılan DMyi seç (chat butonu için gerekli)
+        // Odaya gir
+        setCurrentRoom({
+           id: "dm_call_" + c.id,
+           name: `${c.otherUser?.displayName || "Bilinmeyen"} - ${user.displayName}`,
+           type: 'voice',
+           isDM: true,
+           dmConversationId: c.id
+        });
+        setCurrentTextChannel(null);
+        useChatStore.getState().clearCurrentChannel();
+        setViewMode("voice");
+        
+        // İşlemi tekrarlamamak için call statüsünü temizle
+        endCall(c.id);
+      }
+    });
+  }, [conversations, user?.uid, endCall, playSound, selectConversation]);
+
+  // 🕒 Çağrı Temizlik Döngüsü (Arayan bizsek ve cevap gelmediyse)
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    const interval = setInterval(() => {
+      const activeCalls = useDMStore.getState().conversations;
+      activeCalls.forEach(c => {
+        if (c.callData?.status === 'ringing' && c.callData?.callerId === user.uid) {
+          const age = getCallAge(c.callData.timestamp);
+          if (age > 60000) {
+            console.log("☎️ Call timed out for convo:", c.id);
+            endCall(c.id);
+            playSound("someone-left");
+            toast.error("Aradığınız kişi şu anda cevap vermiyor.");
+          }
+        }
+      });
+    }, 5000); // 5 saniyede bir kontrol
+    
+    return () => clearInterval(interval);
+  }, [user?.uid, endCall, getCallAge, playSound]);
+
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true);
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
   const [showMemberList, setShowMemberList] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const isElectronApp = typeof window !== "undefined" && !!window.netrex;
+    if (!isElectronApp) {
+      const check = () => setIsMobile(window.innerWidth <= 768);
+      check();
+      window.addEventListener("resize", check);
+      return () => window.removeEventListener("resize", check);
+    }
+  }, []);
 
   // ✅ Voice channel switch confirmation modal
   const [voiceChannelSwitch, setVoiceChannelSwitch] = useState({
@@ -169,6 +469,26 @@ export default function Home() {
     useUpdateStore.getState().initialize();
   }, [initializeAuth]);
 
+  // ✅ Friends & DM listeners - başlat/durdur
+  useEffect(() => {
+    if (user?.uid) {
+      startFriendListener(user.uid);
+      startRequestListener(user.uid);
+      startConversationListener(user.uid);
+    }
+    return () => {
+      stopFriendListeners();
+      stopDMListeners();
+    };
+  }, [user?.uid]);
+
+  // ✅ Otomatik Okundu İşaretleme
+  useEffect(() => {
+    if (activeConversation?.id && unreadDMCounts[activeConversation.id] > 0) {
+      markDMAsRead(activeConversation.id, user?.uid);
+    }
+  }, [activeConversation?.id, unreadDMCounts, markDMAsRead, user?.uid]);
+
   useEffect(() => {
     if (!isLoading && showSplash) {
       const timer = setTimeout(() => setShowSplash(false), 1500);
@@ -182,7 +502,187 @@ export default function Home() {
     setShowChatPanel(false);
     setViewMode("voice");
     useChatStore.getState().clearCurrentChannel();
+    // Server seçildiğinde friendsMode kapat
+    if (currentServer) {
+      setFriendsMode(false);
+      clearActiveConversation();
+    }
   }, [currentServer?.id]);
+
+  // ✅ Tümüyle Ana Sayfaya Git (Logo Tıklandığında)
+  const handleGoHome = useCallback(() => {
+    setFriendsMode(false);
+    setShowFriendsPanel(true);
+    setCurrentTextChannel(null);
+    setShowChatPanel(false);
+    clearActiveConversation();
+    useServerStore.getState().selectServer(null);
+    useChatStore.getState().clearCurrentChannel();
+  }, [clearActiveConversation]);
+
+  // ✅ FriendsMode açma/yönetme (ServerRail'den)
+  const handleToggleFriendsMode = useCallback(() => {
+    if (friendsMode) {
+      if (!showFriendsPanel) {
+        setShowFriendsPanel(true);
+        clearActiveConversation();
+      } else {
+        // Eğer sunucu ses odasındayken Mesajlardan çıkarsa, onu boşluğa değil sunucusuna geri götür!
+        if (currentRoom && !currentRoom.isDM && currentRoom._serverId) {
+          useServerStore.getState().selectServer(currentRoom._serverId);
+          setFriendsMode(false);
+          setShowFriendsPanel(true);
+          clearActiveConversation();
+          setViewMode("voice");
+          useChatStore.getState().setShowChatPanel(true);
+          return;
+        } else {
+          handleGoHome();
+          return;
+        }
+      }
+    } else {
+      // DM moduna geç, sunucu seçimini kaldır
+      setFriendsMode(true);
+      setShowFriendsPanel(true);
+      useServerStore.getState().selectServer(null);
+      clearActiveConversation();
+    }
+    setViewMode("chat");
+    useChatStore.getState().setShowChatPanel(true);
+  }, [friendsMode, showFriendsPanel, clearActiveConversation, handleGoHome, currentRoom]);
+
+  // ✅ DM açma handler'ı (arkadaş listesinden mesaj butonuna tıklanınca)
+  const handleOpenDM = useCallback(async (friendData) => {
+    if (!user?.uid || !friendData?.uid) return;
+    setShowFriendsPanel(false);
+    await openOrCreateConversation(user.uid, friendData.uid);
+    setViewMode("chat");
+    useChatStore.getState().setShowChatPanel(true);
+  }, [user?.uid, openOrCreateConversation]);
+
+  // ✅ DM sidebar'dan konuşma seçme
+  const handleSelectConversation = useCallback((conversation) => {
+    // Aynı sohbet açıksa tekrar yükleme yapma
+    const currentActive = useDMStore.getState().activeConversation;
+    if (currentActive?.id === conversation.id && friendsMode && !showFriendsPanel) {
+      setViewMode("chat");
+      useChatStore.getState().setShowChatPanel(true);
+      return;
+    }
+
+    setFriendsMode(true);
+    useServerStore.getState().selectServer(null);
+    setShowFriendsPanel(false);
+    selectConversation(conversation);
+    setViewMode("chat");
+    useChatStore.getState().setShowChatPanel(true);
+  }, [selectConversation, friendsMode, showFriendsPanel]);
+
+  // ✅ DM Arama Başlatma
+  const handleStartDMCall = useCallback((callRoomConfig) => {
+    setCurrentRoom(callRoomConfig);
+    setCurrentTextChannel(null);
+    useChatStore.getState().clearCurrentChannel();
+    setViewMode("voice");
+  }, []);
+
+  // ✅ Friends paneline dön
+  const handleOpenFriends = useCallback(() => {
+    setShowFriendsPanel(true);
+    clearActiveConversation();
+  }, [clearActiveConversation]);
+
+  // ✅ Kanal Katılma İşleyicisi (Hem Masaüstü hem Mobil için ortak)
+  const handleJoinChannel = useCallback((channel) => {
+    console.log("🎤 onJoinChannel called:", channel.name);
+
+    if (channel.type === "voice") {
+      if (currentRoom && currentRoom.id !== channel.id) {
+        const currentRoomServer = servers.find(
+          (s) => s.id === currentRoom._serverId,
+        );
+        setVoiceChannelSwitch({
+          isOpen: true,
+          currentChannel: {
+            name: currentRoom.name,
+            serverName:
+              currentRoomServer?.name || "Bilinmeyen Sunucu",
+            serverIcon: currentRoomServer?.iconUrl || null,
+          },
+          targetChannel: {
+            name: channel.name,
+            serverName: currentServer?.name || "Bilinmeyen Sunucu",
+            serverIcon: currentServer?.iconUrl || null,
+          },
+          onConfirm: () => {
+            const roomWithSession = {
+              ...channel,
+              _sessionStart: Date.now(),
+              _serverId: currentServer?.id,
+              _serverName: currentServer?.name,
+              _serverIcon: currentServer?.iconUrl,
+            };
+            setCurrentRoom(roomWithSession);
+            setCurrentTextChannel(null);
+            useChatStore.getState().clearCurrentChannel();
+            setViewMode("voice");
+            setVoiceChannelSwitch({
+              isOpen: false,
+              currentChannel: null,
+              targetChannel: null,
+            });
+          },
+        });
+        return;
+      }
+
+      const roomWithSession = {
+        ...channel,
+        _sessionStart: Date.now(),
+        _serverId: currentServer?.id,
+        _serverName: currentServer?.name,
+        _serverIcon: currentServer?.iconUrl,
+      };
+      setCurrentRoom(roomWithSession);
+      setCurrentTextChannel(null);
+      useChatStore.getState().clearCurrentChannel();
+      setViewMode("voice");
+    } else {
+      if (currentTextChannel === channel.id) {
+        if (showChatPanel) {
+          setShowChatPanel(false);
+          setCurrentTextChannel(null);
+          useChatStore.getState().clearCurrentChannel();
+          setViewMode("voice");
+        } else {
+          setShowChatPanel(true);
+          setViewMode("chat");
+        }
+      } else {
+        setCurrentTextChannel(channel.id);
+        setShowChatPanel(true);
+        setViewMode("chat");
+        useChatStore
+          .getState()
+          .loadChannelMessages(channel.id, currentServer?.id);
+      }
+    }
+  }, [currentRoom, servers, currentServer, currentTextChannel, showChatPanel]);
+
+  const serverSidebarContent = currentServer ? (
+    isServerLoading && channels.length === 0 ? (
+      <ServerSidebarSkeleton />
+    ) : (
+      <ServerSidebar
+        key={currentServer.id}
+        activeTextChannelId={currentTextChannel}
+        onJoinChannel={handleJoinChannel}
+        onToggleMemberList={() => setShowMemberList(!showMemberList)}
+        showMemberList={showMemberList}
+      />
+    )
+  ) : null;
 
   if (showInstallUpdateSplash) return <InstallUpdateSplash />;
   if (isLoading || showSplash) return <SplashScreen />;
@@ -223,6 +723,10 @@ export default function Home() {
         <ServerRail
           onOpenCreateModal={() => setShowAddServerSelectionModal(true)}
           isRoomActive={!!currentRoom}
+          friendsMode={friendsMode}
+          onToggleFriendsMode={handleToggleFriendsMode}
+          onGoHome={handleGoHome}
+          onSelectDM={handleSelectConversation}
         />
       }
       rightSidebar={
@@ -237,94 +741,21 @@ export default function Home() {
       showRightSidebar={showMemberList}
       onToggleRightSidebar={() => setShowMemberList(!showMemberList)}
       hasRightSidebarContent={!!currentServer}
+      // 📱 Mobile props
+      friendsMode={friendsMode}
+      onGoHome={handleGoHome}
+      onToggleFriendsMode={handleToggleFriendsMode}
+      onOpenCreateModal={() => setShowAddServerSelectionModal(true)}
       sidebar={
-        currentServer ? (
-          isServerLoading && channels.length === 0 ? (
-            <ServerSidebarSkeleton />
-          ) : (
-          <ServerSidebar
-            key={currentServer.id}
-            activeTextChannelId={currentTextChannel}
-            onJoinChannel={(channel) => {
-              console.log("🎤 onJoinChannel called:", channel.name);
-
-              if (channel.type === "voice") {
-                if (currentRoom && currentRoom.id !== channel.id) {
-                  const currentRoomServer = servers.find(
-                    (s) => s.id === currentRoom._serverId,
-                  );
-                  setVoiceChannelSwitch({
-                    isOpen: true,
-                    currentChannel: {
-                      name: currentRoom.name,
-                      serverName:
-                        currentRoomServer?.name || "Bilinmeyen Sunucu",
-                      serverIcon: currentRoomServer?.iconUrl || null,
-                    },
-                    targetChannel: {
-                      name: channel.name,
-                      serverName: currentServer?.name || "Bilinmeyen Sunucu",
-                      serverIcon: currentServer?.iconUrl || null,
-                    },
-                    onConfirm: () => {
-                      const roomWithSession = {
-                        ...channel,
-                        _sessionStart: Date.now(),
-                        _serverId: currentServer?.id,
-                        _serverName: currentServer?.name,
-                        _serverIcon: currentServer?.iconUrl,
-                      };
-                      setCurrentRoom(roomWithSession);
-                      setCurrentTextChannel(null);
-                      useChatStore.getState().clearCurrentChannel();
-                      setViewMode("voice");
-                      setVoiceChannelSwitch({
-                        isOpen: false,
-                        currentChannel: null,
-                        targetChannel: null,
-                      });
-                    },
-                  });
-                  return;
-                }
-
-                const roomWithSession = {
-                  ...channel,
-                  _sessionStart: Date.now(),
-                  _serverId: currentServer?.id,
-                  _serverName: currentServer?.name,
-                  _serverIcon: currentServer?.iconUrl,
-                };
-                setCurrentRoom(roomWithSession);
-                setCurrentTextChannel(null);
-                useChatStore.getState().clearCurrentChannel();
-                setViewMode("voice");
-              } else {
-                if (currentTextChannel === channel.id) {
-                  if (showChatPanel) {
-                    setShowChatPanel(false);
-                    setCurrentTextChannel(null);
-                    useChatStore.getState().clearCurrentChannel();
-                    setViewMode("voice");
-                  } else {
-                    setShowChatPanel(true);
-                    setViewMode("chat");
-                  }
-                } else {
-                  setCurrentTextChannel(channel.id);
-                  setShowChatPanel(true);
-                  setViewMode("chat");
-                  useChatStore
-                    .getState()
-                    .loadChannelMessages(channel.id, currentServer?.id);
-                }
-              }
-            }}
-            onToggleMemberList={() => setShowMemberList(!showMemberList)}
-            showMemberList={showMemberList}
+        friendsMode ? (
+          /* ✅ Friends Mode: DM Sidebar */
+          <DMSidebar
+            onSelectConversation={handleSelectConversation}
+            onOpenFriends={handleOpenFriends}
+            activeConversationId={activeConversation?.id}
+            showFriendsPanel={showFriendsPanel}
           />
-          )
-        ) : null
+        ) : serverSidebarContent
       }
     >
       <UpdateNotification />
@@ -350,6 +781,52 @@ export default function Home() {
           })
         }
         onConfirm={voiceChannelSwitch.onConfirm}
+      />
+
+      <IncomingCallModal
+        isOpen={!!incomingCallConvo}
+        caller={incomingCallConvo?.otherUser}
+        onAccept={async () => {
+          if (!incomingCallConvo) return;
+          // Accept the call - this will change status to 'accepted'
+          await acceptCall(incomingCallConvo.id);
+          selectConversation(incomingCallConvo); // ✅ 
+          playSound("join");
+          // And we join locally immediately
+          setCurrentRoom({
+             id: "dm_call_" + incomingCallConvo.id,
+             name: `${incomingCallConvo.otherUser.displayName} - ${user.displayName}`,
+             type: 'voice',
+             isDM: true,
+             dmConversationId: incomingCallConvo.id
+          });
+          setCurrentTextChannel(null);
+          useChatStore.getState().clearCurrentChannel();
+          setViewMode("voice");
+        }}
+        onDecline={async () => {
+          if (!incomingCallConvo) return;
+          await endCall(incomingCallConvo.id);
+          playSound("someone-left");
+        }}
+      />
+
+      {incomingCallConvo && (
+        <LoopingAudio src="/sounds/call-incoming.mp3" />
+      )}
+
+      {outgoingCallConvo && (
+        <LoopingAudio src="/sounds/call-send.mp3" />
+      )}
+
+      <OutgoingCallModal
+        isOpen={!!outgoingCallConvo}
+        targetUser={outgoingCallConvo?.otherUser}
+        onCancel={async () => {
+          if (!outgoingCallConvo) return;
+          await endCall(outgoingCallConvo.id);
+          playSound("someone-left");
+        }}
       />
 
       <AddServerSelectionModal
@@ -394,6 +871,9 @@ export default function Home() {
               displayName={currentRoom.name}
               username={user?.displayName || user?.email || "Misafir"}
               onLeave={() => {
+                if (currentRoom.isDM && currentRoom.dmConversationId) {
+                  endCall(currentRoom.dmConversationId);
+                }
                 setCurrentRoom(null);
                 setCurrentTextChannel(null);
                 setViewMode("voice");
@@ -408,16 +888,44 @@ export default function Home() {
           )}
         </div>
 
-        {/* Welcome/Chat screen */}
+        {/* Welcome/Chat/Friends/DM screen */}
         <div
-          className={`absolute inset-0 ${!currentRoom ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"}`}
+          className={`absolute inset-0 ${!currentRoom || (friendsMode && showFriendsPanel) ? "z-[60] bg-[#313338] opacity-100 pointer-events-auto" : "z-0 opacity-0 pointer-events-none"}`}
         >
-            {!showChatPanel ? (
-              <div key="welcome" className="absolute inset-0">
-                <WelcomeScreen
-                  userName={user?.displayName || "Misafir"}
-                  version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
-                />
+            {friendsMode ? (
+              /* ✅ Friends Mode: Arkadaşlar / DM Conversation */
+              <div key="friends-content" className="absolute inset-0">
+                {(showFriendsPanel && !currentRoom?.isDM) ? (
+                  <FriendsPanel onOpenDM={handleOpenDM} />
+                ) : (
+                  <DMConversation 
+                    onBack={() => {
+                        if (currentRoom?.isDM) {
+                           setViewMode('voice');
+                        } else {
+                           handleOpenFriends();
+                        }
+                    }} 
+                    onStartCall={async (conversationId) => {
+                      if (!user?.uid) return;
+                      await useDMStore.getState().startCall(conversationId, user.uid);
+                    }}
+                  />
+                )}
+              </div>
+            ) : !showChatPanel ? (
+              <div key="welcome-or-channels" className="absolute inset-0">
+                {/* 📱 Mobilde sunucu seçiliyse doğrudan sunucu kanallarını göster */}
+                {isMobile && currentServer ? (
+                  <div className="h-full w-full bg-[#0a0a0c]">
+                    {serverSidebarContent}
+                  </div>
+                ) : (
+                  <WelcomeScreen
+                    userName={user?.displayName || "Misafir"}
+                    version={process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
+                  />
+                )}
               </div>
             ) : (
               <div key="chat" className="absolute inset-0">
@@ -427,6 +935,11 @@ export default function Home() {
                       channelId={currentTextChannel}
                       username={user?.displayName || user?.email || "Misafir"}
                       userId={user?.uid}
+                      onBack={() => {
+                        setShowChatPanel(false);
+                        setCurrentTextChannel(null);
+                        useChatStore.getState().clearCurrentChannel();
+                      }}
                     />
                   </div>
                 )}

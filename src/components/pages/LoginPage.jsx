@@ -15,6 +15,7 @@
 import { useState, useEffect } from "react";
 import { Sparkles, Shield, Users, Zap, Radio, ArrowRight, Eye, EyeOff, User } from "lucide-react";
 import { toast } from "@/src/utils/toast";
+import { useAuthStore } from "@/src/store/authStore";
 
 // Google Icon SVG
 const GoogleIcon = () => (
@@ -48,9 +49,12 @@ export default function LoginPage({
 
   const handleGoogleLogin = () => {
     if (typeof window !== "undefined" && window.netrex) {
+      // Electron: OAuth IPC flow
       onGoogleLogin?.();
     } else {
-      toast.error("Bu özellik sadece masaüstü uygulamasında çalışır.");
+      // Web: Firebase signInWithPopup
+      const { loginWithGooglePopup } = useAuthStore.getState();
+      loginWithGooglePopup();
     }
   };
 
@@ -237,7 +241,7 @@ export default function LoginPage({
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
             <span className="text-xs text-[#5c5e66] font-medium">Netrex Client</span>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-bold border border-indigo-500/20">
-              v{process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}
+              v{process.env.NEXT_PUBLIC_APP_VERSION || "8.0.0"}
             </span>
           </div>
         </div>

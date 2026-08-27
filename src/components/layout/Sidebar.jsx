@@ -154,7 +154,7 @@ export function SidebarItem({
         px-2.5 py-2
         rounded-lg
         text-left
-        transition-all duration-normal
+        transition-colors duration-normal will-change-[background-color,color]
         relative
         group
         

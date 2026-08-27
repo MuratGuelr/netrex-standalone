@@ -10,7 +10,7 @@
  * OPTIMIZATION: useGameActivity hook removed - it should only run when connected to a room
  */
 
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
@@ -20,6 +20,11 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSoundManagerStore } from "@/src/store/soundManagerStore";
 import { toast } from "@/src/utils/toast";
 import ErrorBoundary from "@/src/components/ui/ErrorBoundary";
+
+// 📱 Mobile Components
+import MobileDrawer from "@/src/components/layout/MobileDrawer";
+import MobileNavBar from "@/src/components/layout/MobileNavBar";
+import MobileServerSelector from "@/src/components/layout/MobileServerSelector";
 
 const SettingsModal = lazy(() => import("@/src/components/SettingsModal"));
 
@@ -31,11 +36,23 @@ export default function AppShell({
   showRightSidebar = true,
   onToggleRightSidebar,
   hasRightSidebarContent = false,
-  className = "" 
+  className = "",
+  // 📱 Mobile props
+  friendsMode = false,
+  onGoHome,
+  onToggleFriendsMode,
+  onOpenCreateModal,
+  messengerBadge = 0,
 }) {
 
   const [isElectron, setIsElectron] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
+
+  // 📱 Mobile drawer states
+  const [mobileServerDrawer, setMobileServerDrawer] = useState(false);
+  const [mobileChannelDrawer, setMobileChannelDrawer] = useState(false);
+  const [mobileMemberDrawer, setMobileMemberDrawer] = useState(false);
   const { user } = useAuthStore();
   const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
   const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
@@ -67,7 +84,20 @@ export default function AppShell({
   }, [currentServer, members, user, isLoading, isLeavingServer, router]);
 
   useEffect(() => {
-    setIsElectron(typeof window !== "undefined" && !!window.netrex);
+    const electronCheck = typeof window !== "undefined" && !!window.netrex;
+    setIsElectron(electronCheck);
+
+    // 📱 Mobil ekran kontrolü (sadece web'de)
+    if (!electronCheck) {
+      const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+      checkMobile();
+      window.addEventListener("resize", checkMobile);
+      // Cleanup
+      const originalCleanup = () => window.removeEventListener("resize", checkMobile);
+      // Store cleanup for later
+      window.__netrexMobileCleanup = originalCleanup;
+    }
+
     // 🚀 v5.3: Sistem seslerini RAM'e ön-yükle (Zero Latency)
     // ✅ FIX: 3sn geciktir - auth init ve Firestore onSnapshot ile yarışmasın
     const soundInitDelay = setTimeout(() => {
@@ -101,8 +131,12 @@ export default function AppShell({
     return () => {
         clearTimeout(soundInitDelay);
         if (cleanupTriggered) cleanupTriggered();
+        if (window.__netrexMobileCleanup) window.__netrexMobileCleanup();
     };
   }, []);
+
+  // 📱 Mobil layout kullanılacak mı? (Electron'da asla, web'de sadece dar ekranda)
+  const useMobileLayout = !isElectron && isMobile;
 
   return (
     <div className={`
@@ -113,46 +147,49 @@ export default function AppShell({
       text-nds-text-primary
       overflow-hidden
       select-none
+      ${useMobileLayout ? 'app-shell-mobile' : ''}
       ${className}
     `}>
       {/* Main App Container */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Server Rail */}
-        {serverRail}
+        {/* Server Rail — masaüstüde göster, mobilde gizle */}
+        {!useMobileLayout && serverRail}
 
-        {/* Left Sidebar - Reals Closing & Opening for every server switch */}
-        <AnimatePresence mode="wait">
-          {sidebar && (
-            <motion.aside
-              key={sidebar.key || "sidebar"}
-              initial={{ opacity: 0, x: -20, width: 0 }}
-              animate={{ opacity: 1, x: 0, width: 240 }}
-              exit={{ opacity: 0, x: -20, width: 0 }}
-              transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-              className="
-                sidebar
-                h-full
-                bg-[#0a0a0c]
-                flex flex-col
-                flex-shrink-0
-                border-r border-nds-border-subtle
-                overflow-hidden
-              "
-            >
-              <motion.div 
-                 initial={{ opacity: 0 }}
-                 animate={{ opacity: 1 }}
-                 exit={{ opacity: 0, transition: { duration: 0 } }}
-                 transition={{ 
-                   opacity: { delay: 0.35, duration: 0.2 },
-                 }} 
-                 className="w-sidebar h-full flex flex-col"
+        {/* Left Sidebar — masaüstüde göster, mobilde drawer */}
+        {!useMobileLayout && (
+          <AnimatePresence mode="wait">
+            {sidebar && (
+              <motion.aside
+                key={sidebar.key || "sidebar"}
+                initial={{ opacity: 0, x: -20, width: 0 }}
+                animate={{ opacity: 1, x: 0, width: 240 }}
+                exit={{ opacity: 0, x: -20, width: 0 }}
+                transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+                className="
+                  sidebar
+                  h-full
+                  bg-[#0a0a0c]
+                  flex flex-col
+                  flex-shrink-0
+                  border-r border-nds-border-subtle
+                  overflow-hidden
+                "
               >
-                 {sidebar}
-              </motion.div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
+                <motion.div 
+                   initial={{ opacity: 0 }}
+                   animate={{ opacity: 1 }}
+                   exit={{ opacity: 0, transition: { duration: 0 } }}
+                   transition={{ 
+                     opacity: { delay: 0.35, duration: 0.2 },
+                   }} 
+                   className="w-sidebar h-full flex flex-col"
+                >
+                   {sidebar}
+                </motion.div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        )}
 
         {/* Main Content */}
         <main className="
@@ -170,8 +207,8 @@ export default function AppShell({
              </ErrorBoundary>
           </div>
 
-          {/* Right Sidebar with integrated Toggle Button */}
-          {hasRightSidebarContent && (
+          {/* Right Sidebar — masaüstüde göster, mobilde drawer */}
+          {!useMobileLayout && hasRightSidebarContent && (
             <div className="h-full flex-shrink-0 relative flex" style={{ zIndex: 'auto' }}>
               <button
                 onClick={onToggleRightSidebar}
@@ -197,14 +234,12 @@ export default function AppShell({
                 />
               </button>
 
-              {/* Animated Sidebar Container - Restored its beauty :) */}
               <motion.div
                 initial={false}
                 animate={{ width: showRightSidebar ? 240 : 0 }}
                 transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
                 className="h-full overflow-hidden"
               >
-                {/* ✅ Sidebar Content - Unmounts 350ms after close (animasyon + 20ms buffer) */}
                 <AnimatePresence mode="wait">
                   {(showRightSidebar || rightSidebar) && (
                     <motion.div
@@ -215,9 +250,6 @@ export default function AppShell({
                       }}
                       exit={{ opacity: 0, x: 20 }}
                       transition={{ duration: 0.25, ease: "easeOut" }}
-                      onAnimationComplete={() => {
-                        // When close animation completes, component will unmount via AnimatePresence
-                      }}
                       className="
                         h-full w-[240px]
                         bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214]
@@ -235,6 +267,52 @@ export default function AppShell({
 
         </main>
       </div>
+
+      {/* ════════════════════════════════════════════════════════════
+         📱 MOBILE-ONLY: Bottom Nav + Drawers
+         Electron'da ve geniş ekranlarda render edilmez.
+         ════════════════════════════════════════════════════════════ */}
+      {useMobileLayout && (
+        <>
+          {/* Bottom Navigation Bar */}
+          <MobileNavBar
+            friendsMode={friendsMode}
+            hasCurrentServer={hasRightSidebarContent}
+            onGoHome={onGoHome}
+            onToggleFriendsMode={onToggleFriendsMode}
+            onOpenServers={() => setMobileServerDrawer(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            messengerBadge={messengerBadge}
+          />
+
+          {/* Server Selector Drawer */}
+          <MobileDrawer
+            isOpen={mobileServerDrawer}
+            onClose={() => setMobileServerDrawer(false)}
+            side="left"
+            title="Sunucular"
+          >
+            <MobileServerSelector
+              onSelectServer={(id) => {
+                useServerStore.getState().selectServer(id);
+                setMobileServerDrawer(false);
+              }}
+              onCreateServer={onOpenCreateModal}
+              onClose={() => setMobileServerDrawer(false)}
+            />
+          </MobileDrawer>
+
+          {/* Member List Drawer */}
+          <MobileDrawer
+            isOpen={mobileMemberDrawer}
+            onClose={() => setMobileMemberDrawer(false)}
+            side="right"
+            title="Üyeler"
+          >
+            {rightSidebar}
+          </MobileDrawer>
+        </>
+      )}
       
       {/* Global Settings Modal - Accessible from anywhere in the app */}
       {showSettingsModal && (

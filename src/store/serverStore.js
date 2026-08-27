@@ -18,7 +18,8 @@ import {
   setDoc,
   documentId
 } from "firebase/firestore";
-import { auth, db } from "@/src/lib/firebase";
+import { ref, onValue, off } from "firebase/database";
+import { auth, db, rtdb } from "@/src/lib/firebase";
 import { 
   DEFAULT_ROLE_NAME, 
   DEFAULT_ROLE_COLOR,
@@ -102,6 +103,7 @@ export const useServerStore = create((set, get) => ({
     }
 
     // ✅ FIX: Tek bir set() ile state'i güncelle - "ileri geri" glitch'ini önle
+    // ✅ FIX: _lastVoiceIds eklendi. Null'a ya da başka sunucuya geçildiğinde id cache temizlenir, geri dönüldüğünde presence okuma bloke olmaz.
     set({ 
       currentServer: nextServer, 
       channels: [], 
@@ -109,7 +111,8 @@ export const useServerStore = create((set, get) => ({
       members: [],
       voiceStates: {},
       activeInvites: [],
-      isLoading: true 
+      isLoading: true,
+      _lastVoiceIds: ""
     });
 
     if (!serverId) {
@@ -147,25 +150,24 @@ export const useServerStore = create((set, get) => ({
              if (currentVoiceListener) currentVoiceListener();
              
              if (voiceIds.length > 0) {
-                 // Firestore 'in' query supports up to 30 items
-                 const idsToQuery = voiceIds.slice(0, 30);
+                 const currentVoiceStates = {};
+                 const unsubs = [];
                  
-                 const q = query(
-                    collection(db, "room_presence"),
-                    where(documentId(), 'in', idsToQuery) 
-                 );
-                 
-                 const unsubVoice = onSnapshot(q, (snap) => {
-                     const voiceStates = {};
-                     snap.docs.forEach(doc => {
-                         voiceStates[doc.id] = doc.data().users || [];
+                 voiceIds.forEach(id => {
+                     const roomRef = ref(rtdb, `room_presence/${id}`);
+                     const unsub = onValue(roomRef, (snapshot) => {
+                         const data = snapshot.val();
+                         currentVoiceStates[id] = data ? Object.values(data) : [];
+                         set({ voiceStates: { ...get().voiceStates, ...currentVoiceStates } });
                      });
-                     set({ voiceStates });
-                 }, (error) => {
-                     console.error("Voice state listener error:", error);
+                     unsubs.push(() => off(roomRef, 'value', unsub));
                  });
                  
-                 set({ _voiceStateListener: unsubVoice, _lastVoiceIds: sortedIds });
+                 const combinedUnsub = () => {
+                     unsubs.forEach(u => u());
+                 };
+                 
+                 set({ _voiceStateListener: combinedUnsub, _lastVoiceIds: sortedIds });
              } else {
                  set({ voiceStates: {}, _voiceStateListener: null, _lastVoiceIds: "" });
              }

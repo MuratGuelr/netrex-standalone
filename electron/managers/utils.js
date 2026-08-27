@@ -67,9 +67,11 @@ const COMMON_CSS = `
 const LOGO_PATH = "M470 2469 c-126 -21 -259 -116 -318 -227 -63 -119 -62 -98 -62 -952 0 -451 4 -800 10 -835 20 -127 120 -269 232 -330 102 -56 87 -55 954 -55 703 0 807 2 855 16 149 44 264 158 315 314 17 51 19 114 22 825 2 540 0 794 -8 850 -29 204 -181 362 -380 394 -81 13 -1540 13 -1620 0z m816 -1035 l339 -396 3 71 c3 70 2 72 -38 120 l-40 48 2 274 3 274 132 3 c131 3 133 2 137 -20 3 -13 4 -257 3 -543 l-2 -520 -105 -3 -105 -2 -235 276 c-129 153 -281 331 -337 396 l-103 119 0 -75 c0 -73 1 -76 40 -121 l40 -47 -2 -271 -3 -272 -135 0 -135 0 -3 530 c-1 292 0 536 3 543 3 8 33 12 103 12 l98 0 340 -396z";
 
 const getIconPath = () => {
+    const isMac = process.platform === "darwin";
+    const iconName = isMac ? "logo.png" : "logo.ico";
     return app.isPackaged
-        ? path.join(process.resourcesPath, "logo.ico")
-        : path.join(__dirname, "../../public/logo.ico");
+        ? path.join(process.resourcesPath, iconName)
+        : path.join(__dirname, "../../public/", iconName);
 };
 
 // --- SPLASH SCREEN (ENTRY) ---

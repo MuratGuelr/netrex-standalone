@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, User, AppWindow, Cpu, Mic, Keyboard, Bell, Info, Palette } from "lucide-react";
+import { X, User, AppWindow, Cpu, Mic, Keyboard, Bell, Info, Palette, Monitor, Layers } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import SidebarItem from "./settings/SidebarItem";
 import AccountSettings from "./settings/tabs/AccountSettings";
@@ -10,6 +10,8 @@ import KeybindSettings from "./settings/tabs/KeybindSettings";
 import NotificationSettings from "./settings/tabs/NotificationSettings";
 import AppearanceSettings from "./settings/tabs/AppearanceSettings";
 import AboutSettings from "./settings/tabs/AboutSettings";
+import MacSetupSettings from "./settings/tabs/MacSetupSettings";
+import OverlaySettings from "./settings/tabs/OverlaySettings";
 import { toast } from "@/src/utils/toast";
 
 // --- ANA BİLEŞEN ---
@@ -20,6 +22,21 @@ export default function SettingsModal({ isOpen, onClose }) {
   const accountSettingsRef = useRef(null);
   const settingsScrollToSection = useSettingsStore(state => state.settingsScrollToSection);
   const setSettingsScrollToSection = useSettingsStore(state => state.setSettingsScrollToSection);
+  const [isMac, setIsMac] = useState(false);
+  const [isElectronApp, setIsElectronApp] = useState(false);
+  const [isMobileSettings, setIsMobileSettings] = useState(false);
+
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
+    setIsElectronApp(!!window.netrex);
+    // 📱 Mobil kontrolü
+    if (!window.netrex) {
+      const check = () => setIsMobileSettings(window.innerWidth <= 768);
+      check();
+      window.addEventListener('resize', check);
+      return () => window.removeEventListener('resize', check);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -98,6 +115,65 @@ export default function SettingsModal({ isOpen, onClose }) {
         {/* Top glow effect */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
 
+        {/* 📱 Mobile: Tab bar at bottom */}
+        {isMobileSettings ? (
+          <div className="flex flex-col w-full h-full">
+            {/* Mobile Header with close */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#1a1b1e] flex-shrink-0">
+              <h2 className="text-base font-bold text-white">Ayarlar</h2>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#949ba4]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mobile Content */}
+            <div ref={contentRef} className="flex-1 overflow-y-auto p-4 pb-20 relative">
+              <div className="relative z-10" key={activeTab}>
+                <div className="animate-page-enter">
+                  {activeTab === "account" && <AccountSettings ref={accountSettingsRef} onClose={onClose} scrollToSection={settingsScrollToSection} setScrollToSection={setSettingsScrollToSection} contentRef={contentRef} />}
+                  {activeTab === "application" && <ApplicationSettings />}
+                  {activeTab === "appearance" && <AppearanceSettings />}
+                  {activeTab === "performance" && <PerformanceSettings />}
+                  {activeTab === "voice" && <VoiceSettings isSettingsModalOpen={isOpen} />}
+                  {activeTab === "notifications" && <NotificationSettings />}
+                  {activeTab === "about" && <AboutSettings />}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Tab Bar — BOTTOM */}
+            <div className="flex items-center gap-1 px-2 py-2 overflow-x-auto no-scrollbar border-t border-white/10 bg-[#0a0a0c] flex-shrink-0" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
+              {[
+                { id: 'account', label: 'Hesap', icon: <User size={18} /> },
+                { id: 'application', label: 'Genel', icon: <AppWindow size={18} /> },
+                { id: 'appearance', label: 'Görünüm', icon: <Palette size={18} /> },
+                { id: 'voice', label: 'Ses', icon: <Mic size={18} /> },
+                { id: 'notifications', label: 'Bildirim', icon: <Bell size={18} /> },
+                { id: 'about', label: 'Hakkında', icon: <Info size={18} /> },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`
+                    flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px] font-medium whitespace-nowrap flex-shrink-0 transition-all min-w-[52px]
+                    ${activeTab === tab.id 
+                      ? 'bg-indigo-500/20 text-white' 
+                      : 'text-[#949ba4]'
+                    }
+                  `}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+        /* 🖥️ Desktop: Vertical sidebar */
+        <>
         <div className="w-64 bg-gradient-to-b from-[#1a1b1e] via-[#16171a] to-[#111214] p-3 flex flex-col border-r border-white/10 relative overflow-hidden">
           {/* Sidebar background glow */}
           <div className="absolute inset-0 pointer-events-none">
@@ -174,13 +250,15 @@ export default function SettingsModal({ isOpen, onClose }) {
             onClick={() => setActiveTab("voice")}
             color="cyan"
           />
-          <SidebarItem
-            label="Tuş Atamaları"
-            icon={<Keyboard size={18} />}
-            active={activeTab === "keybinds"}
-            onClick={() => setActiveTab("keybinds")}
-            color="orange"
-          />
+          {isElectronApp && (
+            <SidebarItem
+              label="Tuş Atamaları"
+              icon={<Keyboard size={18} />}
+              active={activeTab === "keybinds"}
+              onClick={() => setActiveTab("keybinds")}
+              color="orange"
+            />
+          )}
           <SidebarItem
             label="Bildirimler"
             icon={<Bell size={18} />}
@@ -188,6 +266,15 @@ export default function SettingsModal({ isOpen, onClose }) {
             onClick={() => setActiveTab("notifications")}
             color="yellow"
           />
+          {isElectronApp && (
+            <SidebarItem
+              label="Oyun İçi Overlay"
+              icon={<Layers size={18} />}
+              active={activeTab === "overlay"}
+              onClick={() => setActiveTab("overlay")}
+              color="amber"
+            />
+          )}
           
           {/* Divider */}
           <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 my-3 relative z-10"></div>
@@ -199,6 +286,19 @@ export default function SettingsModal({ isOpen, onClose }) {
             onClick={() => setActiveTab("about")}
             color="indigo"
           />
+
+          {isMac && (
+            <>
+              <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 my-3 relative z-10"></div>
+              <SidebarItem
+                label="macOS Kurulumu"
+                icon={<Monitor size={18} />}
+                active={activeTab === "mac-setup"}
+                onClick={() => setActiveTab("mac-setup")}
+                color="orange"
+              />
+            </>
+          )}
           
           {/* Footer */}
           <div className="mt-auto px-2 pt-3 relative z-10">
@@ -208,7 +308,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <div className="text-[11px] text-white font-medium">Netrex</div>
                 <div className="text-[10px] text-[#949ba4]">v{process.env.NEXT_PUBLIC_APP_VERSION || "3.0.0"}</div>
               </div>
-          </div>
+            </div>
           </div>
         </div>
         <div className="flex-1 bg-gradient-to-br from-nds-bg-tertiary to-nds-bg-primary relative flex flex-col min-w-0">
@@ -236,7 +336,9 @@ export default function SettingsModal({ isOpen, onClose }) {
                 {activeTab === "voice" && <VoiceSettings isSettingsModalOpen={isOpen} />}
                 {activeTab === "keybinds" && <KeybindSettings />}
                 {activeTab === "notifications" && <NotificationSettings />}
+                {activeTab === "overlay" && <OverlaySettings />}
                 {activeTab === "about" && <AboutSettings />}
+                {activeTab === "mac-setup" && <MacSetupSettings />}
               </div>
             </div>
           </div>
@@ -268,6 +370,8 @@ export default function SettingsModal({ isOpen, onClose }) {
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

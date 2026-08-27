@@ -84,9 +84,18 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   }, []);
 
   // ✅ OPTIMIZATION: Memoized computed values
+  // ✅ CPU OPT: O(n) member find → O(1) Map lookup (ses kanalı katılımcı enrichment'ında kullanılacak)
+  const memberMap = useMemo(() => {
+    const map = new Map();
+    members.forEach(m => {
+      if (m.id) map.set(m.id, m);
+      if (m.userId && m.userId !== m.id) map.set(m.userId, m);
+    });
+    return map;
+  }, [members]);
   const currentUserMember = useMemo(
-    () => members.find((m) => m.id === user?.uid || m.userId === user?.uid),
-    [members, user?.uid],
+    () => memberMap.get(user?.uid) || members.find((m) => m.id === user?.uid || m.userId === user?.uid),
+    [memberMap, members, user?.uid],
   );
 
   const userRoles = currentUserMember?.roles || [];
@@ -162,7 +171,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   if (!currentServer) return null;
 
   return (
-    <div className="w-sidebar h-full flex flex-col shrink-0 relative bg-[#0a0a0c] border-r border-white/5 overflow-hidden">
+    <div className="w-full sm:w-sidebar h-full flex flex-col shrink-0 relative bg-[#0a0a0c] border-r border-white/5 overflow-hidden">
       {/* Background Effects (Void Theme) */}
       <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03] pointer-events-none" />
 
@@ -271,11 +280,10 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
 
               // ✅ voiceStates sadece room_presence'tan geliyor, profileColor içermiyor.
               // members listesiyle cross-reference yaparak enrich ediyoruz.
+              // ✅ CPU OPT: memberMap ile O(1) lookup
               const participants = (voiceStates?.[channel.id] || []).map(
                 (p) => {
-                  const member = members.find(
-                    (m) => m.id === p.userId || m.userId === p.userId,
-                  );
+                  const member = memberMap.get(p.userId);
                   return {
                     ...p,
                     profileColor:

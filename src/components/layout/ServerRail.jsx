@@ -3,8 +3,10 @@
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
+import { useDMStore } from "@/src/store/dmStore";
+import { useFriendStore } from "@/src/store/friendStore";
 import { toast } from "@/src/utils/toast";
-import { Home, Plus } from "lucide-react";
+import { Home, Plus, MessageCircle } from "lucide-react";
 import RailUserPanel from "./RailUserPanel";
 import ServerSettingsModal from "@/src/components/server/ServerSettingsModal";
 import CreateInviteModal from "@/src/components/server/CreateInviteModal";
@@ -18,7 +20,7 @@ import { RailItem, RailSeparator } from "./server-rail";
  * - React.memo for performance
  * - Clean and maintainable
  */
-export default function ServerRail({ onOpenCreateModal, isRoomActive }) {
+export default function ServerRail({ onOpenCreateModal, isRoomActive, friendsMode, onToggleFriendsMode, onGoHome, onSelectDM }) {
   const { user } = useAuthStore();
   const { 
     servers, 
@@ -27,10 +29,20 @@ export default function ServerRail({ onOpenCreateModal, isRoomActive }) {
     fetchUserServers,
     leaveServer
   } = useServerStore();
+
+  const { conversations, unreadDMCounts, selectConversation } = useDMStore();
   
   const [serverSettings, setServerSettings] = useState({ isOpen: false, initialTab: 'overview', serverId: null });
   const [inviteModal, setInviteModal] = useState({ isOpen: false, serverId: null });
   const [leaveModal, setLeaveModal] = useState({ isOpen: false, server: null });
+
+  const totalUnread = useDMStore(state => {
+    const counts = state.unreadDMCounts || {};
+    return Object.values(counts).reduce((sum, c) => sum + c, 0);
+  });
+
+  const pendingFriendRequests = useFriendStore(state => state.incomingRequests.length);
+  const combinedMessengerBadge = totalUnread + pendingFriendRequests;
 
   useEffect(() => {
     if (user?.uid) {
@@ -38,10 +50,12 @@ export default function ServerRail({ onOpenCreateModal, isRoomActive }) {
     }
   }, [user?.uid, fetchUserServers]);
 
-  // ✅ Ana sayfaya git - artık room active iken de izin veriyoruz (background connection)
+  // ✅ Tümüyle Ana Sayfaya Git (Logo Tıklandığında)
   const handleHomeClick = useCallback(() => {
-    selectServer(null);
-  }, [selectServer]);
+    if (onGoHome) {
+      onGoHome();
+    }
+  }, [onGoHome]);
 
   // ✅ Server değiştir - artık room active iken de izin veriyoruz (background connection)
   const handleServerClick = useCallback((serverId) => {
@@ -103,31 +117,67 @@ export default function ServerRail({ onOpenCreateModal, isRoomActive }) {
       border-r border-white/5
     ">
       
-      {/* Home Button */}
+      {/* ✅ Home Button */}
       <RailItem
         label="Ana Sayfa" 
-        active={!currentServer}
+        active={!currentServer && !friendsMode}
         onClick={handleHomeClick}
         icon={<Home size={24} />}
         isRoomActive={isRoomActive}
       />
 
+      {/* Friends / DM Button */}
+      <RailItem
+        label="Mesajlar"
+        active={friendsMode}
+        onClick={onToggleFriendsMode}
+        icon={<MessageCircle size={24} />}
+        isRoomActive={isRoomActive}
+        badgeCount={combinedMessengerBadge}
+      />
+
       <RailSeparator />
 
-      {/* Server List - Memoized */}
-      {serverItems}
+      {/* Scrollable Section: Unread DM Avatars + Servers */}
+      <div className="
+        flex-1 w-full flex flex-col items-center gap-2 overflow-y-auto no-scrollbar
+        px-2 pb-2
+      ">
+        {serverItems}
 
-      {/* Add Server Button */}
+        {/* Separator if we have unread DMs and servers */}
+        {servers.length > 0 && conversations.some(c => (unreadDMCounts[c.id] || 0) > 0) && (
+          <div className="w-8 h-[2px] bg-[#313338] rounded-full my-1 shrink-0" />
+        )}
+
+        {/* Dynamic Unread DM Avatars (Discord-style) - NOW BELOW SERVERS */}
+        {conversations.filter(c => (unreadDMCounts[c.id] || 0) > 0).slice(0, 8).map(convo => (
+          <RailItem
+            key={`dm-${convo.id}`}
+            label={convo.otherUser?.displayName}
+            active={currentServer === null && friendsMode && useDMStore.getState().activeConversation?.id === convo.id}
+            onClick={() => {
+              if (onSelectDM) onSelectDM(convo);
+              else selectConversation(convo); 
+            }}
+            iconUrl={convo.otherUser?.photoURL}
+            badgeCount={unreadDMCounts[convo.id]}
+            isRoomActive={isRoomActive}
+          />
+        ))}
+      </div>
+
+      <RailSeparator />
+
       <RailItem
         label="Sunucu Ekle"
+        variant="success"
         active={false}
         onClick={onOpenCreateModal}
-        variant="success"
         icon={<Plus size={24} />}
       />
-      
-      {/* User Panel (Fixed at Bottom) */}
-      <div className="mt-auto w-full flex justify-center pb-2">
+
+      <div className="mt-auto pt-2 w-full flex flex-col items-center gap-2">
         <RailUserPanel />
       </div>
 

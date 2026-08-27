@@ -2,6 +2,19 @@ import { memo } from "react";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 import Avatar from "@/src/components/ui/Avatar";
 
+const extractYouTubeIds = (text) => {
+  if (!text) return [];
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
+  const ids = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[1] && !ids.includes(match[1])) {
+      ids.push(match[1]);
+    }
+  }
+  return ids;
+};
+
 const MessageItem = memo(({ 
   message, 
   prevMessage, 
@@ -17,9 +30,12 @@ const MessageItem = memo(({
   const prevMsgDate = prevMessage?.timestamp?.toDate ? prevMessage.timestamp.toDate() : (prevMessage ? new Date(prevMessage.timestamp) : null);
 
   const isSequence =
-    prevMessage &&
-    prevMessage.userId === message.userId &&
-    (msgDate.getTime() - prevMsgDate.getTime()) < MESSAGE_SEQUENCE_THRESHOLD;
+    isInSequence !== undefined ? isInSequence : (
+      prevMessage &&
+      prevMessage.userId === message.userId &&
+      msgDate.getTime() >= prevMsgDate.getTime() &&
+      (msgDate.getTime() - prevMsgDate.getTime()) < MESSAGE_SEQUENCE_THRESHOLD
+    );
 
   const showDateSeparator =
     !prevMessage ||
@@ -123,19 +139,47 @@ const MessageItem = memo(({
                   </div>
                 </div>
               ) : (
-                <p
-                  className={`
-                    text-[14px] leading-[1.4] whitespace-pre-wrap break-words font-medium
-                    ${isSequence ? "text-[#dbdee1]" : "text-[#dcddde]"}
-                  `}
-                >
-                  {renderText(message.text)}
-                  {message.edited && (
-                    <span className="text-[10px] text-[#949ba4] ml-1.5 select-none font-bold uppercase opacity-60 tracking-tighter">
-                      (düzenlendi)
-                    </span>
-                  )}
-                </p>
+                <>
+                  <p
+                    className={`
+                      text-[14px] leading-[1.4] whitespace-pre-wrap break-words font-medium
+                      ${isSequence ? "text-[#dbdee1]" : "text-[#dcddde]"}
+                    `}
+                  >
+                    {renderText(message.text)}
+                    {message.edited && (
+                      <span className="text-[10px] text-[#949ba4] ml-1.5 select-none font-bold uppercase opacity-60 tracking-tighter">
+                        (düzenlendi)
+                      </span>
+                    )}
+                  </p>
+                  
+                  {/* YOUTUBE EMBEDS */}
+                  {(() => {
+                    const youtubeIds = extractYouTubeIds(message.text);
+                    if (youtubeIds.length > 0) {
+                      return (
+                        <div className="mt-3 flex flex-col gap-3">
+                          {youtubeIds.map(id => (
+                            <div key={id} className="relative w-[360px] max-w-full rounded-xl overflow-hidden border border-white/5 bg-[#111214] shadow-md">
+                              <iframe
+                                width="100%"
+                                height="200"
+                                src={`https://www.youtube.com/embed/${id}`}
+                                title="YouTube video player"
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                className="block"
+                              ></iframe>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
               )}
 
               {/* REACTIONS */}

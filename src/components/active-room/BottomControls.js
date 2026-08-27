@@ -15,7 +15,9 @@ import {
   ChevronUp,
   ChevronDown,
   Music,
-  Hand
+  Hand,
+  UserPlus,
+  Radar
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -25,6 +27,7 @@ import { useWatchPartyPermission } from "@/src/hooks/useWatchPartyPermission";
 import { useAuthStore } from "@/src/store/authStore";
 import { startWatchParty, endWatchParty } from "@/src/services/watchPartyService";
 import { toastOnce } from "@/src/utils/toast";
+import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import ScreenShareModal from "../ScreenShareModal";
 import TtsStopBadge from "../TtsStopBadge";
 function ControlButton({
@@ -94,6 +97,8 @@ export default function BottomControls({
   deafenedBy,
   mutedAt,
   deafenedAt,
+  isDMCall, // new prop check
+  onInviteClick, // new prop callback
 }) {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
@@ -135,6 +140,17 @@ export default function BottomControls({
   const wpActive = useWatchPartyStore((state) => state.isActive);
   const currentUser = useAuthStore((s) => s.user);
   const wpPermissions = useWatchPartyPermission(serverId);
+
+  // 🎧 Spatial Audio
+  const spatialEnabled = useSpatialAudioStore(s => s.enabled);
+  const toggleSpatial = useSpatialAudioStore(s => s.toggleEnabled);
+  const setShowWindow = useSpatialAudioStore(s => s.setShowWindow);
+
+  const [showSpatialMenu, setShowSpatialMenu] = useState(false);
+  const showSpatialMenuRef = useRef(false);
+  useEffect(() => { showSpatialMenuRef.current = showSpatialMenu; }, [showSpatialMenu]);
+  const spatialMenuRef = useRef(null);
+  const spatialButtonRef = useRef(null);
 
   const stateRef = useRef({
     isMuted,
@@ -1015,6 +1031,16 @@ export default function BottomControls({
       ) {
         setShowWatchPartyMenu(false);
       }
+
+      if (
+        showSpatialMenuRef.current &&
+        spatialMenuRef.current &&
+        spatialButtonRef.current &&
+        !spatialMenuRef.current.contains(e.target) &&
+        !spatialButtonRef.current.contains(e.target)
+      ) {
+        setShowSpatialMenu(false);
+      }
     };
     window.addEventListener("mousedown", handleClickOutside);
     return () => window.removeEventListener("mousedown", handleClickOutside);
@@ -1266,6 +1292,95 @@ export default function BottomControls({
               )}
             </div>
           )}
+          
+          {/* DM Call Invite Button */}
+          {isDMCall && onInviteClick && (
+            <div className="relative flex items-center">
+              <div className="w-px h-8 bg-white/10 mx-1"></div>
+              <button
+                onClick={onInviteClick}
+                className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300 active:scale-95 group relative"
+                title="Kişi Davet Et"
+              >
+                <div className="relative z-10">
+                  <UserPlus size={20} className="sm:w-5 sm:h-5" />
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* 🎧 Spatial Audio Toggle */}
+          <div className="relative flex items-center" ref={spatialButtonRef}>
+            <div className="w-px h-8 bg-white/10 mx-1"></div>
+            <button
+              onClick={() => {
+                if (!spatialEnabled) {
+                  toggleSpatial();
+                  setShowWindow(true);
+                } else {
+                  setShowSpatialMenu(!showSpatialMenu);
+                }
+              }}
+              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+                spatialEnabled
+                  ? "bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] active:scale-95"
+                  : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
+              }`}
+              title={spatialEnabled ? "Spatial Audio Seçenekleri" : "Spatial Audio: Kapalı"}
+            >
+              <div className="relative z-10">
+                <Radar size={20} className="sm:w-5 sm:h-5" />
+              </div>
+              {spatialEnabled && (
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-400 animate-pulse shadow-[0_0_6px_rgba(99,102,241,0.6)]" />
+              )}
+            </button>
+
+            {/* Spatial Audio Menüsü */}
+            {showSpatialMenu && spatialEnabled && (
+              <div
+                ref={spatialMenuRef}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-[99999] w-64 animate-scaleIn origin-bottom bg-[#111214] border border-white/10 overflow-hidden"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                <div className="p-1.5 space-y-1">
+                  <div className="px-3 py-2 flex items-center gap-2 mb-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                    <span className="text-xs font-bold text-white/90">Spatial Audio Aktif</span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setShowSpatialMenu(false);
+                      setShowWindow(true);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
+                  >
+                    <Radar size={16} />
+                    Arayüzü Göster
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowSpatialMenu(false);
+                      toggleSpatial();
+                      setShowWindow(false);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
+                  >
+                    <Radar size={16} className="opacity-50" />
+                    Spatial Audio'yu Kapat
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Ayırıcı */}
           <div className="w-px h-8 bg-white/10 mx-1"></div>

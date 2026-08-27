@@ -1,7 +1,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
-import { RoomEvent } from "livekit-client";
+import { RoomEvent, ConnectionState } from "livekit-client";
 import { Mic, MicOff, VolumeX, Headphones, ShieldAlert } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
@@ -22,7 +22,8 @@ export default function ModerationHandler({
   setIsDeafened, 
   isMuted, 
   setIsMuted, 
-  playSound 
+  playSound,
+  onKicked
 }) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
@@ -197,8 +198,34 @@ export default function ModerationHandler({
                     icon: <Headphones className="text-green-500" size={18} />
                   });
                 }
-             }
-          }
+              } else if (data.action === "VOICE_KICK") {
+                // 🚪 Sesli kanaldan atılma
+                const modName = data.moderatorName || "Bir yetkili";
+                
+                playSound("left");
+                toast.error(`${modName} tarafından sesli kanaldan atıldınız.`, {
+                  duration: 8000
+                });
+
+                // Room'dan disconnect ol
+                setTimeout(() => {
+                  try {
+                    // 1. Önce ebeveyn UI'ı sıfırla (onKicked/onLeave çağır)
+                    if (onKicked) {
+                      onKicked();
+                    }
+                    
+                    // 2. Sonra room bağlantısını kes (zaten unmount sırasında da kesilir ama garanti olsun)
+                    if (room && room.state !== ConnectionState.Disconnected) {
+                      room.disconnect();
+                      console.log("🚪 Sesli kanaldan atıldı:", modName);
+                    }
+                  } catch (e) {
+                    console.error("Voice kick disconnect hatası:", e);
+                  }
+                }, 800); // UI Toast'un okunması için biraz daha süre tanıyalım
+              }
+           }
         } else if (data.type === "MODERATION_REQUEST") {
           // Eğer moderasyon yetkim varsa bu talepleri gör
           // (Actually, check if I have the permission locally)

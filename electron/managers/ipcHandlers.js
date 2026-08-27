@@ -1,4 +1,4 @@
-const { ipcMain, desktopCapturer, shell, autoUpdater, app } = require('electron');
+const { ipcMain, desktopCapturer, shell, autoUpdater, app, screen } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { AccessToken } = require("livekit-server-sdk");
@@ -234,7 +234,92 @@ const startLocalAuthServer = (mainWindow) => {
 // ============================================
 // IPC HANDLERS REGISTRATION
 // ============================================
-function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQuittingFn) {
+function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQuittingFn, pointerOverlayFns, voiceOverlayFns) {
+     const { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive } = pointerOverlayFns || {};
+     const { 
+       createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, 
+       closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, 
+       getVoiceOverlayPosition, startAntiCheatCheck, stopAntiCheatCheck 
+     } = voiceOverlayFns || {};
+
+     ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {
+        if (updatePointerOverlay) updatePointerOverlay(pointers, forceShow);
+     });
+
+     ipcMain.on("close-pointer-overlay", () => {
+        if (closePointerOverlay) closePointerOverlay();
+     });
+
+     ipcMain.on("set-overlay-interactive", (event, interactive) => {
+        if (setPointerOverlayInteractive) setPointerOverlayInteractive(interactive);
+     });
+
+     ipcMain.on("revoke-pointer-overlay", (event, id) => {
+        if (mainWindowFn()) {
+           mainWindowFn().webContents.send("pointer-overlay-revoked", id);
+        }
+     });
+
+     ipcMain.on("revoke-all-pointers", () => {
+        if (mainWindowFn()) {
+           mainWindowFn().webContents.send("pointer-overlay-revoke-all");
+        }
+     });
+
+     // ============================================
+     // 🎮 VOICE OVERLAY IPC HANDLERS
+     // ============================================
+     ipcMain.on("update-voice-overlay", (event, data) => {
+        if (updateVoiceOverlay) updateVoiceOverlay(data);
+     });
+
+     ipcMain.on("set-voice-overlay-interactive", (event, interactive) => {
+        if (setVoiceOverlayInteractive) setVoiceOverlayInteractive(interactive);
+     });
+
+     ipcMain.on("close-voice-overlay", () => {
+        if (closeVoiceOverlay) closeVoiceOverlay();
+     });
+
+     ipcMain.on("set-voice-overlay-enabled", (event, enabled, settings) => {
+        if (enabled) {
+           if (createVoiceOverlayWindow) {
+              createVoiceOverlayWindow(settings);
+              if (settings?.antiCheatProtection && startAntiCheatCheck) {
+                 startAntiCheatCheck();
+              }
+           }
+        } else {
+           if (destroyVoiceOverlay) destroyVoiceOverlay();
+           if (stopAntiCheatCheck) stopAntiCheatCheck();
+        }
+     });
+
+     ipcMain.on("voice-overlay-action", (event, action, payload) => {
+        // Actions from overlay → forwarded to main renderer window
+        switch (action) {
+           case 'toggle-mute':
+           case 'leave':
+              // Forward to main window
+              if (mainWindowFn()) {
+                 mainWindowFn().webContents.send("voice-overlay-action-response", action, payload);
+              }
+              break;
+           case 'drag':
+              if (moveVoiceOverlay && payload) {
+                 moveVoiceOverlay(payload.dx || 0, payload.dy || 0);
+              }
+              break;
+           case 'save-position':
+              if (getVoiceOverlayPosition && mainWindowFn()) {
+                 const pos = getVoiceOverlayPosition();
+                 if (pos) {
+                    mainWindowFn().webContents.send("voice-overlay-action-response", 'position-saved', pos);
+                 }
+              }
+              break;
+        }
+     });
     
     // ============================================
     // AUTH
@@ -457,6 +542,25 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQu
             return { success: true };
         }
         return { success: false, error: "Input Manager not initialized" };
+    });
+
+    // ============================================
+    // 🖱️ CURSOR POSITION (Screen Share)
+    // ============================================
+    ipcMain.handle("get-mouse-position", () => {
+        try {
+            const point = screen.getCursorScreenPoint();
+            const primaryDisplay = screen.getPrimaryDisplay();
+            const { width, height } = primaryDisplay.workAreaSize;
+            return {
+                x: point.x,
+                y: point.y,
+                screenWidth: width,
+                screenHeight: height
+            };
+        } catch (e) {
+            return null;
+        }
     });
 }
 
