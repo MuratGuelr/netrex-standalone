@@ -536,11 +536,10 @@ export default function Home() {
 
     const handlePopState = () => {
       // Açık modal varsa önce onu kapat
-      if (showCreateServerModal || showJoinServerModal || showAddServerSelectionModal || showVoiceSwitchModal) {
+      if (showCreateServerModal || showJoinServerModal || showAddServerSelectionModal) {
         setShowCreateServerModal(false);
         setShowJoinServerModal(false);
         setShowAddServerSelectionModal(false);
-        setShowVoiceSwitchModal(false);
         window.history.pushState({ app: "netrex" }, "", window.location.href);
         return;
       }

@@ -17,7 +17,8 @@ import {
   Music,
   Hand,
   UserPlus,
-  Radar
+  Radar,
+  SwitchCamera
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -151,6 +152,9 @@ export default function BottomControls({
   useEffect(() => { showSpatialMenuRef.current = showSpatialMenu; }, [showSpatialMenu]);
   const spatialMenuRef = useRef(null);
   const spatialButtonRef = useRef(null);
+
+  // 📱 Ön/Arka Kamera Yönü (Mobile Camera Facing Mode)
+  const [cameraFacingMode, setCameraFacingMode] = useState("user");
 
   const stateRef = useRef({
     isMuted,
@@ -459,11 +463,12 @@ export default function BottomControls({
       if (newState) {
         // Çözünürlük ayarlarını belirle
         const resolutionMap = {
-          "240p": { width: 426, height: 240, bitrate: 150000 },
-          "360p": { width: 640, height: 360, bitrate: 300000 },
-          "480p": { width: 854, height: 480, bitrate: 500000 },
+          "240p": { width: 426, height: 240, bitrate: 120000 },
+          "360p": { width: 640, height: 360, bitrate: 250000 },
+          "480p": { width: 854, height: 480, bitrate: 450000 },
+          "720p": { width: 1280, height: 720, bitrate: 750000 },
         };
-        const selectedResolution = resolutionMap[videoResolution] || resolutionMap["240p"];
+        const selectedResolution = resolutionMap[videoResolution] || resolutionMap["720p"] || resolutionMap["480p"];
         const selectedFps = videoFrameRate || 18;
 
         // Önce eski video track'i kaldır (eğer varsa)
@@ -491,7 +496,7 @@ export default function BottomControls({
             width: { ideal: selectedResolution.width },
             height: { ideal: selectedResolution.height },
             frameRate: { ideal: selectedFps },
-            facingMode: "user",
+            facingMode: { ideal: cameraFacingMode },
           },
         };
 
@@ -501,7 +506,7 @@ export default function BottomControls({
         } catch (constraintErr) {
           console.warn("Kamera ideal constraint ile açılamadı, temel mod deneniyor:", constraintErr);
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
+            video: { facingMode: { ideal: cameraFacingMode } },
             audio: false,
           });
         }
@@ -801,7 +806,70 @@ export default function BottomControls({
       // Toggle bittiğini işaretle (event listener'ları tekrar aktif et)
       isTogglingCameraRef.current = false;
     }
-  }, [enableCamera, videoId, videoResolution, videoFrameRate, localParticipant, setIsCameraOn, isCameraOn]);
+  }, [enableCamera, videoId, videoResolution, videoFrameRate, localParticipant, setIsCameraOn, isCameraOn, cameraFacingMode]);
+
+  // 📱 Ön/Arka Kamera Değiştir (Flip Camera)
+  const switchCameraFacingMode = useCallback(async () => {
+    const nextMode = cameraFacingMode === "user" ? "environment" : "user";
+    setCameraFacingMode(nextMode);
+
+    if (!localParticipant || !isCameraOn) {
+      toastOnce(nextMode === "environment" ? "Arka kamera seçildi" : "Ön kamera seçildi", "info");
+      return;
+    }
+
+    try {
+      // Mevcut video track'i kaldır
+      const existingTracks = localParticipant
+        .getTrackPublications()
+        .filter((pub) => pub.source === Track.Source.Camera);
+      for (const trackPub of existingTracks) {
+        if (trackPub.track) {
+          trackPub.track.stop();
+          await localParticipant.unpublishTrack(trackPub.track).catch(() => {});
+        }
+      }
+
+      const resolutionMap = {
+        "240p": { width: 426, height: 240, bitrate: 120000 },
+        "360p": { width: 640, height: 360, bitrate: 250000 },
+        "480p": { width: 854, height: 480, bitrate: 450000 },
+        "720p": { width: 1280, height: 720, bitrate: 750000 },
+      };
+      const selectedResolution = resolutionMap[videoResolution] || resolutionMap["720p"] || resolutionMap["480p"];
+      const selectedFps = videoFrameRate || 18;
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: nextMode },
+          width: { ideal: selectedResolution.width },
+          height: { ideal: selectedResolution.height },
+          frameRate: { ideal: selectedFps },
+        },
+        audio: false,
+      });
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const publication = await localParticipant.publishTrack(videoTrack, {
+          source: Track.Source.Camera,
+          videoEncoding: {
+            maxBitrate: selectedResolution.bitrate,
+            maxFramerate: selectedFps,
+          },
+          videoCodec: videoCodec || "vp8",
+          simulcast: false,
+        });
+        if (publication?.track) {
+          publication.track.enabled = true;
+        }
+        toastOnce(nextMode === "environment" ? "Arka kameraya geçildi" : "Ön kameraya geçildi", "success");
+      }
+    } catch (err) {
+      console.warn("Kamera değiştirilemedi:", err);
+      toastOnce("Kamera değiştirilemedi", "error");
+    }
+  }, [cameraFacingMode, localParticipant, isCameraOn, videoResolution, videoFrameRate, videoCodec]);
 
   const startScreenShare = async ({
     resolution,
@@ -1161,9 +1229,20 @@ export default function BottomControls({
                 {isCameraOn ? <Video size={20} className="sm:w-5 sm:h-5" /> : <VideoOff size={20} className="sm:w-5 sm:h-5" />}
               </div>
             </button>
+
+            {/* Ön / Arka Kamera Değiştirme Butonu (Kamera açıkken görünür) */}
+            {isCameraOn && (
+              <button
+                onClick={switchCameraFacingMode}
+                className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 hover:text-white transition-all duration-300 active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                title={cameraFacingMode === "user" ? "Arka Kameraya Geç" : "Ön Kameraya Geç"}
+              >
+                <SwitchCamera size={19} className="sm:w-5 sm:h-5" />
+              </button>
+            )}
             
-            {/* Ekran Paylaşımı Butonu (Mobilde ekran paylaşımı desteklenmediği için gizlenir) */}
-            <div className="relative hidden sm:block" ref={screenShareButtonRef}>
+            {/* Ekran Paylaşımı Butonu (Telefonda kaldırılmıştır, sadece masaüstü md:block ekranlarda gösterilir) */}
+            <div className="relative hidden md:block" ref={screenShareButtonRef}>
               <button
                 onClick={() => {
                   if (isScreenSharing) {

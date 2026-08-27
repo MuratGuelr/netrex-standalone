@@ -87,7 +87,7 @@ export const useSettingsStore = create(
 
       // Kamera
       cameraMirrorEffect: true, // Ayna efekti
-      videoResolution: "480p", // "240p" | "360p" | "480p"
+      videoResolution: "720p", // "240p" | "360p" | "480p" | "720p"
       videoFrameRate: 24, // 15 | 18 | 24
 
       // Kontrol Çubuğu Ayarları

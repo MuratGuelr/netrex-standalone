@@ -229,9 +229,9 @@ export default function VideoSettingsSection({ videoInputs }) {
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[ 
-                    { value: "240p", label: "240p", desc: "Düşük" },
-                    { value: "360p", label: "360p", desc: "Normal" },
-                    { value: "480p", label: "480p", desc: "Yüksek" },
+                    { value: "360p", label: "360p", desc: "Düşük" },
+                    { value: "480p", label: "480p", desc: "Normal" },
+                    { value: "720p", label: "720p", desc: "HD" },
                   ].map((res) => (
                     <button
                       key={res.value}
