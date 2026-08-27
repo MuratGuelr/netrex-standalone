@@ -4,8 +4,13 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
   signOut,
   deleteUser,
   updateProfile,
@@ -27,6 +32,24 @@ export const useAuthStore = create((set) => ({
   isLoading: true,
 
   initializeAuth: () => {
+    // 🌐 Web: Ensure browser persistence and handle redirect result
+    if (typeof window !== "undefined") {
+      setPersistence(auth, browserLocalPersistence).catch((err) => {
+        console.warn("Auth persistence warning:", err);
+      });
+
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result?.user) {
+            toast.success("Giriş başarılı!");
+          }
+        })
+        .catch((err) => {
+          if (err.code === "auth/missing-initial-state" || err.code === "auth/popup-closed-by-user") return;
+          console.warn("Redirect result error:", err);
+        });
+    }
+
     if (typeof window !== "undefined" && window.netrex?.onOAuthSuccess) {
       window.netrex.onOAuthSuccess(async (token) => {
         try {
@@ -139,16 +162,33 @@ export const useAuthStore = create((set) => ({
   // 🌐 Web Google Login — signInWithPopup (Electron'da kullanılmaz)
   loginWithGooglePopup: async () => {
     try {
+      if (typeof window !== "undefined") {
+        await setPersistence(auth, browserLocalPersistence).catch(() => {});
+      }
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
       toast.success("Google ile giriş başarılı!");
     } catch (error) {
-      // Kullanıcı popup'ı kapattıysa hata verme
+      // Kullanıcı popup'ı kapattıysa veya missing initial state oluştuysa sessizce geç
       if (error.code === 'auth/popup-closed-by-user') return;
       if (error.code === 'auth/cancelled-popup-request') return;
+      if (error.code === 'auth/missing-initial-state') return;
+
+      // Popup engellendiyse redirect'e yönlendir
+      if (error.code === 'auth/popup-blocked') {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          console.error("Redirect auth error:", redirectErr);
+        }
+      }
+
       console.error("Google Popup Login Error:", error);
-      toast.error("Google ile giriş başarısız: " + error.message);
+      toast.error("Google ile giriş başarısız: " + (error.message || "Lütfen tekrar deneyin."));
     }
   },
 
