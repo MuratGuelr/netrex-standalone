@@ -1,7 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { UserPlus, Settings, Plus, Trash2, LogOut } from "lucide-react";
+import { UserPlus, Settings, Plus, Trash2, LogOut, Users } from "lucide-react";
+import { useServerStore } from "@/src/store/serverStore";
 
 /**
  * 📋 ServerDropdownMenu - OPTIMIZED Dropdown Menu
@@ -25,6 +26,15 @@ const ServerDropdownMenu = memo(function ServerDropdownMenu({
         <UserPlus size={18} />
         <span className="text-sm font-semibold">Davet Et</span>
       </button>
+
+      {/* Üye Listesi */}
+      <MenuButton 
+        icon={<Users size={18} />} 
+        label="Üye Listesi" 
+        onClick={() => {
+          useServerStore.getState().setMobileMemberDrawerOpen(true);
+        }} 
+      />
 
       <div className="h-px bg-white/10 my-1 mx-2" />
 

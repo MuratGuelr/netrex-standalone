@@ -1367,8 +1367,11 @@ body.disable-animations * {
   bottom: 0;
   z-index: 9001;
   background: linear-gradient(to bottom, #1a1b1e, #111214);
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }

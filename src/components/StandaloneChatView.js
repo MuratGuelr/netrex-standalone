@@ -9,11 +9,11 @@ import ChatView from "@/src/components/ChatView";
 import { useChatStore } from "@/src/store/chatStore";
 import { useServerStore } from "@/src/store/serverStore";
 import { useMemo } from "react";
-import { Hash, MessageSquare, ChevronLeft } from "lucide-react";
+import { Hash, MessageSquare, ChevronLeft, Users } from "lucide-react";
 
 export default function StandaloneChatView({ channelId, username, userId, onBack }) {
   const { currentChannel } = useChatStore();
-  const { channels } = useServerStore();
+  const { channels, currentServer, setMobileMemberDrawerOpen } = useServerStore();
   
   const channelName = useMemo(() => {
     if (currentChannel?.name) return currentChannel.name;
@@ -52,7 +52,19 @@ export default function StandaloneChatView({ channelId, username, userId, onBack
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+            {/* Member List Button (Mobile & Desktop) */}
+            {currentServer && (
+              <button
+                onClick={() => setMobileMemberDrawerOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.05] text-[#949ba4] hover:text-white transition-all text-xs font-semibold shadow-sm active:scale-95"
+                title="Sunucu Üyelerini Göster"
+              >
+                <Users className="w-4 h-4 text-indigo-400" />
+                <span className="hidden xs:inline">Üyeler</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
               <MessageSquare className="w-3.5 h-3.5 text-[#949ba4]" />
               <span className="text-[11px] text-[#949ba4] font-medium hidden sm:inline">Sohbet</span>
             </div>

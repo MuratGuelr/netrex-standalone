@@ -79,8 +79,8 @@ export default function MobileDrawer({
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
           >
             {/* Header */}
-            {(title || showCloseButton) && (
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 sticky top-0 bg-[#1a1b1e]/95 backdrop-blur-md z-10">
+            {Boolean(title || showCloseButton) && (
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 sticky top-0 bg-[#1a1b1e]/95 backdrop-blur-md z-10 shrink-0">
                 {title && (
                   <h2 className="text-sm font-semibold text-white">{title}</h2>
                 )}
@@ -96,7 +96,7 @@ export default function MobileDrawer({
             )}
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden mobile-scroll mobile-no-scrollbar">
+            <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
               {children}
             </div>
           </motion.div>

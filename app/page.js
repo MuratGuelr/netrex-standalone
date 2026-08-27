@@ -535,8 +535,19 @@ export default function Home() {
     window.history.pushState({ app: "netrex" }, "", window.location.href);
 
     const handlePopState = () => {
+      // Açık modal veya mobil üye çekmecesi varsa önce onu kapat
+      if (useServerStore.getState().mobileMemberDrawerOpen) {
+        useServerStore.getState().setMobileMemberDrawerOpen(false);
+        window.history.pushState({ app: "netrex" }, "", window.location.href);
+        return;
+      }
+
       // Açık modal varsa önce onu kapat
-      if (showCreateServerModal || showJoinServerModal || showAddServerSelectionModal) {
+      if (
+        showCreateServerModal ||
+        showJoinServerModal ||
+        showAddServerSelectionModal
+      ) {
         setShowCreateServerModal(false);
         setShowJoinServerModal(false);
         setShowAddServerSelectionModal(false);
@@ -809,7 +820,10 @@ export default function Home() {
           isServerLoading ? (
             <ServerMemberListSkeleton />
           ) : (
-            <ServerMemberList onClose={() => setShowMemberList(false)} />
+            <ServerMemberList onClose={() => {
+              setShowMemberList(false);
+              useServerStore.getState().setMobileMemberDrawerOpen(false);
+            }} />
           )
         ) : null
       }

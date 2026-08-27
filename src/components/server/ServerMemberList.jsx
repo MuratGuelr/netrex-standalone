@@ -350,13 +350,12 @@ export default function ServerMemberList({ onClose }) {
         )}
       </div>
 
-      <div className="flex-1 relative z-10">
-        <Virtuoso
-          style={{ height: "100%", width: "100%" }}
-          data={flatData}
-          itemContent={rowContent}
-          className="scrollbar-thin scrollbar-thumb-[#2b2d31] scrollbar-track-transparent"
-        />
+      <div className="flex-1 min-h-0 relative z-10 overflow-y-auto overflow-x-hidden p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-[#2b2d31] scrollbar-track-transparent">
+        {flatData.map((item, idx) => (
+          <div key={item.type === "header" ? `header-${item.roleId}` : (item.member?.id || item.member?.userId || idx)}>
+            {rowContent(idx, item)}
+          </div>
+        ))}
       </div>
 
       {contextMenu && (

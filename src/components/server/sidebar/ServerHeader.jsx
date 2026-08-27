@@ -1,7 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, Users } from "lucide-react";
+import { useServerStore } from "@/src/store/serverStore";
 
 /**
  * 📋 ServerHeader - OPTIMIZED Server Dashboard Header
@@ -45,8 +46,21 @@ const ServerHeader = memo(function ServerHeader({
             server.name.charAt(0).toUpperCase()
           )}
         </div>
-        <div className={`p-2 rounded-xl transition-colors ${showMenu ? 'bg-white/10 text-white' : 'text-[#5c5e66] group-hover:text-white'}`}>
-          <MoreVertical size={18} />
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              useServerStore.getState().setMobileMemberDrawerOpen(true);
+            }}
+            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[#949ba4] hover:text-white transition-colors flex items-center gap-1 text-xs"
+            title="Üye Listesi"
+          >
+            <Users size={16} className="text-indigo-400" />
+          </button>
+          <div className={`p-2 rounded-xl transition-colors ${showMenu ? 'bg-white/10 text-white' : 'text-[#5c5e66] group-hover:text-white'}`}>
+            <MoreVertical size={18} />
+          </div>
         </div>
       </div>
       
@@ -54,11 +68,26 @@ const ServerHeader = memo(function ServerHeader({
         <h1 className="font-bold text-lg text-white tracking-tight truncate">
           {server.name}
         </h1>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-          <span className="text-xs text-[#949ba4] font-medium">
-            {voiceCount} Sesli • {memberCount} Üye
-          </span>
+        <div className="flex items-center justify-between mt-1">
+          <div className="flex items-center gap-2">
+            <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+            <span className="text-xs text-[#949ba4] font-medium">
+              {voiceCount} Sesli
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              useServerStore.getState().setMobileMemberDrawerOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/5 hover:bg-indigo-500/20 text-[#949ba4] hover:text-white transition-all text-xs font-semibold"
+            title="Üyeleri Gör"
+          >
+            <Users size={12} className="text-indigo-400" />
+            <span>{memberCount} Üye</span>
+          </button>
         </div>
       </div>
     </div>

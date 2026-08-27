@@ -52,7 +52,8 @@ export default function AppShell({
   // 📱 Mobile drawer states
   const [mobileServerDrawer, setMobileServerDrawer] = useState(false);
   const [mobileChannelDrawer, setMobileChannelDrawer] = useState(false);
-  const [mobileMemberDrawer, setMobileMemberDrawer] = useState(false);
+  const mobileMemberDrawerOpen = useServerStore(state => state.mobileMemberDrawerOpen);
+  const setMobileMemberDrawerOpen = useServerStore(state => state.setMobileMemberDrawerOpen);
   const { user } = useAuthStore();
   const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
   const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
@@ -281,6 +282,7 @@ export default function AppShell({
             onGoHome={onGoHome}
             onToggleFriendsMode={onToggleFriendsMode}
             onOpenServers={() => setMobileServerDrawer(true)}
+            onOpenMembers={() => setMobileMemberDrawerOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             messengerBadge={messengerBadge}
           />
@@ -304,10 +306,13 @@ export default function AppShell({
 
           {/* Member List Drawer */}
           <MobileDrawer
-            isOpen={mobileMemberDrawer}
-            onClose={() => setMobileMemberDrawer(false)}
+            isOpen={mobileMemberDrawerOpen}
+            onClose={() => setMobileMemberDrawerOpen(false)}
             side="right"
-            title="Üyeler"
+            title=""
+            showCloseButton={false}
+            width="85vw"
+            maxWidth="320px"
           >
             {rightSidebar}
           </MobileDrawer>

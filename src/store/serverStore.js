@@ -39,6 +39,8 @@ export const useServerStore = create((set, get) => ({
   isLeavingServer: false, // Flag to prevent "kicked" notification when user leaves voluntarily
 
   voiceStates: {}, // Map of channelId -> list of users in that channel
+  mobileMemberDrawerOpen: false, // 📱 Mobil üye listesi drawer state
+  setMobileMemberDrawerOpen: (open) => set({ mobileMemberDrawerOpen: open }),
   
   // Listeners that need cleanup
   _serverListener: null,

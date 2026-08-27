@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import { Track, RoomEvent, ConnectionState } from "livekit-client";
@@ -157,6 +157,7 @@ export default function BottomControls({
 
   // 📱 Ön/Arka Kamera Yönü & Kamera Seçim Menüsü
   const [cameraFacingMode, setCameraFacingMode] = useState("user");
+  const [selectedCameraDeviceId, setSelectedCameraDeviceId] = useState(null);
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [availableCameras, setAvailableCameras] = useState([]);
   const cameraMenuRef = useRef(null);
@@ -907,7 +908,20 @@ export default function BottomControls({
   // 📱 Menüden Kamera Seç
   const handleSelectCamera = useCallback(async ({ deviceId, facingMode, label }) => {
     setShowCameraMenu(false);
-    if (facingMode) setCameraFacingMode(facingMode);
+    setSelectedCameraDeviceId(deviceId || null);
+
+    let targetFacingMode = facingMode;
+    if (!targetFacingMode) {
+      const lower = (label || "").toLowerCase();
+      if (lower.includes("ön") || lower.includes("front") || lower.includes("selfie")) {
+        targetFacingMode = "user";
+      } else if (lower.includes("arka") || lower.includes("back") || lower.includes("rear") || lower.includes("çevre")) {
+        targetFacingMode = "environment";
+      }
+    }
+    if (targetFacingMode) {
+      setCameraFacingMode(targetFacingMode);
+    }
 
     if (!localParticipant || !isCameraOn) {
       if (label) toastOnce(`${label} seçildi`, "info");
@@ -943,8 +957,8 @@ export default function BottomControls({
 
       if (deviceId) {
         videoConstraints.deviceId = { exact: deviceId };
-      } else if (facingMode) {
-        videoConstraints.facingMode = { ideal: facingMode };
+      } else if (targetFacingMode) {
+        videoConstraints.facingMode = { ideal: targetFacingMode };
       }
 
       let stream;
@@ -956,7 +970,7 @@ export default function BottomControls({
       } catch (err) {
         console.warn("Özel constraint ile kamera açılamadı, esnek mod deneniyor:", err);
         stream = await navigator.mediaDevices.getUserMedia({
-          video: facingMode ? { facingMode: { ideal: facingMode } } : true,
+          video: targetFacingMode ? { facingMode: { ideal: targetFacingMode } } : true,
           audio: false,
         });
       }
@@ -1241,6 +1255,47 @@ export default function BottomControls({
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, []); // ✅ boş array - artık listener birikmiyor
 
+  // 📱 Kameraları Türkçe ve Numaralı Olarak Formatla
+  const formattedCameraList = useMemo(() => {
+    let frontIdx = 0;
+    let backIdx = 0;
+    let otherIdx = 0;
+
+    return availableCameras.map((cam, idx) => {
+      const raw = (cam.label || "").toLowerCase();
+      let friendlyName = "";
+      let isFront = false;
+
+      if (raw.includes("front") || raw.includes("user") || raw.includes("ön") || raw.includes("facing front")) {
+        frontIdx++;
+        isFront = true;
+        friendlyName = `Ön Kamera ${frontIdx > 1 ? frontIdx : ""}`.trim();
+      } else if (raw.includes("back") || raw.includes("environment") || raw.includes("arka") || raw.includes("facing back") || raw.includes("rear")) {
+        backIdx++;
+        isFront = false;
+        if (raw.includes("wide") || raw.includes("geniş")) {
+          friendlyName = `Arka Kamera ${backIdx} (Geniş Açı)`;
+        } else if (raw.includes("ultra")) {
+          friendlyName = `Arka Kamera ${backIdx} (Ultra Geniş)`;
+        } else if (raw.includes("tele")) {
+          friendlyName = `Arka Kamera ${backIdx} (Telefoto)`;
+        } else {
+          friendlyName = `Arka Kamera ${backIdx}`;
+        }
+      } else {
+        otherIdx++;
+        friendlyName = cam.label ? cam.label : `Kamera ${otherIdx}`;
+      }
+
+      return {
+        deviceId: cam.deviceId,
+        rawLabel: cam.label,
+        friendlyName,
+        isFront,
+      };
+    });
+  }, [availableCameras]);
+
   return (
     <>
       <ScreenShareModal
@@ -1360,10 +1415,10 @@ export default function BottomControls({
                   <SwitchCamera size={19} className="sm:w-5 sm:h-5" />
                 </button>
 
-                {/* Kamera Seçim Menüsü Popover */}
+                {/* Kamera Seçim Menüsü Popover (Ekrandan Taşmayan Responsive Tasarım) */}
                 {showCameraMenu && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.8)] z-[99999] w-64 animate-scaleIn origin-bottom bg-[#111214]/95 border border-white/15 backdrop-blur-2xl p-2 flex flex-col gap-1">
-                    <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between">
+                  <div className="absolute bottom-full right-0 sm:left-1/2 sm:-translate-x-1/2 mb-3 rounded-2xl shadow-[0_16px_50px_rgba(0,0,0,0.85)] z-[99999] w-72 max-w-[calc(100vw-32px)] animate-scaleIn origin-bottom-right sm:origin-bottom bg-[#111214]/98 border border-white/15 backdrop-blur-2xl p-2.5 flex flex-col gap-1.5">
+                    <div className="px-2 py-1.5 border-b border-white/10 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                         <Camera size={13} className="text-indigo-400" />
                         Kamera Seçin
@@ -1372,48 +1427,60 @@ export default function BottomControls({
 
                     {/* Hızlı Ön Kamera Seçeneği */}
                     <button
-                      onClick={() => handleSelectCamera({ facingMode: "user", label: "Ön Kamera" })}
+                      onClick={() => handleSelectCamera({ facingMode: "user", label: "Ön Kamera (Selfie)" })}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                        cameraFacingMode === "user" ? "bg-indigo-600/30 text-white border border-indigo-500/30" : "text-[#dbdee1] hover:bg-white/5"
+                        (!selectedCameraDeviceId && cameraFacingMode === "user") || (selectedCameraDeviceId && cameraFacingMode === "user")
+                          ? "bg-indigo-600/30 text-white border border-indigo-500/40"
+                          : "text-[#dbdee1] hover:bg-white/5 hover:text-white"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <Camera size={15} className="text-indigo-400" />
-                        <span>Ön Kamera (Selfie)</span>
+                      <div className="flex items-center gap-2.5">
+                        <Camera size={15} className="text-indigo-400 shrink-0" />
+                        <span className="font-semibold">Ön Kamera (Selfie)</span>
                       </div>
-                      {cameraFacingMode === "user" && <Check size={14} className="text-indigo-400" />}
+                      {cameraFacingMode === "user" && <Check size={14} className="text-indigo-400 shrink-0" />}
                     </button>
 
                     {/* Hızlı Arka Kamera Seçeneği */}
                     <button
-                      onClick={() => handleSelectCamera({ facingMode: "environment", label: "Arka Kamera" })}
+                      onClick={() => handleSelectCamera({ facingMode: "environment", label: "Arka Kamera (Çevre)" })}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                        cameraFacingMode === "environment" ? "bg-cyan-600/30 text-white border border-cyan-500/30" : "text-[#dbdee1] hover:bg-white/5"
+                        (!selectedCameraDeviceId && cameraFacingMode === "environment") || (selectedCameraDeviceId && cameraFacingMode === "environment")
+                          ? "bg-cyan-600/30 text-white border border-cyan-500/40"
+                          : "text-[#dbdee1] hover:bg-white/5 hover:text-white"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <Camera size={15} className="text-cyan-400" />
-                        <span>Arka Kamera (Çevre)</span>
+                      <div className="flex items-center gap-2.5">
+                        <Camera size={15} className="text-cyan-400 shrink-0" />
+                        <span className="font-semibold">Arka Kamera (Çevre)</span>
                       </div>
-                      {cameraFacingMode === "environment" && <Check size={14} className="text-cyan-400" />}
+                      {cameraFacingMode === "environment" && <Check size={14} className="text-cyan-400 shrink-0" />}
                     </button>
 
-                    {/* Varsa Özel Cihaz Listesi */}
-                    {availableCameras.length > 0 && availableCameras.some(c => c.label) && (
-                      <div className="mt-1 pt-1 border-t border-white/5 flex flex-col gap-0.5">
-                        <span className="px-3 py-1 text-[10px] font-bold text-[#949ba4] uppercase">Tüm Cihazlar</span>
-                        {availableCameras.map((cam, idx) => {
-                          const label = cam.label || `Kamera ${idx + 1}`;
+                    {/* Varsa Ayrıştırılmış Tüm Cihazlar Listesi */}
+                    {formattedCameraList.length > 0 && (
+                      <div className="mt-1 pt-1.5 border-t border-white/10 flex flex-col gap-1 max-h-48 overflow-y-auto scrollbar-thin">
+                        <span className="px-2 py-0.5 text-[10px] font-bold text-[#949ba4] uppercase tracking-wider">Mevcut Donanım Kameraları</span>
+                        {formattedCameraList.map((item, idx) => {
+                          const isSelected = selectedCameraDeviceId
+                            ? selectedCameraDeviceId === item.deviceId
+                            : (item.isFront ? cameraFacingMode === "user" : cameraFacingMode === "environment");
+
                           return (
                             <button
-                              key={cam.deviceId || idx}
-                              onClick={() => handleSelectCamera({ deviceId: cam.deviceId, label })}
-                              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#949ba4] hover:text-white hover:bg-white/5 transition-all text-left truncate"
+                              key={item.deviceId || idx}
+                              onClick={() => handleSelectCamera({ deviceId: item.deviceId, facingMode: item.isFront ? "user" : "environment", label: item.friendlyName })}
+                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all text-left truncate ${
+                                isSelected
+                                  ? "bg-white/10 text-white border border-white/15 font-semibold"
+                                  : "text-[#949ba4] hover:text-white hover:bg-white/5"
+                              }`}
                             >
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
-                                <span className="truncate">{label}</span>
+                              <div className="flex items-center gap-2.5 truncate">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${item.isFront ? "bg-indigo-400" : "bg-cyan-400"}`} />
+                                <span className="truncate">{item.friendlyName}</span>
                               </div>
+                              {isSelected && <Check size={14} className={item.isFront ? "text-indigo-400 shrink-0" : "text-cyan-400 shrink-0"} />}
                             </button>
                           );
                         })}

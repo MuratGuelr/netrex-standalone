@@ -17,10 +17,7 @@ export const metadata = {
   keywords: "sesli sohbet, voice chat, discord alternatifi, güvenli iletişim",
   authors: [{ name: "Netrex Team" }],
   icons: {
-    icon: [
-      { url: "/logo.png", type: "image/png" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
+    icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
   },
@@ -40,11 +37,6 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="tr" className="dark">
-      <head>
-        <link rel="icon" href="/logo.png" type="image/png" sizes="any" />
-        <link rel="shortcut icon" href="/logo.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/logo.png" />
-      </head>
       <body className="bg-nds-bg-primary text-nds-text-primary overflow-hidden antialiased">
         <ErrorBoundary>
           <Providers>{children}</Providers>

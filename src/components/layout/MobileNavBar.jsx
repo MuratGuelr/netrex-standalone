@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Home, MessageCircle, Server, Settings, Maximize, Minimize } from "lucide-react";
+import { Home, MessageCircle, Server, Users, Settings, Maximize, Minimize } from "lucide-react";
 
 export default function MobileNavBar({
   friendsMode,
@@ -15,6 +15,7 @@ export default function MobileNavBar({
   onGoHome,
   onToggleFriendsMode,
   onOpenServers,
+  onOpenMembers,
   onOpenSettings,
   messengerBadge = 0,
 }) {
@@ -86,6 +87,17 @@ export default function MobileNavBar({
         <Server className="mobile-nav-icon" />
         <span>Sunucular</span>
       </button>
+
+      {/* Members (Only when in a server) */}
+      {hasCurrentServer && (
+        <button
+          className="mobile-nav-item"
+          onClick={onOpenMembers}
+        >
+          <Users className="mobile-nav-icon text-indigo-400" />
+          <span>Üyeler</span>
+        </button>
+      )}
 
       {/* Settings */}
       <button
