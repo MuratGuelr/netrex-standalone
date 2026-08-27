@@ -80,8 +80,13 @@ export function systemToast({ title, message, type = "info", onClick }) {
   });
 }
 
-// Standart toast objesi - Geriye uyumluluk ve Sonner API uyumluluğu için
-export const toast = {
+// Standart toast fonksiyonu & objesi - Geriye uyumluluk ve Sonner API uyumluluğu için
+function baseToast(message, opt = {}) {
+  const msgStr = typeof message === "string" ? message : (typeof message === "function" ? "Yeni Bildirim" : String(message || ""));
+  return toast.info(msgStr, opt);
+}
+
+export const toast = Object.assign(baseToast, {
   success: (m, opt = {}) => {
     if (opt.id) {
       useToastStore.getState().updateToast(opt.id, { 
@@ -158,12 +163,12 @@ export const toast = {
     return useToastStore.getState().addToast({
       title: opt.title || "İşlem Yapılıyor",
       message: m,
-      type: 'info', // Loading icon can be added to ToastItem later, using info for now
-      duration: opt.duration || 30000, // Long duration for loading
+      type: 'info',
+      duration: opt.duration || 30000,
       ...opt
     });
   },
   dismiss: (id) => {
     useToastStore.getState().dismiss(id);
   }
-};
+});

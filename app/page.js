@@ -237,46 +237,10 @@ export default function Home() {
           sound: "friend-notificaiton"
         });
 
-        // Custom Interactive Toast
-        toast((t) => (
-          <div className="flex flex-col gap-2 min-w-[280px]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10">
-                {newRequest.senderData.photoURL ? (
-                  <img src={newRequest.senderData.photoURL} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-white font-bold">
-                    {newRequest.senderData.displayName[0].toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-white leading-tight">{newRequest.senderData.displayName}</p>
-                <p className="text-[11px] text-[#949ba4]">Arkadaşlık isteği gönderdi</p>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-1">
-              <button
-                onClick={async () => {
-                  await useFriendStore.getState().acceptRequest(newRequest.id);
-                  toast.dismiss(t.id);
-                }}
-                className="flex-1 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-bold transition-colors"
-              >
-                Kabul Et
-              </button>
-              <button
-                onClick={async () => {
-                  await useFriendStore.getState().rejectRequest(newRequest.id);
-                  toast.dismiss(t.id);
-                }}
-                className="flex-1 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold transition-colors"
-              >
-                Yoksay
-              </button>
-            </div>
-          </div>
-        ), { duration: 6000, position: "bottom-right" });
+        // Toast Bildirimi
+        toast.info(`${newRequest.senderData.displayName} size arkadaşlık isteği gönderdi.`, {
+          title: "Yeni Arkadaşlık İsteği"
+        });
       }
     }
     prevRequestsLength.current = incomingRequests.length;
