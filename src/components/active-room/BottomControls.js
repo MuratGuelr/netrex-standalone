@@ -18,7 +18,9 @@ import {
   Hand,
   UserPlus,
   Radar,
-  SwitchCamera
+  SwitchCamera,
+  Camera,
+  Check
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -153,8 +155,27 @@ export default function BottomControls({
   const spatialMenuRef = useRef(null);
   const spatialButtonRef = useRef(null);
 
-  // 📱 Ön/Arka Kamera Yönü (Mobile Camera Facing Mode)
+  // 📱 Ön/Arka Kamera Yönü & Kamera Seçim Menüsü
   const [cameraFacingMode, setCameraFacingMode] = useState("user");
+  const [showCameraMenu, setShowCameraMenu] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const cameraMenuRef = useRef(null);
+
+  // Kamera menüsü dışına tıklandığında kapat
+  useEffect(() => {
+    if (!showCameraMenu) return;
+    const handleClickOutside = (e) => {
+      if (cameraMenuRef.current && !cameraMenuRef.current.contains(e.target)) {
+        setShowCameraMenu(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showCameraMenu]);
 
   const stateRef = useRef({
     isMuted,
@@ -871,6 +892,97 @@ export default function BottomControls({
     }
   }, [cameraFacingMode, localParticipant, isCameraOn, videoResolution, videoFrameRate, videoCodec]);
 
+  // 📱 Kullanılabilir Kameraları Listele
+  const fetchCameras = useCallback(async () => {
+    try {
+      if (!navigator?.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevs = devices.filter((d) => d.kind === "videoinput");
+      setAvailableCameras(videoDevs);
+    } catch (e) {
+      console.warn("Kamera listesi alınamadı:", e);
+    }
+  }, []);
+
+  // 📱 Menüden Kamera Seç
+  const handleSelectCamera = useCallback(async ({ deviceId, facingMode, label }) => {
+    setShowCameraMenu(false);
+    if (facingMode) setCameraFacingMode(facingMode);
+
+    if (!localParticipant || !isCameraOn) {
+      if (label) toastOnce(`${label} seçildi`, "info");
+      return;
+    }
+
+    try {
+      // Eski track'leri kaldır
+      const existingTracks = localParticipant
+        .getTrackPublications()
+        .filter((pub) => pub.source === Track.Source.Camera);
+      for (const trackPub of existingTracks) {
+        if (trackPub.track) {
+          trackPub.track.stop();
+          await localParticipant.unpublishTrack(trackPub.track).catch(() => {});
+        }
+      }
+
+      const resolutionMap = {
+        "240p": { width: 426, height: 240, bitrate: 120000 },
+        "360p": { width: 640, height: 360, bitrate: 250000 },
+        "480p": { width: 854, height: 480, bitrate: 450000 },
+        "720p": { width: 1280, height: 720, bitrate: 750000 },
+      };
+      const selectedResolution = resolutionMap[videoResolution] || resolutionMap["720p"] || resolutionMap["480p"];
+      const selectedFps = videoFrameRate || 18;
+
+      const videoConstraints = {
+        width: { ideal: selectedResolution.width },
+        height: { ideal: selectedResolution.height },
+        frameRate: { ideal: selectedFps },
+      };
+
+      if (deviceId) {
+        videoConstraints.deviceId = { exact: deviceId };
+      } else if (facingMode) {
+        videoConstraints.facingMode = { ideal: facingMode };
+      }
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false,
+        });
+      } catch (err) {
+        console.warn("Özel constraint ile kamera açılamadı, esnek mod deneniyor:", err);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: facingMode ? { facingMode: { ideal: facingMode } } : true,
+          audio: false,
+        });
+      }
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const publication = await localParticipant.publishTrack(videoTrack, {
+          source: Track.Source.Camera,
+          videoEncoding: {
+            maxBitrate: selectedResolution.bitrate,
+            maxFramerate: selectedFps,
+          },
+          videoCodec: videoCodec || "vp8",
+          simulcast: false,
+        });
+        if (publication?.track) {
+          publication.track.enabled = true;
+        }
+        toastOnce(label ? `${label} seçildi` : "Kamera değiştirildi", "success");
+      }
+    } catch (err) {
+      console.warn("Kamera değiştirme hatası:", err);
+      toastOnce("Kamera değiştirilemedi", "error");
+    }
+  }, [localParticipant, isCameraOn, videoResolution, videoFrameRate, videoCodec]);
+
   const startScreenShare = async ({
     resolution,
     fps,
@@ -1162,7 +1274,7 @@ export default function BottomControls({
       
       {/* Floating Control Bar Container */}
       <div 
-        className={`h-controls absolute bottom-[70px] sm:bottom-0 pb-1 sm:pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
+        className={`h-controls absolute bottom-[52px] sm:bottom-0 pb-0.5 sm:pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
           controlBarHidden 
             ? 'opacity-0 pointer-events-none translate-x-[calc(50vw-80px)] scale-[0.15]' 
             : 'opacity-100 translate-x-0 scale-100'
@@ -1176,7 +1288,7 @@ export default function BottomControls({
         <TtsStopBadge />
 
         {/* Kontrol Butonları - Floating Glass Style */}
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 relative z-10 rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+        <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-2.5 relative z-10 rounded-xl sm:rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
           {/* Inner Glow */}
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
 
@@ -1230,15 +1342,86 @@ export default function BottomControls({
               </div>
             </button>
 
-            {/* Ön / Arka Kamera Değiştirme Butonu (Kamera açıkken görünür) */}
+            {/* Ön / Arka Kamera & Cihaz Seçim Menüsü (Kamera açıkken görünür) */}
             {isCameraOn && (
-              <button
-                onClick={switchCameraFacingMode}
-                className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 hover:text-white transition-all duration-300 active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-                title={cameraFacingMode === "user" ? "Arka Kameraya Geç" : "Ön Kameraya Geç"}
-              >
-                <SwitchCamera size={19} className="sm:w-5 sm:h-5" />
-              </button>
+              <div className="relative" ref={cameraMenuRef}>
+                <button
+                  onClick={() => {
+                    fetchCameras();
+                    setShowCameraMenu(!showCameraMenu);
+                  }}
+                  className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 active:scale-95 border ${
+                    showCameraMenu
+                      ? "bg-indigo-600 text-white border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                      : "bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 hover:text-white shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                  }`}
+                  title="Kamera Seçenekleri"
+                >
+                  <SwitchCamera size={19} className="sm:w-5 sm:h-5" />
+                </button>
+
+                {/* Kamera Seçim Menüsü Popover */}
+                {showCameraMenu && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.8)] z-[99999] w-64 animate-scaleIn origin-bottom bg-[#111214]/95 border border-white/15 backdrop-blur-2xl p-2 flex flex-col gap-1">
+                    <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Camera size={13} className="text-indigo-400" />
+                        Kamera Seçin
+                      </span>
+                    </div>
+
+                    {/* Hızlı Ön Kamera Seçeneği */}
+                    <button
+                      onClick={() => handleSelectCamera({ facingMode: "user", label: "Ön Kamera" })}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                        cameraFacingMode === "user" ? "bg-indigo-600/30 text-white border border-indigo-500/30" : "text-[#dbdee1] hover:bg-white/5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Camera size={15} className="text-indigo-400" />
+                        <span>Ön Kamera (Selfie)</span>
+                      </div>
+                      {cameraFacingMode === "user" && <Check size={14} className="text-indigo-400" />}
+                    </button>
+
+                    {/* Hızlı Arka Kamera Seçeneği */}
+                    <button
+                      onClick={() => handleSelectCamera({ facingMode: "environment", label: "Arka Kamera" })}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                        cameraFacingMode === "environment" ? "bg-cyan-600/30 text-white border border-cyan-500/30" : "text-[#dbdee1] hover:bg-white/5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Camera size={15} className="text-cyan-400" />
+                        <span>Arka Kamera (Çevre)</span>
+                      </div>
+                      {cameraFacingMode === "environment" && <Check size={14} className="text-cyan-400" />}
+                    </button>
+
+                    {/* Varsa Özel Cihaz Listesi */}
+                    {availableCameras.length > 0 && availableCameras.some(c => c.label) && (
+                      <div className="mt-1 pt-1 border-t border-white/5 flex flex-col gap-0.5">
+                        <span className="px-3 py-1 text-[10px] font-bold text-[#949ba4] uppercase">Tüm Cihazlar</span>
+                        {availableCameras.map((cam, idx) => {
+                          const label = cam.label || `Kamera ${idx + 1}`;
+                          return (
+                            <button
+                              key={cam.deviceId || idx}
+                              onClick={() => handleSelectCamera({ deviceId: cam.deviceId, label })}
+                              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#949ba4] hover:text-white hover:bg-white/5 transition-all text-left truncate"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                                <span className="truncate">{label}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
             
             {/* Ekran Paylaşımı Butonu (Telefonda kaldırılmıştır, sadece masaüstü md:block ekranlarda gösterilir) */}

@@ -2051,10 +2051,11 @@ function ScreenShareStage({
           trackRef={trackRef}
           className="max-w-full max-h-full object-contain shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
           style={{
-            // Kamera track'i için ayna efekti uygula (local veya remote metadata'ya göre)
+            // Kamera track'i için ayna efekti sadece yerel katılımcıya uygula
             transform:
               trackRef.source === Track.Source.Camera &&
-              (trackRef.participant?.isLocal ? cameraMirrorEffect : remoteState.cameraMirrorEffect)
+              trackRef.participant?.isLocal &&
+              cameraMirrorEffect
                 ? "scaleX(-1)"
                 : undefined,
           }}

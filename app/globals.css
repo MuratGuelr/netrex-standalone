@@ -1540,3 +1540,17 @@ body.disable-animations * {
   transform: scale(0.95);
 }
 
+/* 📹 Video & Camera Mobile Orientation Fix */
+video {
+  image-rendering: -webkit-optimize-contrast;
+  transform-origin: center center;
+}
+
+.lk-video-container video,
+.lk-participant-media video,
+.lk-track-renderer video {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
