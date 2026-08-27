@@ -7,9 +7,9 @@ require("dotenv").config({ path: ".env.local" });
 // ============================================
 // 🌐 DUAL-MODE: Electron (static) + Web (server)
 // ============================================
-// NEXT_PUBLIC_BUILD_TARGET=web  → Normal Next.js server mode (Vercel/web deploy)
+// NEXT_PUBLIC_BUILD_TARGET=web or VERCEL=1 → Normal Next.js server mode (Vercel/web deploy)
 // NEXT_PUBLIC_BUILD_TARGET=electron (veya boş) → Static export (Electron build)
-const isWebTarget = process.env.NEXT_PUBLIC_BUILD_TARGET === 'web';
+const isWebTarget = process.env.NEXT_PUBLIC_BUILD_TARGET === 'web' || !!process.env.VERCEL;
 
 const nextConfig = {
   // Electron: Static export (generates html/css/js in /out)

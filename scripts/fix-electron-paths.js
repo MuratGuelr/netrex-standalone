@@ -3,6 +3,12 @@ const path = require('path');
 
 const outDir = path.join(__dirname, '../out');
 
+// 🌐 Web / Vercel modunda out klasörü oluşmaz, hata vermeden çık
+if (!fs.existsSync(outDir)) {
+  console.log('ℹ️ out/ dizini bulunamadı (Web/Vercel modu). Path düzeltme atlanıyor.');
+  process.exit(0);
+}
+
 function fixPathsInFile(filePath) {
   try {
     let content = fs.readFileSync(filePath, 'utf8');
