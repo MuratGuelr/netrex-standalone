@@ -578,7 +578,6 @@ export default function Home() {
     showCreateServerModal,
     showJoinServerModal,
     showAddServerSelectionModal,
-    showVoiceSwitchModal,
     activeConversation,
     currentTextChannel,
     currentServer,
