@@ -10,7 +10,8 @@ import * as playlistModule from '../../../electron/managers/youtubePlaylist';
 // Kötüye kullanım koruması: yalnızca doğrulanmış liste kimlikleri, IP başına dakikada 10 istek,
 // aynı liste 2 dakika önbelleğe alınır.
 
-export const dynamic = 'force-dynamic';
+// 'force-dynamic' statik export (Electron) derlemesini bozar; diğer route'lardaki gibi prerender = false kullanılır.
+export const prerender = false;
 
 const fetchYouTubePlaylist =
   playlistModule.fetchYouTubePlaylist || playlistModule.default?.fetchYouTubePlaylist;
