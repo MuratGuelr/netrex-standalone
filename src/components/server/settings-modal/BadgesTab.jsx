@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Avatar from "@/src/components/ui/Avatar";
 import { createPortal } from "react-dom";
 import { Award, Edit3, Trash2, Upload, Check, Palette } from "lucide-react";
 import { toast } from "sonner";
@@ -429,13 +430,14 @@ export default function BadgesTab({ badges, members, onCreate, onUpdate, onDelet
                     getMembersWithBadge(selectedBadge.id).map(member => (
                       <div key={member.id} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
                         <div className="flex items-center gap-2">
-                          {member.photoURL ? (
-                            <img src={member.photoURL} className="w-6 h-6 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-                              {member.displayName?.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <Avatar
+                            uid={member.id || member.userId}
+                            src={member.photoURL}
+                            name={member.displayName}
+                            color={member.profileColor}
+                            size="sm"
+                            borderless
+                          />
                           <span className="text-sm text-white">{member.displayName}</span>
                         </div>
                         <button 
@@ -460,13 +462,14 @@ export default function BadgesTab({ badges, members, onCreate, onUpdate, onDelet
                     getMembersWithoutBadge(selectedBadge.id).map(member => (
                       <div key={member.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
                         <div className="flex items-center gap-2">
-                          {member.photoURL ? (
-                            <img src={member.photoURL} className="w-6 h-6 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-                              {member.displayName?.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <Avatar
+                            uid={member.id || member.userId}
+                            src={member.photoURL}
+                            name={member.displayName}
+                            color={member.profileColor}
+                            size="sm"
+                            borderless
+                          />
                           <span className="text-sm text-[#dbdee1]">{member.displayName}</span>
                         </div>
                         <button 

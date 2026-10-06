@@ -11,6 +11,8 @@
  */
 
 import { Mic, MicOff, Headphones, VolumeX, Settings } from "lucide-react";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 
 export default function UserPanel({ 
   user,
@@ -21,27 +23,6 @@ export default function UserPanel({
   onSettingsClick,
   className = "" 
 }) {
-  // Generate avatar color from user ID
-  const getAvatarColor = (userId) => {
-    if (!userId) return "#6366f1";
-    const colors = [
-      "#6366f1", // Indigo
-      "#a855f7", // Purple
-      "#ec4899", // Pink
-      "#22c55e", // Green
-      "#3b82f6", // Blue
-      "#f97316", // Orange
-      "#eab308", // Yellow
-      "#14b8a6", // Teal
-    ];
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  const avatarColor = getAvatarColor(user?.uid);
   const displayName = user?.displayName || user?.email?.split("@")[0] || "Kullanıcı";
   const statusText = isMuted ? "Susturuldu" : isDeafened ? "Sağır" : "Çevrimiçi";
 
@@ -65,18 +46,14 @@ export default function UserPanel({
             text-small
             overflow-hidden
           "
-          style={{ background: avatarColor }}
         >
-          {user?.photoURL ? (
-            <img 
-              src={user.photoURL} 
-              alt={displayName}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span>{displayName.charAt(0).toUpperCase()}</span>
-          )}
+          <UserPhoto
+            uid={user?.uid}
+            src={user?.photoURL}
+            alt={displayName}
+            className="w-full h-full object-cover"
+            fallback={<AvatarFallback name={displayName} className="w-full h-full" textClassName="text-small" />}
+          />
         </div>
 
         {/* Status Indicator */}

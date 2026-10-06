@@ -10,7 +10,7 @@ export default function CreateChannelModal({ isOpen, onClose, channelType = "tex
   const [channelName, setChannelName] = useState("");
   const [selectedType, setSelectedType] = useState(channelType);
   const [isLoading, setIsLoading] = useState(false);
-  const { createChannel } = useServerStore();
+  const createChannel = useServerStore((s) => s.createChannel);
 
   useEffect(() => {
     if (isOpen) {

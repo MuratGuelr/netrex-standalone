@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Users, Ban, Shield } from "lucide-react";
 import { toast } from "sonner";
 import Button from "@/src/components/ui/Button";
+import Avatar from "@/src/components/ui/Avatar";
 import Input from "@/src/components/ui/Input";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
@@ -84,18 +85,14 @@ export default function MembersTab({ members, roles }) {
              return (
             <div key={member.id} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-xl transition-colors group">
               <div className="flex items-center gap-3">
-                {member.photoURL ? (
-                  <img 
-                    src={member.photoURL} 
-                    alt={member.displayName} 
-                    className="w-10 h-10 rounded-xl object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
-                    {member.displayName?.charAt(0).toUpperCase() || '?'}
-                  </div>
-                )}
+                <Avatar
+                  uid={member.id || member.userId}
+                  src={member.photoURL}
+                  name={member.displayName}
+                  color={member.profileColor}
+                  size="lg"
+                  borderless
+                />
                 <div>
                   <span className="text-white font-medium">{member.displayName}</span>
                   <div className="flex gap-1 mt-1">

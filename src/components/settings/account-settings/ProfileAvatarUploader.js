@@ -5,7 +5,7 @@ import {
   uploadImageToCloudinary,
   deleteImageFromCloudinary,
 } from "@/src/utils/imageUpload";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/src/lib/firebase";
 import { updateProfile } from "firebase/auth";
 import { useServerStore } from "@/src/store/serverStore";
@@ -112,11 +112,18 @@ export default function ProfileAvatarUploader() {
         await deleteImageFromCloudinary(user.photoURL);
       }
 
-      // 🔥 FIX: Google hesabıysa provider photo'suna geri dön, null'a değil
+      // Google hesabıysa Google fotoğrafına geri dön, null'a değil. Kaynaklar sırayla: Auth providerData (güncel),
+      // oturum açılırken kaydedilen googlePhotoURL, Firestore'da saklanan googlePhotoURL (providerData boş dönerse).
       const googleProvider = auth.currentUser?.providerData?.find(
         (p) => p.providerId === "google.com"
       );
-      const fallbackPhotoURL = googleProvider?.photoURL || null;
+      let fallbackPhotoURL = googleProvider?.photoURL || user.googlePhotoURL || null;
+      if (!fallbackPhotoURL) {
+        try {
+          const snap = await getDoc(doc(db, "users", user.uid));
+          fallbackPhotoURL = snap.data()?.googlePhotoURL || null;
+        } catch (e) {}
+      }
 
       // 1) Firestore users dokümanı - kaynak of truth
       await updateDoc(doc(db, "users", user.uid), {

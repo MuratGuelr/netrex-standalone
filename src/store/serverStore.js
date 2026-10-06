@@ -28,6 +28,31 @@ import {
   SERVER_NAME_MAX_LENGTH
 } from "@/src/constants/appConfig";
 
+// ── Sunucu açılırken güncelleme birleştirme ──────────────────────────────
+// Bir sunucu açılınca kanallar, roller, üyeler, rozetler ve her sesli kanalın RTDB dinleyicisi art arda kendi
+// set() çağrısını yapıyordu: her biri abone olan bileşenleri yeniden render ediyor, arayüz takılıyordu.
+// Aynı kare içindeki güncellemeleri tek set()'e birleştiriyoruz. `gen`, sunucu değiştikten sonra gelen
+// eski sunucunun verisinin yeni sunucuya yazılmasını engeller.
+let serverGen = 0;
+let pendingPatch = null;
+let flushScheduled = false;
+
+const scheduleFrame = (fn) =>
+  typeof requestAnimationFrame === "function" ? requestAnimationFrame(fn) : setTimeout(fn, 16);
+
+function batchedSet(set, gen, patch) {
+  if (gen !== serverGen) return; // eski sunucunun geç kalmış verisi
+  pendingPatch = { ...(pendingPatch || {}), ...patch };
+  if (flushScheduled) return;
+  flushScheduled = true;
+  scheduleFrame(() => {
+    flushScheduled = false;
+    const p = pendingPatch;
+    pendingPatch = null;
+    if (p && gen === serverGen) set(p);
+  });
+}
+
 export const useServerStore = create((set, get) => ({
   servers: [], // List of servers user is in
   currentServer: null,
@@ -90,6 +115,10 @@ export const useServerStore = create((set, get) => ({
     const prevServerId = get().currentServer?.id;
     if (prevServerId === serverId) return;
 
+    // Yeni sunucu nesli: bekleyen/geç kalan birleştirilmiş güncellemeler artık geçersiz
+    const gen = ++serverGen;
+    pendingPatch = null;
+
     // Cleanup previous server listeners
     const { _channelListener, _roleListener, _memberListener, _badgeListener, _inviteListener, _voiceStateListener } = get();
     if (_channelListener) _channelListener();
@@ -138,7 +167,7 @@ export const useServerStore = create((set, get) => ({
         const channels = snapshot.docs
             .map(d => ({ id: d.id, ...d.data() }))
             .sort((a, b) => (a.position || 0) - (b.position || 0));
-        set({ channels });
+        batchedSet(set, gen, { channels });
 
         // --- Voice States Listener ---
         const voiceChannels = channels.filter(c => c.type === 'voice');
@@ -161,7 +190,8 @@ export const useServerStore = create((set, get) => ({
                      const unsub = onValue(roomRef, (snapshot) => {
                          const data = snapshot.val();
                          currentVoiceStates[id] = data ? Object.values(data) : [];
-                         set({ voiceStates: { ...get().voiceStates, ...currentVoiceStates } });
+                         // currentVoiceStates kümülatif: aynı karedeki birden çok kanal güncellemesi tek set()'e iner
+                         batchedSet(set, gen, { voiceStates: { ...get().voiceStates, ...currentVoiceStates } });
                      });
                      // onValue zaten unsubscribe fonksiyonu döndürür; off() callback ile eşleşmediği için listener'ı kapatmıyordu
                      unsubs.push(unsub);
@@ -189,7 +219,7 @@ export const useServerStore = create((set, get) => ({
         const roles = snapshot.docs
             .map(d => ({ id: d.id, ...d.data() }))
             .sort((a, b) => (b.position || 0) - (a.position || 0)); // Descending for roles
-        set({ roles });
+        batchedSet(set, gen, { roles });
       }, (error) => {
         console.error("Roles listener error:", error);
       });
@@ -198,9 +228,12 @@ export const useServerStore = create((set, get) => ({
       const membersQ = query(collection(db, "servers", serverId, "members"));
       let autoRepairDone = false;
 
-      const unsubMembers = onSnapshot(membersQ, (snapshot) => {
+      // Üyeler büyük olabilir (yüzlerce kayıt + liste render'ı). Kanal listesi önce çizilsin diye dinleyici
+      // ilk karenin ardına ertelenir; sunucu açılırken her şeyin bir anda yüklenmesi takılma yaratıyordu.
+      let unsubMembersInner = null;
+      const startMembers = () => { unsubMembersInner = onSnapshot(membersQ, (snapshot) => {
         const members = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        set({ members });
+        batchedSet(set, gen, { members });
 
         // Auto-repair: Sadece ilk snapshot'ta, sadece bir kez çalış
         if (!autoRepairDone) {
@@ -230,16 +263,28 @@ export const useServerStore = create((set, get) => ({
         }
       }, (error) => {
         console.error("Members listener error:", error);
-      });
+      }); };
+      const membersTimer = setTimeout(startMembers, 150);
+      const unsubMembers = () => {
+        clearTimeout(membersTimer);
+        if (unsubMembersInner) unsubMembersInner();
+      };
 
-      // Badges Listener
+      // Badges Listener (kritik değil: daha da geç başlar)
       const badgesQ = query(collection(db, "servers", serverId, "badges"));
-      const unsubBadges = onSnapshot(badgesQ, (snapshot) => {
-        const badges = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        set({ badges });
-      }, (error) => {
-        console.error("Badges listener error:", error);
-      });
+      let unsubBadgesInner = null;
+      const badgesTimer = setTimeout(() => {
+        unsubBadgesInner = onSnapshot(badgesQ, (snapshot) => {
+          const badges = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          batchedSet(set, gen, { badges });
+        }, (error) => {
+          console.error("Badges listener error:", error);
+        });
+      }, 600);
+      const unsubBadges = () => {
+        clearTimeout(badgesTimer);
+        if (unsubBadgesInner) unsubBadgesInner();
+      };
 
       // ✅ FIX: getDoc sonucunu bekle ve TEK set() ile tüm listener'ları birlikte kaydet
       const serverDoc = await serverDocPromise;

@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import { Phone, PhoneOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 
 export default function IncomingCallModal({ caller, onAccept, onDecline, isOpen }) {
   const audioRef = useRef(null);
@@ -59,17 +61,20 @@ export default function IncomingCallModal({ caller, onAccept, onDecline, isOpen 
               <div className="absolute -inset-4 bg-indigo-500/10 rounded-full animate-pulse duration-[1500ms]" />
               
               <div className="relative z-10 w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-2xl">
-                {caller.photoURL ? (
-                  <img 
-                    src={caller.photoURL} 
-                    alt={caller.displayName} 
-                    className="w-full h-full rounded-full object-cover border-4 border-[#111214]"
-                  />
-                ) : (
-                  <div className="w-full h-full rounded-full bg-[#313338] flex items-center justify-center text-3xl font-bold text-white border-4 border-[#111214]">
-                    {caller.displayName?.[0]?.toUpperCase() || "?"}
-                  </div>
-                )}
+                <UserPhoto
+                  uid={caller.uid || caller.id}
+                  src={caller.photoURL}
+                  alt={caller.displayName}
+                  className="w-full h-full rounded-full object-cover border-4 border-[#111214]"
+                  fallback={
+                    <AvatarFallback
+                      name={caller.displayName}
+                      color={caller.profileColor}
+                      className="w-full h-full rounded-full border-4 border-[#111214]"
+                      textClassName="text-3xl font-bold"
+                    />
+                  }
+                />
               </div>
             </div>
 

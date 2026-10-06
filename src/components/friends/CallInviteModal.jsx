@@ -6,6 +6,8 @@ import { useFriendStore } from "@/src/store/friendStore";
 import { useDMStore } from "@/src/store/dmStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 
@@ -100,13 +102,20 @@ export default function CallInviteModal({ roomId, onClose }) {
                   >
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        {friend.photoURL ? (
-                          <img src={friend.photoURL} alt={friend.displayName} className="w-9 h-9 rounded-full object-cover" />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center">
-                            {friend.displayName?.[0]?.toUpperCase()}
-                          </div>
-                        )}
+                        <UserPhoto
+                          uid={friend.uid || friend.id}
+                          src={friend.photoURL}
+                          alt={friend.displayName}
+                          className="w-9 h-9 rounded-full object-cover"
+                          fallback={
+                            <AvatarFallback
+                              name={friend.displayName}
+                              color={friend.profileColor}
+                              className="w-9 h-9 rounded-full"
+                              textClassName="text-sm"
+                            />
+                          }
+                        />
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#2b2d31]
                           ${presence === "online" ? "bg-green-500" : presence === "idle" ? "bg-yellow-500" : presence === "dnd" ? "bg-red-500" : "bg-gray-500"}
                         `} />

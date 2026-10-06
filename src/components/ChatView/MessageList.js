@@ -4,6 +4,8 @@ import { Loader2, Hash } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageItem from "./MessageItem";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 
 export default function MessageList({
   messages,
@@ -71,7 +73,6 @@ export default function MessageList({
   }
 
   if (messages.length === 0) {
-    const avatarLetter = (dmPartner?.displayName || currentChannel?.name || "?")[0].toUpperCase();
     
     return (
       <motion.div 
@@ -82,10 +83,20 @@ export default function MessageList({
         <div className="w-20 h-20 relative mb-6 group">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-cyan-500/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative w-20 h-20 bg-[#1e1f22] rounded-3xl flex items-center justify-center shadow-2xl border border-white/10 backdrop-blur-sm overflow-hidden">
-            {isDM && dmPartner?.photoURL ? (
-              <img src={dmPartner.photoURL} alt="" className="w-full h-full object-cover" />
-            ) : isDM ? (
-              <span className="text-3xl font-bold text-white">{avatarLetter}</span>
+            {isDM ? (
+              <UserPhoto
+                uid={dmPartner?.uid || dmPartner?.id}
+                src={dmPartner?.photoURL}
+                className="w-full h-full object-cover"
+                fallback={
+                  <AvatarFallback
+                    name={dmPartner?.displayName}
+                    color={dmPartner?.profileColor}
+                    className="w-full h-full"
+                    textClassName="text-3xl font-bold"
+                  />
+                }
+              />
             ) : (
               <Hash size={44} className="text-white/90" />
             )}

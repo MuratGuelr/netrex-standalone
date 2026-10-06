@@ -26,6 +26,7 @@ import { useServerStore } from "@/src/store/serverStore";
 import { useOptionalRoomContext } from "@/src/hooks/useOptionalRoomContext";
 import { toast } from "@/src/utils/toast";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import Avatar from "@/src/components/ui/Avatar";
 import { uploadImageToCloudinary } from "@/src/utils/imageUpload";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 
@@ -104,7 +105,6 @@ export default function DMConversation({ onBack, onStartCall }) {
   const otherUser = realTimeUsers[otherId] || activeConversation?.otherUser;
   const presence = getEffectivePresence(otherUser);
   const blockState = otherId ? blockedUsers?.[otherId] : null; // "byMe" | "byThem" | undefined
-  const avatarLetter = (otherUser?.displayName || "?")[0].toUpperCase();
 
   // Initial focus
   useEffect(() => {
@@ -430,14 +430,14 @@ export default function DMConversation({ onBack, onStartCall }) {
           </button>
           
           <div className="relative">
-             {otherUser.photoURL ? (
-               <img src={otherUser.photoURL} alt="" className="w-8 h-8 rounded-full border border-white/10" />
-             ) : (
-               <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs font-bold text-white border border-indigo-500/30">
-                 {avatarLetter}
-               </div>
-             )}
-             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#111214] ${PRESENCE_DOT[presence] || 'bg-gray-500'}`} />
+             <Avatar
+               uid={otherUser.uid || otherUser.id}
+               src={otherUser.photoURL}
+               name={otherUser.displayName}
+               color={otherUser.profileColor}
+               size="md"
+               status={presence}
+             />
           </div>
 
           <div>

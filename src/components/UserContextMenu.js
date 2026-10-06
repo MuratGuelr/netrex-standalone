@@ -6,6 +6,8 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useFriendStore } from "@/src/store/friendStore";
 import VolumeSlider from "@/src/components/VolumeSlider";
 import ModerationPanel from "@/src/components/ModerationPanel";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 import QuickStatusManager from "@/src/components/settings/QuickStatusManager";
 
 /**
@@ -143,17 +145,20 @@ export default function UserContextMenu({
       <div className="flex items-center gap-3 px-2 pb-3 border-b border-white/[0.06]">
         <div className="relative">
           <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-md opacity-40"></div>
-          {targetMetadata.photoURL ? (
-            <img 
-              src={targetMetadata.photoURL} 
-              alt={participant.name || participant.identity}
-              className="relative w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white/10"
-            />
-          ) : (
-            <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white/10">
-              {(participant.name || participant.identity)?.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <UserPhoto
+            uid={participant.identity}
+            src={targetMetadata.photoURL}
+            alt={participant.name || participant.identity}
+            className="relative w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+            fallback={
+              <AvatarFallback
+                name={participant.name || participant.identity}
+                color={targetMetadata.profileColor}
+                className="relative w-10 h-10 rounded-full shrink-0 ring-2 ring-white/10"
+                textClassName="text-sm font-bold"
+              />
+            }
+          />
         </div>
         <div className="flex-1 min-w-0">
           <span className="text-sm font-bold text-white truncate block">

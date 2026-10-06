@@ -70,6 +70,7 @@ const MessageItem = memo(({
         <div className="absolute left-4 w-[50px] flex justify-start select-none">
           {!isSequence || showDateSeparator ? (
             <Avatar
+              uid={message.userId || message.member?.id || message.member?.userId}
               src={message.member?.photoURL || null}
               name={message.member?.displayName || message.username}
               size="md"

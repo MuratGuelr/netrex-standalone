@@ -36,6 +36,7 @@ export default function UserCard({
       `}
     >
       <Avatar
+        uid={user?.uid || user?.id}
         src={user?.photoURL}
         name={displayName}
         size="md"

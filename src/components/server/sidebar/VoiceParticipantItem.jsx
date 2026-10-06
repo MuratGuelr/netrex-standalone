@@ -41,6 +41,7 @@ const VoiceParticipantItem = memo(
         <div className={`relative flex-shrink-0 transition-opacity duration-200 ${(participant.isMuted || participant.isDeafened) ? 'opacity-50' : 'opacity-100'}`}>
           <Avatar
             size="sm"
+            uid={participant.userId}
             src={participant.photoURL || null}
             name={displayName}
             color={effectiveColor}

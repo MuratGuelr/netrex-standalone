@@ -7,6 +7,8 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useUpdateStore } from "@/src/store/updateStore";
 import { createPortal } from "react-dom";
 import { useServerStore } from "@/src/store/serverStore";
+import UserPhoto from "@/src/components/ui/UserPhoto";
+import { AvatarFallback } from "@/src/components/ui/Avatar";
 
 export default function RailUserPanel() {
   const { user } = useAuthStore();
@@ -95,16 +97,6 @@ export default function RailUserPanel() {
   };
   const currentStatus = statusConfig[userStatus] || statusConfig.offline;
 
-  // Avatar bileşeniyle birebir aynı initials mantığı: "Random Kullanıcı" → "RK"
-  const initials = (() => {
-    const name = user?.displayName?.trim();
-    if (!name) return "?";
-    const parts = name.split(" ").filter(Boolean);
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (
-      parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
-    ).toUpperCase();
-  })();
 
   return (
     <>
@@ -152,21 +144,20 @@ export default function RailUserPanel() {
             <div className="absolute inset-0 bg-[#313338]" />
 
             <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-lg z-10">
-              {user?.photoURL ? (
-                <img
-                  src={user.photoURL}
-                  alt={user.displayName || "Avatar"}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-white font-bold text-lg"
-                  style={{ background: effectiveProfileColor }}
-                >
-                  {initials}
-                </div>
-              )}
+              <UserPhoto
+                uid={user?.uid}
+                src={user?.photoURL}
+                alt={user?.displayName || "Avatar"}
+                className="w-full h-full object-cover"
+                fallback={
+                  <AvatarFallback
+                    name={user?.displayName}
+                    color={effectiveProfileColor}
+                    className="w-full h-full"
+                    textClassName="text-lg font-bold"
+                  />
+                }
+              />
             </div>
           </div>
 
@@ -213,21 +204,20 @@ export default function RailUserPanel() {
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="flex items-center gap-3 relative z-10">
                 <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 shadow-lg border border-white/10">
-                  {user?.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName || "Avatar"}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center text-white font-bold text-lg"
-                      style={{ background: effectiveProfileColor }}
-                    >
-                      {initials}
-                    </div>
-                  )}
+                  <UserPhoto
+                    uid={user?.uid}
+                    src={user?.photoURL}
+                    alt={user?.displayName || "Avatar"}
+                    className="w-full h-full object-cover"
+                    fallback={
+                      <AvatarFallback
+                        name={user?.displayName}
+                        color={effectiveProfileColor}
+                        className="w-full h-full"
+                        textClassName="text-lg font-bold"
+                      />
+                    }
+                  />
                 </div>
 
                 {/* Bilgi */}

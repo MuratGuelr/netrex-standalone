@@ -29,6 +29,7 @@ import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useAuthStore } from "@/src/store/authStore";
 import { useChatStore } from "@/src/store/chatStore";
+import { useShallow } from "zustand/react/shallow";
 import { useServerStore } from "@/src/store/serverStore";
 import { useDMStore } from "@/src/store/dmStore";
 import { getLiveKitToken, getLiveKitServerInfo } from "@/src/lib/platformBridge";
@@ -494,7 +495,19 @@ export default function ActiveRoom({
     setChatPosition,
     chatWidth,
     setChatWidth,
-  } = useChatStore();
+  } = useChatStore(
+    // Seçicisiz abonelik her sohbet mesajında/yazıyor bilgisinde tüm odayı yeniden render ediyordu
+    useShallow((s) => ({
+      showChatPanel: s.showChatPanel,
+      setShowChatPanel: s.setShowChatPanel,
+      currentChannel: s.currentChannel,
+      clearCurrentChannel: s.clearCurrentChannel,
+      chatPosition: s.chatPosition,
+      setChatPosition: s.setChatPosition,
+      chatWidth: s.chatWidth,
+      setChatWidth: s.setChatWidth,
+    })),
+  );
   const [contextMenu, setContextMenu] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [pinnedStreamIds, setPinnedStreamIds] = useState([]); // ✅ Faz 2: Çoklu yayın desteği
@@ -698,7 +711,7 @@ export default function ActiveRoom({
     }
   }, [disableAnimations]);
   const { playSound } = useSoundEffects();
-  const { channels } = useServerStore();
+  const channels = useServerStore((s) => s.channels);
 
   // NOT: useLocalParticipant hook'u sadece LiveKitRoom içinde çalışır.
   // Mikrofon senkronizasyonu MicrophoneSyncHandler bileşeninde yapılır (LiveKitRoom içinde).

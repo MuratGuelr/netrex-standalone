@@ -39,6 +39,7 @@ const MemberItem = memo(
         {/* Avatar */}
         <div className="relative shrink-0">
           <Avatar
+            uid={member.id || member.userId}
             src={member.photoURL}
             name={member.displayName}
             size="md"

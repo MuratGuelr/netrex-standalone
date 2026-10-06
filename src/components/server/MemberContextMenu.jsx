@@ -171,6 +171,7 @@ export default function MemberContextMenu({
         <div className="flex items-center gap-3">
           <div className="relative group cursor-pointer">
             <Avatar 
+               uid={member.id || member.userId}
                src={member.photoURL}
                name={member.displayName}
                size="md"

@@ -19,8 +19,9 @@ export default function CreateServerModal({ isOpen, onClose, onJoinClick }) {
   const [isUploading, setIsUploading] = useState(false);
   const [iconType, setIconType] = useState("emoji"); // "emoji" or "image"
   const fileInputRef = useRef(null);
-  const { createServer } = useServerStore();
-  const { user } = useAuthStore();
+  // Seçicisiz abonelik, modal kapalıyken bile sunucu deposundaki her değişiklikte render ediyordu
+  const createServer = useServerStore((s) => s.createServer);
+  const user = useAuthStore((s) => s.user);
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];

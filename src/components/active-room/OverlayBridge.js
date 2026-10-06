@@ -6,6 +6,7 @@ import { useSpeakingStore } from "@/src/store/speakingStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
 import { useDMStore } from "@/src/store/dmStore";
+import { useAvatarStore, watchAvatar } from "@/src/store/avatarStore";
 
 /**
  * 🎮 OverlayBridge — LiveKitRoom İÇİNDE çalışır
@@ -136,6 +137,14 @@ export default function OverlayBridge({ channelName, serverName, isDMCall, onLea
     return cleanup;
   }, [onMuteToggle, toggleDeaf, onLeave, setCustomPosition]);
 
+  // Overlay'deki herkesin güncel fotoğrafını canlı dinle (ref-sayaçlı, başka avatarlarla paylaşılır)
+  const participantIdsKey = participants.map((p) => p.identity).join(",");
+  useEffect(() => {
+    if (!overlayEnabled || !participantIdsKey) return;
+    const releases = participantIdsKey.split(",").map((id) => watchAvatar(id));
+    return () => releases.forEach((release) => release());
+  }, [overlayEnabled, participantIdsKey]);
+
   // Heartbeat loop for syncing view state
   useEffect(() => {
     if (!overlayEnabled || !window.netrex?.updateVoiceOverlay) return;
@@ -151,7 +160,9 @@ export default function OverlayBridge({ channelName, serverName, isDMCall, onLea
 
         const speaking = p.isLocal ? state.localIsSpeaking : !!state.speakingParticipants[p.identity];
 
-        const effAvatar = p.isLocal ? state.localUser?.photoURL : (metadata.photoURL || member?.photoURL || null);
+        // Canlı (Firestore) adres öncelikli; metadata/üye kaydındaki kopyalar yalnızca yedek (eskimiş olabilir)
+        const liveAvatar = useAvatarStore.getState().photos[p.identity];
+        const effAvatar = liveAvatar || (p.isLocal ? state.localUser?.photoURL : (metadata.photoURL || member?.photoURL || null));
         const effName = p.isLocal 
            ? (state.localUser?.displayName || state.localUser?.username || p.name || p.identity) 
            : (metadata.displayName || member?.displayName || member?.username || p.name || p.identity);

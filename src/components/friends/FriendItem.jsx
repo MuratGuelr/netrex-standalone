@@ -2,18 +2,21 @@
 
 /**
  * 👤 FriendItem - Single friend row with actions
- * Used in FriendList and search results
+ * Used in FriendList, friend requests and search results.
+ * Netrex tasarım dili: koyu inset satır, hover'da indigo kenarlık + sol vurgu çubuğu (üye listesiyle aynı),
+ * yumuşak tonlu eylem düğmeleri.
  */
 
 import { useState, useEffect } from "react";
-import { MessageCircle, UserMinus, MoreHorizontal, UserPlus, Check, X, Clock, ShieldAlert, Phone } from "lucide-react";
+import { MessageCircle, UserMinus, UserPlus, Check, X, Clock, Phone } from "lucide-react";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import Avatar from "@/src/components/ui/Avatar";
 
-const presenceColors = {
-  online: "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]",
-  idle: "bg-yellow-500 shadow-[0_0_6px_rgba(234,179,8,0.6)]",
-  dnd: "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]",
-  offline: "bg-gray-500",
+const presenceText = {
+  online: "text-green-400",
+  idle: "text-yellow-400",
+  dnd: "text-red-400",
+  offline: "text-[#949ba4]",
 };
 
 const presenceLabels = {
@@ -37,7 +40,6 @@ export default function FriendItem({
   friendshipId,
   unreadCount = 0,
 }) {
-  const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -61,7 +63,8 @@ export default function FriendItem({
   if (!user) return null;
 
   const presence = getEffectivePresence(user);
-  const avatarLetter = (user.displayName || "?")[0].toUpperCase();
+  const isOffline = presence === "offline";
+  const isFriendRow = variant === "friend";
 
   const handleAction = async (fn) => {
     if (actionLoading) return;
@@ -75,70 +78,59 @@ export default function FriendItem({
 
   return (
     <div
-      className="
-        group flex items-center gap-3 px-4 py-3
-        hover:bg-white/[0.04] rounded-xl
-        transition-all duration-200 cursor-pointer
-        border border-transparent hover:border-white/5
-      "
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-      onClick={() => { if (variant === "friend") onMessage?.(); }}
+      className={`
+        group/row relative flex items-center gap-3 px-3.5 py-2.5
+        bg-black/25 rounded-xl border border-white/5
+        hover:border-indigo-500/25 hover:bg-black/35
+        transition-all duration-200
+        ${isFriendRow ? "cursor-pointer" : "cursor-default"}
+      `}
+      onClick={() => { if (isFriendRow) onMessage?.(); }}
       onContextMenu={handleContextMenu}
     >
-      {/* Avatar */}
-      <div className="relative flex-shrink-0">
-        {user.photoURL ? (
-          <img
-            src={user.photoURL}
-            alt={user.displayName}
-            className="w-10 h-10 rounded-full object-cover border border-white/10"
-          />
-        ) : (
-          <div className="
-            w-10 h-10 rounded-full 
-            bg-gradient-to-br from-indigo-500/30 to-purple-500/30 
-            border border-white/10
-            flex items-center justify-center
-            text-sm font-bold text-white
-          ">
-            {avatarLetter}
-          </div>
-        )}
+      {/* Sol vurgu çubuğu (üye listesindeki gibi) */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r opacity-0 group-hover/row:opacity-100 transition-opacity duration-200" />
 
-        {/* Presence Indicator */}
-        {variant !== "search" && (
-          <div className={`
-            absolute -bottom-0.5 -right-0.5 
-            w-3.5 h-3.5 rounded-full 
-            border-2 border-[#1a1b1e]
-            ${presenceColors[presence] || presenceColors.offline}
-          `} />
-        )}
+      {/* Avatar (uygulamanın tek Avatar bileşeni: üye listesi, ses odası, mesajlarla aynı şekil/yedek/durum noktası) */}
+      <div className={`relative flex-shrink-0 transition-opacity duration-200 ${isFriendRow && isOffline ? "opacity-60 group-hover/row:opacity-100" : ""}`}>
+        <Avatar
+          uid={user.uid || user.id}
+          src={user.photoURL}
+          name={user.displayName}
+          color={user.profileColor}
+          size="lg"
+          status={variant !== "search" ? presence : undefined}
+        />
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
+      <div className={`flex-1 min-w-0 transition-opacity duration-200 ${isFriendRow && isOffline ? "opacity-70 group-hover/row:opacity-100" : ""}`}>
         <p className="text-sm font-semibold text-white truncate">
           {user.displayName || "Bilinmeyen"}
         </p>
-        <p className="text-xs text-[#949ba4] truncate">
-          {user.username 
-            ? `@${user.username}`
-            : variant === "incoming"
-              ? "Arkadaşlık isteği gönderdi"
-              : variant === "outgoing"
-                ? "İstek gönderildi"
-                : presenceLabels[presence] || "Çevrimdışı"
-          }
+        <p className="text-xs truncate flex items-center gap-1.5">
+          {variant === "incoming" ? (
+            <span className="text-[#949ba4]">Arkadaşlık isteği gönderdi</span>
+          ) : variant === "outgoing" ? (
+            <span className="text-[#949ba4]">İstek gönderildi</span>
+          ) : variant === "search" ? (
+            <span className="text-[#949ba4]">{user.username ? `@${user.username}` : ""}</span>
+          ) : (
+            <>
+              <span className={`font-medium ${presenceText[presence] || presenceText.offline}`}>
+                {presenceLabels[presence] || "Çevrimdışı"}
+              </span>
+              {user.username && <span className="text-[#5c5e66] truncate">· @{user.username}</span>}
+            </>
+          )}
         </p>
       </div>
 
       {/* Unread Badge */}
       {unreadCount > 0 && (
         <div className="
-          min-w-[20px] h-5 px-1.5 rounded-full 
-          bg-[#f23f43] border-2 border-[#1a1b1e]
+          min-w-[20px] h-5 px-1.5 rounded-full
+          bg-[#f23f43] border-2 border-[#16171a]
           flex items-center justify-center
           animate-pulse shadow-[0_0_8px_rgba(242,63,67,0.4)]
         ">
@@ -151,14 +143,14 @@ export default function FriendItem({
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         {/* Friend actions */}
-        {variant === "friend" && (
+        {isFriendRow && (
           <>
             <button
               onClick={(e) => { e.stopPropagation(); onMessage?.(); }}
               className="
                 w-9 h-9 rounded-xl flex items-center justify-center
-                bg-white/5 border border-white/10
-                text-[#dbdee1] hover:text-white hover:bg-white/10
+                bg-indigo-500/10 border border-indigo-500/20
+                text-indigo-300 hover:text-white hover:bg-indigo-500/30 hover:border-indigo-500/40
                 transition-all duration-200
               "
               title="Mesaj Gönder"
@@ -170,7 +162,7 @@ export default function FriendItem({
               className="
                 w-9 h-9 rounded-xl flex items-center justify-center
                 bg-green-500/10 border border-green-500/20
-                text-green-400 hover:text-white hover:bg-green-500/30
+                text-green-400 hover:text-white hover:bg-green-500/30 hover:border-green-500/40
                 transition-all duration-200
               "
               title="Sesli Ara"
@@ -181,10 +173,10 @@ export default function FriendItem({
               onClick={(e) => { e.stopPropagation(); handleAction(() => onRemove?.(friendshipId)); }}
               className="
                 w-9 h-9 rounded-xl flex items-center justify-center
-                bg-[#2b2d31] border border-white/5
-                text-[#b5bac1] hover:text-red-400 hover:bg-red-500/20 hover:border-red-500/30
+                bg-white/5 border border-white/10
+                text-[#b5bac1] hover:text-red-400 hover:bg-red-500/15 hover:border-red-500/30
                 transition-all duration-200
-                hidden sm:flex opacity-0 group-hover:opacity-100
+                hidden sm:flex opacity-0 group-hover/row:opacity-100
               "
               title="Arkadaşlıktan Çıkart"
               style={onRemove ? undefined : { display: "none" }}
@@ -202,8 +194,8 @@ export default function FriendItem({
               disabled={actionLoading}
               className="
                 w-9 h-9 rounded-xl flex items-center justify-center
-                bg-green-500/20 border border-green-500/30
-                text-green-400 hover:text-white hover:bg-green-500/30
+                bg-green-500/15 border border-green-500/30
+                text-green-400 hover:text-white hover:bg-green-500/35
                 transition-all duration-200
                 disabled:opacity-50
               "
@@ -216,8 +208,8 @@ export default function FriendItem({
               disabled={actionLoading}
               className="
                 w-9 h-9 rounded-xl flex items-center justify-center
-                bg-red-500/20 border border-red-500/30
-                text-red-400 hover:text-white hover:bg-red-500/30
+                bg-red-500/15 border border-red-500/30
+                text-red-400 hover:text-white hover:bg-red-500/35
                 transition-all duration-200
                 disabled:opacity-50
               "
@@ -235,8 +227,8 @@ export default function FriendItem({
             disabled={actionLoading}
             className="
               px-3 h-9 rounded-xl flex items-center justify-center gap-1.5
-              bg-[#2b2d31] border border-white/5
-              text-[#b5bac1] hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20
+              bg-white/5 border border-white/10
+              text-[#b5bac1] hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/25
               transition-all duration-200 text-xs font-medium
               disabled:opacity-50
             "
@@ -256,9 +248,9 @@ export default function FriendItem({
                 disabled={actionLoading}
                 className="
                   px-3 h-9 rounded-xl flex items-center justify-center gap-1.5
-                  bg-indigo-500/20 border border-indigo-500/30
-                  text-indigo-400 hover:text-white hover:bg-indigo-500/30
-                  transition-all duration-200 text-xs font-medium
+                  bg-indigo-500/15 border border-indigo-500/30
+                  text-indigo-300 hover:text-white hover:bg-indigo-500/35
+                  transition-all duration-200 text-xs font-semibold
                   disabled:opacity-50
                 "
               >
@@ -288,9 +280,9 @@ export default function FriendItem({
                 disabled={actionLoading}
                 className="
                   px-3 h-9 rounded-xl flex items-center justify-center gap-1.5
-                  bg-green-500/20 border border-green-500/30
-                  text-green-400 hover:text-white hover:bg-green-500/30
-                  transition-all duration-200 text-xs font-medium
+                  bg-green-500/15 border border-green-500/30
+                  text-green-400 hover:text-white hover:bg-green-500/35
+                  transition-all duration-200 text-xs font-semibold
                   disabled:opacity-50
                 "
               >
@@ -304,8 +296,8 @@ export default function FriendItem({
 
       {/* ── Context Menu ── */}
       {contextMenu && (
-        <div 
-          className="fixed z-[1000] w-48 bg-[#111214] border border-white/5 shadow-2xl rounded-xl py-1.5 animate-in fade-in zoom-in duration-150"
+        <div
+          className="fixed z-[1000] w-48 bg-[#111214] border border-white/10 shadow-2xl rounded-xl py-1.5 animate-nds-scale-in"
           style={{
             top: Math.min(contextMenu.y, window.innerHeight - 180),
             left: Math.min(contextMenu.x, window.innerWidth - 200),

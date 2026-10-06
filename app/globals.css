@@ -1276,8 +1276,19 @@ body.graphics-quality-low .backdrop-blur-3xl {
 body.graphics-quality-low .animate-pulse,
 body.graphics-quality-low .animate-pulse-slow,
 body.graphics-quality-low .animate-bounce-subtle,
-body.graphics-quality-low .animate-float {
+body.graphics-quality-low .animate-float,
+body.graphics-quality-low .animate-ping,
+body.graphics-quality-low .animate-bounce {
   animation: none !important;
+}
+
+/* Süs ışıkları: filter:blur ile yapılan büyük, mutlak konumlu dekoratif katmanlar (backdrop-filter DEĞİL).
+   Her kareyi yeniden boyayan en pahalı katmanlardan; yalnızca süs oldukları için düşük modda gizlenir.
+   İçerik bulanıklığı (sansür vb.) absolute değildir, etkilenmez. */
+body.graphics-quality-low [class*="blur-["][class*="absolute"]:not([class*="backdrop-blur"]),
+body.graphics-quality-low .blur-3xl.absolute,
+body.graphics-quality-low .blur-2xl.absolute {
+  display: none !important;
 }
 
 /* Ensure readable text in low quality mode */

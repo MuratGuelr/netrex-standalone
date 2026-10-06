@@ -38,6 +38,23 @@ let conversationSnapshotSeq = 0;
 
 const unknownUser = (uid) => ({ uid, displayName: "Bilinmeyen" });
 
+// Açılışta her DM partneri için ayrı kullanıcı dinleyicisi başlar ve her biri `users`'a kendi set()'ini yapardı
+// (50 sohbette ilk saniyede 50 art arda güncelleme). Aynı kare içindekileri tek set()'e birleştiriyoruz.
+let pendingUsers = null;
+let usersFlushScheduled = false;
+function queueUserUpdate(set, userId, data) {
+  pendingUsers = { ...(pendingUsers || {}), [userId]: data };
+  if (usersFlushScheduled) return;
+  usersFlushScheduled = true;
+  const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+  schedule(() => {
+    usersFlushScheduled = false;
+    const patch = pendingUsers;
+    pendingUsers = null; // reset() sırasında temizlenmişse patch null gelir
+    if (patch) set((state) => ({ users: { ...state.users, ...patch } }));
+  });
+}
+
 async function loadPartner(uid) {
   const live = useDMStore.getState().users[uid];
   if (live) return live;
@@ -147,12 +164,7 @@ export const useDMStore = create((set, get) => ({
       if (docSnap.exists()) {
         const data = { uid: docSnap.id, ...docSnap.data() };
         partnerDocCache.set(userId, data);
-        set((state) => ({
-          users: {
-            ...state.users,
-            [userId]: data,
-          }
-        }));
+        queueUserUpdate(set, userId, data);
       }
     }, (error) => {
       console.error("User presence listener error:", error);
@@ -807,6 +819,7 @@ export const useDMStore = create((set, get) => ({
     get().stopListeners();
     partnerDocCache.clear();
     dmPaginationCursors.clear();
+    pendingUsers = null; // çıkış yapılırken bekleyen kullanıcı güncellemeleri yeni oturuma sızmasın
     set({
       conversations: [],
       activeConversation: null,

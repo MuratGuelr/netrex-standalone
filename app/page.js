@@ -7,6 +7,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useLayoutStore } from "@/src/store/layoutStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/src/store/authStore";
 import { toast } from "@/src/utils/toast";
@@ -95,9 +97,26 @@ const LoopingAudio = ({ src }) => {
 };
 
 export default function Home() {
-  const { user, isAuth, isLoading, initializeAuth, loginAnonymously } =
-    useAuthStore();
-  const { currentServer, servers, isLoading: isServerLoading, channels } = useServerStore();
+  // Seçicisiz useXStore() çağrısı depodaki HER değişiklikte (üye listesi, ses durumları, yazıyor bilgisi…) tüm
+  // sayfayı yeniden render ediyordu; sunucu açılırken bu onlarca kez art arda oluyor ve arayüz takılıyordu.
+  // useShallow ile yalnızca gerçekten kullanılan alanlara abone oluyoruz.
+  const { user, isAuth, isLoading, initializeAuth, loginAnonymously } = useAuthStore(
+    useShallow((s) => ({
+      user: s.user,
+      isAuth: s.isAuth,
+      isLoading: s.isLoading,
+      initializeAuth: s.initializeAuth,
+      loginAnonymously: s.loginAnonymously,
+    })),
+  );
+  const { currentServer, servers, isLoading: isServerLoading, channels } = useServerStore(
+    useShallow((s) => ({
+      currentServer: s.currentServer,
+      servers: s.servers,
+      isLoading: s.isLoading,
+      channels: s.channels,
+    })),
+  );
 
   const [currentRoom, setCurrentRoom] = useState(null);
   const [currentTextChannel, setCurrentTextChannel] = useState(null);
@@ -109,26 +128,49 @@ export default function Home() {
   // ✅ Friends & DM State
   const [friendsMode, setFriendsMode] = useState(false); // Ayrı sekme: ServerRail'den aktif edilir
   const [showFriendsPanel, setShowFriendsPanel] = useState(true);
-  const { 
+  const {
     conversations,
-    activeConversation, 
-    openOrCreateConversation, 
-    selectConversation, 
+    activeConversation,
+    openOrCreateConversation,
+    selectConversation,
     clearActiveConversation,
     acceptCall,
     endCall,
     markDMAsRead,
-    unreadDMCounts
-  } = useDMStore();
-  
-  const { 
-    friends, 
-    incomingRequests, 
-    startFriendListener, 
-    startRequestListener, 
-    stopListeners: stopFriendListeners 
-  } = useFriendStore();
-  const { startConversationListener, stopListeners: stopDMListeners } = useDMStore();
+    unreadDMCounts,
+    startConversationListener,
+    stopListeners: stopDMListeners,
+  } = useDMStore(
+    useShallow((s) => ({
+      conversations: s.conversations,
+      activeConversation: s.activeConversation,
+      openOrCreateConversation: s.openOrCreateConversation,
+      selectConversation: s.selectConversation,
+      clearActiveConversation: s.clearActiveConversation,
+      acceptCall: s.acceptCall,
+      endCall: s.endCall,
+      markDMAsRead: s.markDMAsRead,
+      unreadDMCounts: s.unreadDMCounts,
+      startConversationListener: s.startConversationListener,
+      stopListeners: s.stopListeners,
+    })),
+  );
+
+  const {
+    friends,
+    incomingRequests,
+    startFriendListener,
+    startRequestListener,
+    stopListeners: stopFriendListeners
+  } = useFriendStore(
+    useShallow((s) => ({
+      friends: s.friends,
+      incomingRequests: s.incomingRequests,
+      startFriendListener: s.startFriendListener,
+      startRequestListener: s.startRequestListener,
+      stopListeners: s.stopListeners,
+    })),
+  );
   const { playSound } = useSoundEffects();
 
   // Çağrı yaşını (zaman aşımı için) güvenli hesapla
@@ -328,7 +370,6 @@ export default function Home() {
   const [viewMode, setViewMode] = useState("voice");
   const [showSplash, setShowSplash] = useState(true);
   const [showInstallUpdateSplash, setShowInstallUpdateSplash] = useState(false);
-  const [showMemberList, setShowMemberList] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -770,8 +811,6 @@ export default function Home() {
         key={currentServer.id}
         activeTextChannelId={currentTextChannel}
         onJoinChannel={handleJoinChannel}
-        onToggleMemberList={() => setShowMemberList(!showMemberList)}
-        showMemberList={showMemberList}
       />
     )
   ) : null;
@@ -827,15 +866,13 @@ export default function Home() {
             <ServerMemberListSkeleton />
           ) : (
             <ServerMemberList onClose={() => {
-              setShowMemberList(false);
+              useLayoutStore.getState().setShowMemberList(false);
               useServerStore.getState().setMobileMemberDrawerOpen(false);
             }} />
           )
         ) : null
       }
-      showRightSidebar={showMemberList}
-      onToggleRightSidebar={() => setShowMemberList(!showMemberList)}
-      onOpenRightSidebar={() => setShowMemberList(true)}
+      rightSidebarKey={currentServer?.id}
       hasRightSidebarContent={!!currentServer}
       // 📱 Mobile props
       friendsMode={friendsMode}

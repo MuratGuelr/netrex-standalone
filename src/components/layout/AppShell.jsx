@@ -10,12 +10,14 @@
  * OPTIMIZATION: useGameActivity hook removed - it should only run when connected to a room
  */
 
-import { useState, useEffect, lazy, Suspense, useCallback } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useServerStore } from "@/src/store/serverStore";
+import { useLayoutStore } from "@/src/store/layoutStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSoundManagerStore } from "@/src/store/soundManagerStore";
 import { toast } from "@/src/utils/toast";
@@ -32,10 +34,8 @@ export default function AppShell({
   children, 
   sidebar,
   rightSidebar,
+  rightSidebarKey,
   serverRail,
-  showRightSidebar = true,
-  onToggleRightSidebar,
-  onOpenRightSidebar,
   hasRightSidebarContent = false,
   className = "",
   // 📱 Mobile props
@@ -55,8 +55,46 @@ export default function AppShell({
   const [mobileChannelDrawer, setMobileChannelDrawer] = useState(false);
   const mobileMemberDrawerOpen = useServerStore(state => state.mobileMemberDrawerOpen);
   const setMobileMemberDrawerOpen = useServerStore(state => state.setMobileMemberDrawerOpen);
-  const { user } = useAuthStore();
-  const { currentServer, members, isLoading, isLeavingServer } = useServerStore();
+  // ── Sunucu değişince üye paneli "Üye listesini gizle"ye basılmış gibi kapanır, içerik kapalıyken değişir,
+  // sonra yeniden açılır. Kullanıcının kendi aç/kapa tercihi (showMemberList) bundan etkilenmez.
+  // renderKey: şu an ekranda gösterilen sunucu; anahtar farklıysa kapanma süresince ESKİ içerik dondurulur.
+  const [renderKey, setRenderKey] = useState(rightSidebarKey);
+  const [closingForSwitch, setClosingForSwitch] = useState(false);
+  const lastRightNodeRef = useRef(rightSidebar);
+  const isCurrentServer = !renderKey || rightSidebarKey === renderKey;
+  if (isCurrentServer) lastRightNodeRef.current = rightSidebar;
+  const rightNode = isCurrentServer ? rightSidebar : lastRightNodeRef.current;
+
+  useEffect(() => {
+    if (rightSidebarKey === renderKey) return;
+    if (!renderKey) {
+      // Panel zaten boştaydı (ana sayfa): kapanmayı bekleme, doğrudan aç
+      setRenderKey(rightSidebarKey);
+      return;
+    }
+    setClosingForSwitch(true);
+    // Kapanma animasyonu (0.32 sn) bitince yeni sunucuya geç ve yeniden aç
+    const t = setTimeout(() => {
+      setRenderKey(rightSidebarKey);
+      setClosingForSwitch(false);
+    }, 330);
+    return () => clearTimeout(t);
+  }, [rightSidebarKey, renderKey]);
+
+  // Üye listesi görünürlüğü depoda: değişince Home yeniden render olmaz (bkz. layoutStore)
+  const showRightSidebar = useLayoutStore((s) => s.showMemberList);
+  const panelOpen = hasRightSidebarContent && showRightSidebar && !closingForSwitch;
+  const onToggleRightSidebar = useLayoutStore((s) => s.toggleMemberList);
+  const setShowMemberList = useLayoutStore((s) => s.setShowMemberList);
+  const user = useAuthStore((s) => s.user);
+  const { currentServer, members, isLoading, isLeavingServer } = useServerStore(
+    useShallow((s) => ({
+      currentServer: s.currentServer,
+      members: s.members,
+      isLoading: s.isLoading,
+      isLeavingServer: s.isLeavingServer,
+    })),
+  );
   const showSettingsModal = useSettingsStore(state => state.showSettingsModal);
   const setSettingsOpen = useSettingsStore(state => state.setSettingsOpen);
   
@@ -145,9 +183,9 @@ export default function AppShell({
   useEffect(() => {
     if (!useMobileLayout && mobileMemberDrawerOpen) {
       setMobileMemberDrawerOpen(false);
-      onOpenRightSidebar?.();
+      setShowMemberList(true);
     }
-  }, [useMobileLayout, mobileMemberDrawerOpen, setMobileMemberDrawerOpen, onOpenRightSidebar]);
+  }, [useMobileLayout, mobileMemberDrawerOpen, setMobileMemberDrawerOpen, setShowMemberList]);
 
   return (
     <div className={`
@@ -219,8 +257,11 @@ export default function AppShell({
           </div>
 
           {/* Right Sidebar — masaüstüde göster, mobilde drawer */}
-          {!useMobileLayout && hasRightSidebarContent && (
+          {/* Panel (kapsayıcı) masaüstünde her zaman bağlı kalır: sunucu değişince ya da ana sayfaya dönünce içerik
+              sol kenar çubuğu gibi animasyonla çıkıp girer (eskiden panel bir anda yok olup beliriyordu). */}
+          {!useMobileLayout && (
             <div className="h-full flex-shrink-0 relative flex" style={{ zIndex: 'auto' }}>
+              {hasRightSidebarContent && (
               <button
                 onClick={onToggleRightSidebar}
                 className={`
@@ -244,20 +285,23 @@ export default function AppShell({
                   className={`w-4 h-4 group-hover:scale-125 group-hover:text-indigo-400 transition-all duration-300 relative z-10 ${showRightSidebar ? '' : 'rotate-180'}`} 
                 />
               </button>
+              )}
 
               <motion.div
                 initial={false}
-                animate={{ width: showRightSidebar ? 240 : 0 }}
+                animate={{ width: panelOpen ? 240 : 0 }}
                 transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
                 className="h-full overflow-hidden"
+                // Panelin içi genişlik animasyonu sırasında dışarıyı etkilemesin / yeniden boyanmasın
+                style={{ contain: "layout paint" }}
               >
                 <AnimatePresence mode="wait">
-                  {(showRightSidebar || rightSidebar) && (
+                  {rightNode && (hasRightSidebarContent || closingForSwitch) && (
                     <motion.div
                       initial={false}
-                      animate={{ 
-                        opacity: showRightSidebar ? 1 : 0,
-                        x: showRightSidebar ? 0 : 20
+                      animate={{
+                        opacity: panelOpen ? 1 : 0,
+                        x: panelOpen ? 0 : 20
                       }}
                       exit={{ opacity: 0, x: 20 }}
                       transition={{ duration: 0.25, ease: "easeOut" }}
@@ -268,7 +312,7 @@ export default function AppShell({
                         overflow-hidden
                       "
                     >
-                      {rightSidebar}
+                      {rightNode}
                     </motion.div>
                   )}
                 </AnimatePresence>

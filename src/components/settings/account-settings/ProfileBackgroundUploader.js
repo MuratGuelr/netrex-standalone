@@ -145,6 +145,7 @@ export default function ProfileBackgroundUploader({
               <div className="absolute bottom-2 left-3 flex items-center gap-2">
                 <Avatar
                   size="sm"
+                  uid={user?.uid}
                   name={user?.displayName || "Kullanıcı"}
                   src={user?.photoURL || null}
                 />

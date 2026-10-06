@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
@@ -39,9 +40,26 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
     members,
     canUserViewChannel,
     voiceStates,
-  } = useServerStore();
-  const { user } = useAuthStore();
-  const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
+  } = useServerStore(
+    // Seçicisiz abonelik roller/rozetler/mobil çekmece gibi alakasız değişikliklerde de kenar çubuğunu render ediyordu
+    useShallow((s) => ({
+      currentServer: s.currentServer,
+      channels: s.channels,
+      deleteServer: s.deleteServer,
+      members: s.members,
+      canUserViewChannel: s.canUserViewChannel,
+      voiceStates: s.voiceStates,
+    })),
+  );
+  const user = useAuthStore((s) => s.user);
+  // Seçicisiz useChatStore() her gelen sohbet mesajında (mesaj listesi, yazıyor bilgisi…) kenar çubuğunu yeniden çiziyordu
+  const { unreadCounts, currentChannel, showChatPanel } = useChatStore(
+    useShallow((s) => ({
+      unreadCounts: s.unreadCounts,
+      currentChannel: s.currentChannel,
+      showChatPanel: s.showChatPanel,
+    })),
+  );
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
   const canManageServer = useServerPermission("MANAGE_SERVER");
   const canMoveMembers = useServerPermission("MOVE_MEMBERS");

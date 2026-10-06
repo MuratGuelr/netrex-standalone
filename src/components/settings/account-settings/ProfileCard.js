@@ -300,6 +300,7 @@ const ProfileCard = memo(function ProfileCard({ user, profileColor, bgImage }) {
                   <div className="w-full h-full flex items-center justify-center text-white text-4xl font-bold">
                     <Avatar
                       size="2xl"
+                      uid={user.uid}
                       src={user.photoURL || null}
                       name={user.displayName || "Kullanıcı"}
                       color={profileColor}

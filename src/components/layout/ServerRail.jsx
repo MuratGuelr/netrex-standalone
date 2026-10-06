@@ -161,6 +161,7 @@ export default function ServerRail({ onOpenCreateModal, isRoomActive, friendsMod
               else selectConversation(convo); 
             }}
             iconUrl={convo.otherUser?.photoURL}
+            avatarUid={convo.otherId || convo.otherUser?.uid}
             badgeCount={unreadDMCounts[convo.id]}
             isRoomActive={isRoomActive}
           />

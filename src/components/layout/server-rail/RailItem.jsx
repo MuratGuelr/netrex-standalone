@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import Tooltip from "@/src/components/ui/Tooltip";
+import { useAvatarUrl } from "@/src/hooks/useAvatarUrl";
 import RailContextMenu from "./RailContextMenu";
 
 /**
@@ -13,7 +14,8 @@ const RailItem = memo(function RailItem({
   active, 
   onClick, 
   icon = null, 
-  iconUrl = null, 
+  iconUrl = null,
+  avatarUid = null, // DM satırı: kişinin güncel fotoğrafı canlı çözülür (iconUrl yalnızca yedek)
   variant = "default",
   serverId = null,
   isOwner = false,
@@ -71,7 +73,8 @@ const RailItem = memo(function RailItem({
     setShowMenu(false);
   }, [serverId]);
 
-  const effectiveIcon = localIcon || iconUrl;
+  const liveAvatar = useAvatarUrl(avatarUid, iconUrl);
+  const effectiveIcon = localIcon || (avatarUid ? liveAvatar : iconUrl);
   
   // ✅ Memoize icon rendering
   const iconContent = useMemo(() => {
@@ -180,6 +183,7 @@ const RailItem = memo(function RailItem({
     prevProps.label === nextProps.label &&
     prevProps.active === nextProps.active &&
     prevProps.iconUrl === nextProps.iconUrl &&
+    prevProps.avatarUid === nextProps.avatarUid &&
     prevProps.isOwner === nextProps.isOwner &&
     prevProps.canManage === nextProps.canManage &&
     prevProps.variant === nextProps.variant &&

@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useServerStore } from "@/src/store/serverStore";
+import { resetAvatarStore } from "@/src/store/avatarStore";
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -65,6 +66,7 @@ export const useAuthStore = create((set) => ({
 
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
+        resetAvatarStore(); // önceki oturumun fotoğraf dinleyicileri/önbelleği sızmasın
         set({ user: null, isAuth: false, isLoading: false });
         return;
       }
@@ -76,17 +78,24 @@ export const useAuthStore = create((set) => ({
         const existingDoc = await getDoc(userRef);
         const existingData = existingDoc.exists() ? existingDoc.data() : null;
 
-        // ── 2. photoURL kaynağı: Firestore kaynak of truth ──────────
-        // Eğer Firestore'da "photoURL" alanı varsa (null dahil) onu kullan.
-        // Yoksa (ilk giriş) Auth'tan al.
-        let photoURL;
-        if (existingData && "photoURL" in existingData) {
-          // Firestore'daki değeri esas al - null olsa bile
-          photoURL = existingData.photoURL ?? null;
-        } else {
-          // İlk kez giriş → Auth'taki değeri Firestore'a yaz
-          photoURL = firebaseUser.photoURL ?? null;
-        }
+        // ── 2. photoURL kaynağı ─────────────────────────────────────
+        // Google fotoğrafı: Auth'un üst düzey photoURL'si özel resim yüklenince updateProfile ile ezilir; Google'ın
+        // kendi adresi YALNIZCA providerData'da kalır, bu yüzden oradan okunur.
+        const googlePhoto =
+          firebaseUser.providerData?.find((p) => p.providerId === "google.com")?.photoURL || null;
+        const existingPhoto = existingData?.photoURL || null; // null / "" / yok → null
+        const prevGooglePhoto = existingData?.googlePhotoURL || null;
+
+        // Özel resim = Firestore'daki fotoğraf var VE Google'ınkinden farklı. Bu durumda dokunma.
+        // Aksi halde (hiç yok, null, ya da eski Google adresi) güncel Google fotoğrafını kullan.
+        // ⚠️ Eskiden Google fotoğrafı Firestore'a HİÇ yazılmıyordu: kullanıcı kendi ekranında görüyor (Auth'tan),
+        // diğer herkes Firestore'dan okuduğu için (üye listesi, DM, arkadaşlar, arama) göremiyordu. Ayrıca resmi
+        // silip Google'a dönemeyen eski kayıtlar null'da kalıyordu; burada kendiliğinden iyileşir.
+        const usingCustom =
+          !!existingPhoto && existingPhoto !== prevGooglePhoto && existingPhoto !== googlePhoto;
+        const photoURL = usingCustom
+          ? existingPhoto
+          : googlePhoto || existingPhoto || (!existingData ? firebaseUser.photoURL : null) || null;
 
         // ── 3. displayName - Firestore'daki güncelse onu kullan ─────
         const displayName =
@@ -114,7 +123,8 @@ export const useAuthStore = create((set) => ({
           email: firebaseUser.email,
           displayName,
           username: generatedUsername,
-          photoURL, // ← Firestore'dan
+          photoURL,
+          googlePhotoURL: googlePhoto, // özel resim kaldırılınca bu adrese dönülür
           isAnonymous: firebaseUser.isAnonymous,
           emailVerified: firebaseUser.emailVerified,
         };
@@ -132,6 +142,10 @@ export const useAuthStore = create((set) => ({
         if (needsUsernameUpdate) {
           syncData.username = generatedUsername;
         }
+
+        // Fotoğrafı herkesin okuduğu kaynağa (Firestore) yaz; yalnızca değiştiyse (gereksiz yazma olmasın)
+        if (photoURL !== existingPhoto) syncData.photoURL = photoURL;
+        if (googlePhoto !== prevGooglePhoto) syncData.googlePhotoURL = googlePhoto;
 
         setDoc(
           userRef,

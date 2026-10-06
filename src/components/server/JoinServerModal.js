@@ -10,7 +10,7 @@ import { toast } from "sonner";
 export default function JoinServerModal({ isOpen, onClose, onCreateClick }) {
   const [inviteCode, setInviteCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { joinServer } = useServerStore();
+  const joinServer = useServerStore((s) => s.joinServer);
   const { user } = useAuthStore();
 
   const handleSubmit = async (e) => {

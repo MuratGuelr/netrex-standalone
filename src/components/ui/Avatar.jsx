@@ -5,8 +5,9 @@
  * NDS v2.1 - border → box-shadow (dışa doğru, avatarı küçültmez)
  */
 
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useAvatarUrl } from "@/src/hooks/useAvatarUrl";
 
 const AVATAR_COLORS = [
   "#6366f1",
@@ -40,9 +41,26 @@ const getInitials = (name, maxChars = 2) => {
     .join("");
 };
 
+/**
+ * Fotoğraf yokken gösterilen TEK yedek görünüm: profil rengi (varsa) yoksa isimden türetilen sabit renk + baş harfler.
+ * Eskiden her ekran kendi yedeğini çiziyordu (profil gradyanı, düz gri, yarı saydam indigo…): aynı kişi her yerde
+ * farklı renkte görünüyordu. Şekli/boyutu çağıran verir (className).
+ */
+export function AvatarFallback({ name, color, className = "", textClassName = "" }) {
+  return (
+    <div
+      className={`flex items-center justify-center font-semibold text-white select-none ${className}`}
+      style={{ background: color || getColorFromString(name) }}
+    >
+      <span className={textClassName}>{getInitials(name)}</span>
+    </div>
+  );
+}
+
 const Avatar = forwardRef(function Avatar(
   {
-    src,
+    src: srcProp,
+    uid, // verilirse fotoğraf Firestore'dan CANLI çözülür (srcProp yalnızca ilk an / yedek)
     alt,
     name,
     size = "md",
@@ -61,6 +79,12 @@ const Avatar = forwardRef(function Avatar(
 ) {
   const useProfileColorForSpeaking = useSettingsStore((s) => s.useProfileColorForSpeaking ?? true);
   const avatarColor = color || getColorFromString(name);
+
+  // Güncel adres (canlı) + yükleme hatası ADRESE bağlı state'te. Eskiden onError elle DOM'u gizliyordu ve adres
+  // düzelse bile resim bir daha görünmüyordu (silinen resim → Google'a dönüş "rastgele renge" takılıyordu).
+  const liveSrc = useAvatarUrl(uid, srcProp);
+  const [failedSrc, setFailedSrc] = useState(null);
+  const src = liveSrc && failedSrc !== liveSrc ? liveSrc : null;
 
   // Gradient → ilk hex rengi al
   let effectiveBorderColor = borderColor;
@@ -163,20 +187,15 @@ const Avatar = forwardRef(function Avatar(
             crossOrigin="anonymous"
             referrerPolicy="no-referrer"
             onLoad={onImageLoad}
-            onError={(e) => {
-              e.target.style.display = "none";
-              e.target.parentNode
-                .querySelector(".avatar-fallback")
-                ?.classList.remove("hidden");
-            }}
+            onError={() => setFailedSrc(liveSrc)}
           />
         ) : null}
 
-        <span
-          className={`avatar-fallback ${config.text} ${src ? "hidden" : ""}`}
-        >
-          {initials}
-        </span>
+        {!src && (
+          <span className={`avatar-fallback ${config.text}`}>
+            {initials}
+          </span>
+        )}
       </div>
 
       {/* Status Indicator */}

@@ -44,6 +44,7 @@ export default function MessageBubble({
     >
       {showAvatar && (
         <Avatar
+          uid={message?.user?.uid || message?.userId}
           src={message?.user?.photoURL || message?.user?.avatarUrl || message?.avatarUrl}
           name={displayName}
           size="sm"

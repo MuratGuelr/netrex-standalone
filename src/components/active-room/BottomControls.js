@@ -25,6 +25,7 @@ import {
 import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useChatStore } from "@/src/store/chatStore";
+import { useShallow } from "zustand/react/shallow";
 import { useWatchPartyStore } from "@/src/store/watchPartyStore";
 import { useWatchPartyPermission } from "@/src/hooks/useWatchPartyPermission";
 import { useAuthStore } from "@/src/store/authStore";
@@ -115,7 +116,10 @@ export default function BottomControls({
   const toggleControlBarHidden = useSettingsStore(state => state.toggleControlBarHidden);
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
   const cameraMirrorEffect = useSettingsStore(state => state.cameraMirrorEffect);
-  const { showChatPanel, chatPosition, chatWidth } = useChatStore();
+  // Seçicisiz abonelik her sohbet mesajında alt kontrolleri de yeniden render ediyordu
+  const { showChatPanel, chatPosition, chatWidth } = useChatStore(
+    useShallow((s) => ({ showChatPanel: s.showChatPanel, chatPosition: s.chatPosition, chatWidth: s.chatWidth })),
+  );
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);

@@ -2,12 +2,13 @@
 
 /**
  * 📋 FriendList - Displays all accepted friends
- * Supports filtering by online/all
+ * Supports filtering by online/all. "Tümü" görünümünde çevrimiçi / çevrimdışı ayrı kartlarda gruplanır.
  */
 
 import { useMemo } from "react";
-import { Users, UserX } from "lucide-react";
+import { Users, UserX, Globe, Moon } from "lucide-react";
 import FriendItem from "./FriendItem";
+import { SectionCard, EmptyState } from "./FriendsUI";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
 import { useRtdbPresenceWatch } from "@/src/lib/rtdbPresence";
 
@@ -25,102 +26,67 @@ export default function FriendList({
   const friendUids = useMemo(() => friends.map((f) => f.friendData?.uid || f.friendId).filter(Boolean), [friends]);
   const livePresenceVersion = useRtdbPresenceWatch(friendUids);
 
-  const filteredFriends = useMemo(() => {
-    if (filter === "online") {
-      return friends.filter(f => {
-        const presence = getEffectivePresence(f.friendData);
-        return presence !== "offline";
-      });
-    }
-    return friends;
-  }, [friends, filter, livePresenceVersion]);
-
-  // Sort: online first, then alphabetical
-  const sortedFriends = useMemo(() => {
-    return [...filteredFriends].sort((a, b) => {
-      const presA = getEffectivePresence(a.friendData);
-      const presB = getEffectivePresence(b.friendData);
-      
-      // Online users first
-      const onlineA = presA !== "offline" ? 0 : 1;
-      const onlineB = presB !== "offline" ? 0 : 1;
-      
-      if (onlineA !== onlineB) return onlineA - onlineB;
-      
-      // Then alphabetical
-      const nameA = (a.friendData?.displayName || "").toLowerCase();
-      const nameB = (b.friendData?.displayName || "").toLowerCase();
-      return nameA.localeCompare(nameB);
+  // Satırda gösterilen canlı kullanıcı verisiyle aynı kaynaktan hesapla (filtre ile satır tutarlı olsun)
+  const { onlineFriends, offlineFriends } = useMemo(() => {
+    const byName = (a, b) =>
+      (a.friendData?.displayName || "").toLowerCase().localeCompare((b.friendData?.displayName || "").toLowerCase());
+    const online = [];
+    const offline = [];
+    friends.forEach((f) => {
+      const live = realTimeUsers[f.friendId] || f.friendData;
+      (getEffectivePresence(live) !== "offline" ? online : offline).push(f);
     });
-  }, [filteredFriends, livePresenceVersion]);
+    return { onlineFriends: online.sort(byName), offlineFriends: offline.sort(byName) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [friends, realTimeUsers, livePresenceVersion]);
 
-  // Count online
-  const onlineCount = useMemo(() => {
-    return friends.filter(f => getEffectivePresence(f.friendData) !== "offline").length;
-  }, [friends, livePresenceVersion]);
+  const renderRow = (friend) => {
+    const convo = conversations.find(c => c.participantIds?.includes(friend.friendId));
+    const unreadCount = convo ? (unreadDMCounts[convo.id] || 0) : 0;
 
-  if (sortedFriends.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-8">
-        <div className="
-          w-20 h-20 rounded-2xl 
-          bg-gradient-to-br from-[#2b2d31] to-[#1e1f22] 
-          border border-white/5 
-          flex items-center justify-center mb-6
-          shadow-lg
-        ">
-          {filter === "online" ? (
-            <Users size={36} className="text-[#5c5e66]" />
-          ) : (
-            <UserX size={36} className="text-[#5c5e66]" />
-          )}
-        </div>
-        <h3 className="text-lg font-bold text-white mb-2">
-          {filter === "online" ? "Kimse çevrimiçi değil" : "Henüz arkadaş yok"}
-        </h3>
-        <p className="text-sm text-[#949ba4] text-center max-w-sm">
-          {filter === "online"
+      <FriendItem
+        key={friend.friendshipId}
+        user={realTimeUsers[friend.friendId] || friend.friendData}
+        variant="friend"
+        friendshipId={friend.friendshipId}
+        onMessage={() => onMessage?.(friend.friendData)}
+        onRemove={onRemove}
+        onCall={() => onCall?.(friend)}
+        unreadCount={unreadCount}
+      />
+    );
+  };
+
+  const visibleCount = filter === "online" ? onlineFriends.length : friends.length;
+
+  if (visibleCount === 0) {
+    return (
+      <EmptyState
+        icon={filter === "online" ? Users : UserX}
+        title={filter === "online" ? "Kimse çevrimiçi değil" : "Henüz arkadaş yok"}
+        description={
+          filter === "online"
             ? "Arkadaşların şu anda çevrimdışı görünüyor."
             : "\"Arkadaş Ekle\" sekmesinden kullanıcı arayarak yeni arkadaşlar edinebilirsin."
-          }
-        </p>
-      </div>
+        }
+      />
     );
   }
 
   return (
-    <div className="flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-2">
-        <span className="text-xs font-bold text-[#949ba4] uppercase tracking-wider">
-          {filter === "online" ? "Çevrimiçi" : "Tüm Arkadaşlar"}
-        </span>
-        <span className="text-xs text-[#5c5e66]">—</span>
-        <span className="text-xs font-medium text-[#5c5e66]">
-          {filter === "online" ? onlineCount : sortedFriends.length}
-        </span>
-      </div>
+    <div className="flex flex-col gap-4">
+      {onlineFriends.length > 0 && (
+        <SectionCard icon={Globe} tone="green" title="Çevrimiçi" count={onlineFriends.length} countTone="green">
+          <div className="space-y-1.5">{onlineFriends.map(renderRow)}</div>
+        </SectionCard>
+      )}
 
-      {/* List */}
-      <div className="space-y-0.5">
-        {sortedFriends.map((friend) => {
-          const convo = conversations.find(c => c.participantIds?.includes(friend.friendId));
-          const unreadCount = convo ? (unreadDMCounts[convo.id] || 0) : 0;
-          
-          return (
-            <FriendItem
-              key={friend.friendshipId}
-              user={realTimeUsers[friend.friendId] || friend.friendData}
-              variant="friend"
-              friendshipId={friend.friendshipId}
-              onMessage={() => onMessage?.(friend.friendData)}
-              onRemove={onRemove}
-              onCall={() => onCall?.(friend)}
-              unreadCount={unreadCount}
-            />
-          );
-        })}
-      </div>
+      {filter === "all" && offlineFriends.length > 0 && (
+        <SectionCard icon={Moon} tone="slate" title="Çevrimdışı" count={offlineFriends.length}>
+          <div className="space-y-1.5">{offlineFriends.map(renderRow)}</div>
+        </SectionCard>
+      )}
     </div>
   );
 }

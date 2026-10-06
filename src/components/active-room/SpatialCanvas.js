@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useSpatialAudioStore } from '@/src/store/spatialAudioStore';
 import { useSpeakingStore } from '@/src/store/speakingStore';
+import UserPhoto from '@/src/components/ui/UserPhoto';
+import { AvatarFallback } from '@/src/components/ui/Avatar';
 import { useSettingsStore } from '@/src/store/settingsStore';
 import {
   calculateAudioFromPosition,
@@ -122,23 +124,21 @@ const SpatialAvatar = memo(({
           transform: isDragging ? 'scale(1.1)' : 'scale(1)',
         }}
       >
-        {photoURL ? (
-          <img
-            src={photoURL}
-            alt={displayName}
-            className="w-full h-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div
-            className="w-full h-full flex items-center justify-center text-sm font-bold text-white"
-            style={{
-              background: `linear-gradient(135deg, ${profileColor || '#6366f1'}, ${profileColor || '#8b5cf6'}cc)`,
-            }}
-          >
-            {initial}
-          </div>
-        )}
+        <UserPhoto
+          uid={userId}
+          src={photoURL}
+          alt={displayName}
+          className="w-full h-full object-cover"
+          draggable={false}
+          fallback={
+            <AvatarFallback
+              name={displayName || userId}
+              color={profileColor}
+              className="w-full h-full"
+              textClassName="text-sm font-bold"
+            />
+          }
+        />
 
         {/* Local badge */}
         {isLocal && (

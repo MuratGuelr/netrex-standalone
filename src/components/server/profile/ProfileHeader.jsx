@@ -66,6 +66,7 @@ const ProfileHeader = memo(
           <div className="flex justify-between items-end">
             <div className="relative group/avatar">
               <Avatar
+                uid={member.id || member.userId}
                 src={member.photoURL || userProfile?.photoURL}
                 name={member.displayName}
                 size="xl"

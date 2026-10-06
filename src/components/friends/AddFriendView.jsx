@@ -6,13 +6,14 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Search, UserPlus, Loader2, Users } from "lucide-react";
+import { Search, UserPlus, Loader2, Users, Sparkles } from "lucide-react";
 import { useFriendStore } from "@/src/store/friendStore";
 import { useAuthStore } from "@/src/store/authStore";
 import FriendItem from "./FriendItem";
+import { SectionCard, EmptyState } from "./FriendsUI";
 
 export default function AddFriendView() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const {
     searchResults,
     isSearching,
@@ -77,18 +78,17 @@ export default function AddFriendView() {
     }
   };
 
-  return (
-    <div className="flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-white/5">
-        <h3 className="text-lg font-bold text-white mb-1">Arkadaş Ekle</h3>
-        <p className="text-sm text-[#949ba4]">
-          Netrex kullanıcı adı ile arayabilirsin.
-        </p>
-      </div>
+  const hasQuery = !!searchQuery.trim();
 
-      {/* Search Input */}
-      <div className="px-6 py-4">
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Arama kartı */}
+      <SectionCard
+        icon={UserPlus}
+        tone="emerald"
+        title="Arkadaş Ekle"
+        description="Netrex kullanıcı adı ile arayabilirsin. En az 2 karakter girmen gerekiyor."
+      >
         <div className="relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#949ba4] pointer-events-none">
             {isSearching ? (
@@ -105,9 +105,9 @@ export default function AddFriendView() {
             placeholder="Kullanıcı adı ara..."
             className="
               w-full h-12 pl-12 pr-4
-              bg-black/30 
+              bg-black/30
               text-white placeholder:text-[#5c5e66]
-              border border-white/10 rounded-2xl
+              border border-white/10 rounded-xl
               outline-none
               focus:border-indigo-500/50 focus:shadow-[0_0_20px_rgba(99,102,241,0.15)]
               transition-all duration-300
@@ -115,68 +115,44 @@ export default function AddFriendView() {
             "
           />
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Results */}
-      <div className="flex-1 overflow-y-auto px-2">
-        {searchQuery.trim() && !isSearching && searchResults.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 px-8">
-            <div className="
-              w-16 h-16 rounded-2xl 
-              bg-[#2b2d31] border border-white/5 
-              flex items-center justify-center mb-4
-            ">
-              <Users size={28} className="text-[#5c5e66]" />
-            </div>
-            <p className="text-sm text-[#949ba4] text-center">
-              &quot;<span className="text-white font-medium">{searchQuery}</span>&quot; ile eşleşen kullanıcı bulunamadı.
-            </p>
+      {/* Sonuçlar */}
+      {searchResults.length > 0 && (
+        <SectionCard icon={Users} tone="indigo" title="Sonuçlar" count={searchResults.length}>
+          <div className="space-y-1.5">
+            {searchResults.map((result) => (
+              <FriendItem
+                key={result.uid}
+                user={result}
+                variant="search"
+                relationshipStatus={result.relationshipStatus}
+                onSendRequest={handleSendRequest}
+                onAccept={handleAcceptFromSearch}
+              />
+            ))}
           </div>
-        )}
+        </SectionCard>
+      )}
 
-        {searchResults.length > 0 && (
-          <div>
-            <div className="px-4 py-2">
-              <span className="text-xs font-bold text-[#949ba4] uppercase tracking-wider">
-                Sonuçlar — {searchResults.length}
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              {searchResults.map((result) => (
-                <FriendItem
-                  key={result.uid}
-                  user={result}
-                  variant="search"
-                  relationshipStatus={result.relationshipStatus}
-                  onSendRequest={handleSendRequest}
-                  onAccept={handleAcceptFromSearch}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+      {/* Sonuç yok */}
+      {hasQuery && !isSearching && searchResults.length === 0 && (
+        <EmptyState
+          icon={Users}
+          title="Kullanıcı bulunamadı"
+          description={`"${searchQuery}" ile eşleşen kullanıcı bulunamadı.`}
+        />
+      )}
 
-        {!searchQuery.trim() && (
-          <div className="flex flex-col items-center justify-center py-12 px-8">
-            <div className="
-              w-20 h-20 rounded-2xl 
-              bg-gradient-to-br from-indigo-500/10 to-purple-500/10 
-              border border-indigo-500/20 
-              flex items-center justify-center mb-6
-              shadow-lg
-            ">
-              <UserPlus size={36} className="text-indigo-400" />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2">
-              Yeni arkadaşlar bul
-            </h3>
-            <p className="text-sm text-[#949ba4] text-center max-w-sm">
-              Kullanıcı adı yazarak arkadaş ekleyebilirsin.
-              En az 2 karakter girmen gerekiyor.
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Henüz arama yapılmadı */}
+      {!hasQuery && (
+        <EmptyState
+          icon={Sparkles}
+          tone="indigo"
+          title="Yeni arkadaşlar bul"
+          description="Kullanıcı adı yazarak arkadaş ekleyebilirsin."
+        />
+      )}
     </div>
   );
 }

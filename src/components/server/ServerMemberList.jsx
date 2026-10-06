@@ -20,6 +20,16 @@ import {
 import { Virtuoso } from "react-virtuoso";
 import ServerMemberListSkeleton from "@/src/components/server/skeletons/ServerMemberListSkeleton";
 import { useRtdbPresenceWatch } from "@/src/lib/rtdbPresence";
+import { useShallow } from "zustand/react/shallow";
+
+// İki üye nesnesi yüzeysel olarak aynı mı? Aynıysa eski referans korunur ve MemberItem'ın memo'su işe yarar.
+function shallowEqualObj(a, b) {
+  if (a === b) return true;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if (!Object.is(a[k], b[k])) return false;
+  return true;
+}
 
 // Kullanıcı profilleri (durum, aktivite, son görülme) panel kapanıp açılınca ve sunucular arasında geçişte
 // anında dolsun diye bellekte tutulur. Aksi halde liste her açılışta herkesi "Çevrimdışı" gösterip sonra
@@ -70,8 +80,16 @@ const HeaderRow = memo(({ item }) => (
 HeaderRow.displayName = "HeaderRow";
 
 export default function ServerMemberList({ onClose }) {
-  const { members, roles, currentServer, isLoading } = useServerStore();
-  const { user: currentUser } = useAuthStore();
+  // Seçicisiz useServerStore() sesli kanala biri girip çıkınca (voiceStates değişince) bile tüm listeyi yeniden çiziyordu
+  const { members, roles, currentServer, isLoading } = useServerStore(
+    useShallow((s) => ({
+      members: s.members,
+      roles: s.roles,
+      currentServer: s.currentServer,
+      isLoading: s.isLoading,
+    })),
+  );
+  const currentUser = useAuthStore((s) => s.user);
   // Kendi profileColor'ımızı da okuyoruz (local user için fallback)
   const localProfileColor = useSettingsStore((s) => s.profileColor);
 
@@ -141,6 +159,19 @@ export default function ServerMemberList({ onClose }) {
       ready: (prev.serverId === serverId && prev.ready) || covered,
     }));
 
+    // Parçalar ayrı ayrı gelir (150 üyede 5 parça). Her biri için liste baştan hesaplanıp çizilmesin:
+    // iskelet görünürken tüm parçalar gelene kadar bekle, sonra TEK seferde yaz; liste zaten görünürken gelen
+    // güncellemeleri de kare başına tek yazıma birleştir.
+    let listVisible = covered;
+    let flushRaf = null;
+    const flushProfiles = () => {
+      flushRaf = null;
+      setUserProfiles(Object.assign({}, ...chunkProfiles));
+    };
+    const scheduleFlush = () => {
+      if (flushRaf == null) flushRaf = requestAnimationFrame(flushProfiles);
+    };
+
     for (let i = 0; i < memberIds.length; i += CHUNK_SIZE) {
       const chunkIndex = i / CHUNK_SIZE;
       const chunkIds = memberIds.slice(i, i + CHUNK_SIZE);
@@ -173,12 +204,22 @@ export default function ServerMemberList({ onClose }) {
             });
             Object.entries(profiles).forEach(([id, p]) => PROFILE_CACHE.set(id, p));
             chunkProfiles[chunkIndex] = profiles;
-            setUserProfiles(Object.assign({}, ...chunkProfiles));
             if (!chunkLoaded[chunkIndex]) {
               chunkLoaded[chunkIndex] = true;
               loadedChunks += 1;
             }
-            if (loadedChunks >= totalChunks) setProfilesReady({ serverId, ready: true });
+            if (listVisible) {
+              scheduleFlush();
+            } else if (loadedChunks >= totalChunks) {
+              // İlk yükleme tamamlandı: profilleri tek seferde yaz, iskeleti kaldır
+              listVisible = true;
+              if (flushRaf != null) {
+                cancelAnimationFrame(flushRaf);
+                flushRaf = null;
+              }
+              setUserProfiles(Object.assign({}, ...chunkProfiles));
+              setProfilesReady({ serverId, ready: true });
+            }
           },
           (error) => {
             console.error("User profiles listener error:", error);
@@ -188,7 +229,10 @@ export default function ServerMemberList({ onClose }) {
       );
     }
 
-    return () => unsubscribes.forEach((unsub) => unsub());
+    return () => {
+      if (flushRaf != null) cancelAnimationFrame(flushRaf);
+      unsubscribes.forEach((unsub) => unsub());
+    };
   }, [memberIdsKey]); // ✅ Sadece üye ID'leri değişince yeniden bağlan
 
   const profileModalTimeoutRef = useRef(null);
@@ -222,8 +266,13 @@ export default function ServerMemberList({ onClose }) {
   }, []);
 
   // ✅ enrichedMembers - profileColor kaynağı: Firestore users > member doc > local store (sadece kendi)
+  // Önceki hesabın nesneleri: içerik değişmediyse AYNI referans döner, böylece MemberItem'ın memo'su işe yarar
+  // (aksi halde her hesapta yüzlerce satır gereksiz yeniden render oluyordu).
+  const enrichedCacheRef = useRef(new Map());
   const enrichedMembers = useMemo(() => {
-    return members.map((member) => {
+    const prevCache = enrichedCacheRef.current;
+    const nextCache = new Map();
+    const list = members.map((member) => {
       const memberId = member.id || member.userId;
       const userProfile = userProfiles[memberId] || {};
       const isCurrentUser =
@@ -252,7 +301,7 @@ export default function ServerMemberList({ onClose }) {
           ? userProfile.photoURL
           : member.photoURL || (isCurrentUser ? currentUser.photoURL : null);
 
-      return {
+      const enriched = {
         ...member,
         displayName:
           member.displayName ||
@@ -267,7 +316,13 @@ export default function ServerMemberList({ onClose }) {
         customStatus: userProfile.customStatus || member.customStatus,
         customStatusColor: userProfile.customStatusColor,
       };
+      const prev = prevCache.get(memberId);
+      const result = prev && shallowEqualObj(prev, enriched) ? prev : enriched;
+      nextCache.set(memberId, result);
+      return result;
     });
+    enrichedCacheRef.current = nextCache;
+    return list;
   }, [members, currentUser, userProfiles, localProfileColor, nowTick, livePresenceVersion]);
 
   const groupedMembers = useMemo(() => {
@@ -431,7 +486,11 @@ export default function ServerMemberList({ onClose }) {
 
       <div className="flex-1 min-h-0 relative z-10 overflow-y-auto overflow-x-hidden p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-[#2b2d31] scrollbar-track-transparent">
         {flatData.map((item, idx) => (
-          <div key={item.type === "header" ? `header-${item.roleId}` : (item.member?.id || item.member?.userId || idx)}>
+          <div
+            key={item.type === "header" ? `header-${item.roleId}` : (item.member?.id || item.member?.userId || idx)}
+            // Ekran dışındaki satırların yerleşim/boyama maliyetini atlar (yüzlerce üyede belirgin kazanç)
+            style={{ contentVisibility: "auto", containIntrinsicSize: "auto 44px" }}
+          >
             {rowContent(idx, item)}
           </div>
         ))}

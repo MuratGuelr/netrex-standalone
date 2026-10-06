@@ -20,6 +20,7 @@ import { useSpeakingStore } from "@/src/store/speakingStore";
 import { useAuthStore } from "@/src/store/authStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 import { useRemoteSpeaking } from "@/src/hooks/useRemoteSpeaking";
+import UserPhoto from "@/src/components/ui/UserPhoto";
 
 const UserCard = ({
   participant,
@@ -482,16 +483,13 @@ const UserCard = ({
                 />
               )}
 
-              {effectivePhotoURL ? (
-                <img
-                  src={effectivePhotoURL}
-                  alt={effectiveDisplayName}
-                  className="w-full h-full object-cover rounded-2xl relative z-10"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span className="relative z-10 uppercase">{getInitials(effectiveDisplayName)}</span>
-              )}
+              <UserPhoto
+                uid={participant.identity}
+                src={effectivePhotoURL}
+                alt={effectiveDisplayName}
+                className="w-full h-full object-cover rounded-2xl relative z-10"
+                fallback={<span className="relative z-10 uppercase">{getInitials(effectiveDisplayName)}</span>}
+              />
 
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
