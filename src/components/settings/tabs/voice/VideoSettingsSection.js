@@ -4,7 +4,7 @@ import { useRoomContext } from "@livekit/components-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import ToggleSwitch from "../../ToggleSwitch";
 
-export default function VideoSettingsSection({ videoInputs }) {
+export default function VideoSettingsSection({ videoInputs, onDevicesChanged }) {
   let room;
   try {
     room = useRoomContext();
@@ -57,6 +57,8 @@ export default function VideoSettingsSection({ videoInputs }) {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+        // Kamera izni artık verildi: cihaz adları ancak şimdi okunabilir, listeyi yenile
+        onDevicesChanged?.();
       } catch (e) {
         console.error("Kamera önizleme hatası:", e);
         if (active) {
@@ -137,9 +139,10 @@ export default function VideoSettingsSection({ videoInputs }) {
                   className="w-full bg-[#1e1f22] border border-white/10 text-white p-2.5 rounded-lg hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer pl-9 transition-all duration-300 relative z-10"
                 >
                   {videoInputs.length > 0 ? (
-                    videoInputs.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Kamera ${d.deviceId.slice(0, 5)}`}
+                    videoInputs.map((d, i) => (
+                      <option key={d.deviceId || `cam-${i}`} value={d.deviceId}>
+                        {/* İzin verilene kadar tarayıcı kamera adını vermez; "Önizle"den sonra gerçek ad gelir */}
+                        {d.label || `Kamera ${i + 1}`}
                       </option>
                     ))
                   ) : (
