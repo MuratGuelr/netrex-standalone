@@ -25,6 +25,10 @@ export default function VideoSettingsSection({ videoInputs, onDevicesChanged }) 
 
   const videoRef = useRef(null);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
+  // Efekt dizinin kendisine değil yalnızca "kamera var mı"ya bağlı olmalı: cihaz listesi yenilenince (kamera açılınca
+  // tarayıcı devicechange verir, ayrıca onDevicesChanged listeyi yeniler) dizi yeni referans alır ve önizleme
+  // kendini kapatıp açan sonsuz döngüye giriyordu (telefonda bariz).
+  const hasCameras = videoInputs.length > 0;
 
   // Kamera Önizleme
   useEffect(() => {
@@ -35,18 +39,27 @@ export default function VideoSettingsSection({ videoInputs, onDevicesChanged }) 
     if (!enableCamera || !isPreviewActive) return;
 
     const initVideo = async () => {
-      if (videoInputs.length === 0) return;
+      if (!hasCameras) return;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId:
-              videoId !== "default"
-                ? { exact: videoId }
-                : undefined,
-            width: { ideal: 640 },
-            height: { ideal: 360 },
-          },
-        });
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId:
+                videoId !== "default"
+                  ? { exact: videoId }
+                  : undefined,
+              width: { ideal: 640 },
+              height: { ideal: 360 },
+            },
+          });
+        } catch (exactErr) {
+          // Kayıtlı cihaz kimliği artık geçersiz olabilir (telefonda sık): seçime takılmadan aç
+          if (exactErr?.name !== "OverconstrainedError" && exactErr?.name !== "NotFoundError") throw exactErr;
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 360 } },
+          });
+        }
 
         if (!active) {
           stream.getTracks().forEach((t) => t.stop());
@@ -74,7 +87,7 @@ export default function VideoSettingsSection({ videoInputs, onDevicesChanged }) 
         activeStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [videoId, videoInputs, enableCamera, isPreviewActive]);
+  }, [videoId, hasCameras, enableCamera, isPreviewActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="mb-6">

@@ -13,7 +13,10 @@ export default function CameraSettings() {
   const refreshDevices = useCallback(async () => {
     try {
       const devs = await navigator.mediaDevices.enumerateDevices();
-      setVideoInputs(devs.filter((d) => d.kind === "videoinput"));
+      const list = devs.filter((d) => d.kind === "videoinput");
+      // Liste aynıysa state'i değiştirme: gereksiz yeniden render / önizleme yeniden başlatmayı önler
+      const sig = (a) => a.map((d) => d.deviceId + "|" + d.label).join(",");
+      setVideoInputs((prev) => (sig(prev) === sig(list) ? prev : list));
     } catch (err) {
       console.error("Video device enumeration error:", err);
     }

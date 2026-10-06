@@ -806,13 +806,16 @@ function StageManager({
         );
       });
 
-      // 🔁 Kaybolan UZAK ekran yayınlarını geri dönüş için hatırla (yayıncı ekran değiştiriyor olabilir)
+      // 🔁 Kaybolan ekran/kamera yayınlarını geri dönüş için hatırla (yayıncı ekran değiştiriyor olabilir).
+      // KENDİ yayınımız da dahil: telefonda ön/arka kamera değiştirmek kamerayı bir an kaldırıp yeniden yayınlar,
+      // bu sırada büyütülmüş (pinli) görünüm kayboluyor ve geri gelmiyordu. Kullanıcı yayını elle (X / sağ tık)
+      // kapatırsa pin zaten kullanıcı tarafından kaldırılır, buradan geçmez, yani geri getirilmez.
       const lostAt = Date.now();
       pinnedStreamIds.forEach((id, index) => {
         if (stillActiveIds.includes(id)) return;
         const [identity, source] = id.includes(":") ? id.split(":") : [id, "any"];
-        // Uzak ekran paylaşımı VE kamera: kapanıp geri gelirse otomatik devam edilir
-        if (identity === localIdentity || (source !== "screen" && source !== "camera")) return;
+        // Ekran paylaşımı VE kamera: kapanıp geri gelirse otomatik devam edilir
+        if (source !== "screen" && source !== "camera") return;
         if (resumeRef.current.has(id)) return;
         const fsExit = fsExitRef.current;
         resumeRef.current.set(id, {

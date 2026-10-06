@@ -161,12 +161,48 @@ export default function BottomControls({
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [availableCameras, setAvailableCameras] = useState([]);
   const cameraMenuRef = useRef(null);
+  // Menü body'ye taşınır (alt çubuğun taşma/dönüşüm bağlamından çıkar) ve butona göre ekran içinde konumlanır
+  const cameraButtonRef = useRef(null);
+  const cameraPopoverRef = useRef(null);
+  const [cameraMenuPos, setCameraMenuPos] = useState(null);
+
+  // Menüyü butonun üstüne, ekranın dışına taşmayacak şekilde yerleştir.
+  // Eskiden butonun sağ kenarına hizalanıp 288px sola açılıyordu: telefonda buton ortada olduğu için sol kısmı ekran dışında kalıyordu.
+  const computeCameraMenuPos = useCallback(() => {
+    const btn = cameraButtonRef.current;
+    if (!btn || typeof window === "undefined") return null;
+    const r = btn.getBoundingClientRect();
+    const margin = 16;
+    const width = Math.min(288, window.innerWidth - margin * 2);
+    const left = Math.max(margin, Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - margin));
+    return {
+      left,
+      width,
+      bottom: window.innerHeight - r.top + 12,
+      maxHeight: Math.max(160, r.top - 24),
+    };
+  }, []);
+
+  // Açıkken ekran döndürme / yeniden boyutlandırmada konumu güncelle
+  useEffect(() => {
+    if (!showCameraMenu) return;
+    const update = () => setCameraMenuPos(computeCameraMenuPos());
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [showCameraMenu, computeCameraMenuPos]);
 
   // Kamera menüsü dışına tıklandığında kapat
   useEffect(() => {
     if (!showCameraMenu) return;
     const handleClickOutside = (e) => {
-      if (cameraMenuRef.current && !cameraMenuRef.current.contains(e.target)) {
+      const insideButton = cameraMenuRef.current && cameraMenuRef.current.contains(e.target);
+      const insidePopover = cameraPopoverRef.current && cameraPopoverRef.current.contains(e.target);
+      if (!insideButton && !insidePopover) {
         setShowCameraMenu(false);
       }
     };
@@ -1401,6 +1437,7 @@ export default function BottomControls({
             {isCameraOn && (
               <div className="relative" ref={cameraMenuRef}>
                 <button
+                  ref={cameraButtonRef}
                   onClick={() => {
                     fetchCameras();
                     setShowCameraMenu(!showCameraMenu);
@@ -1416,8 +1453,16 @@ export default function BottomControls({
                 </button>
 
                 {/* Kamera Seçim Menüsü Popover (Ekrandan Taşmayan Responsive Tasarım) */}
-                {showCameraMenu && (
-                  <div className="absolute bottom-full right-0 sm:left-1/2 sm:-translate-x-1/2 mb-3 rounded-2xl shadow-[0_16px_50px_rgba(0,0,0,0.85)] z-[99999] w-72 max-w-[calc(100vw-32px)] animate-scaleIn origin-bottom-right sm:origin-bottom bg-[#111214]/98 border border-white/15 backdrop-blur-2xl p-2.5 flex flex-col gap-1.5">
+                {showCameraMenu && cameraMenuPos && typeof document !== "undefined" && createPortal(
+                  <div
+                    ref={cameraPopoverRef}
+                    style={{
+                      left: cameraMenuPos.left,
+                      bottom: cameraMenuPos.bottom,
+                      width: cameraMenuPos.width,
+                      maxHeight: cameraMenuPos.maxHeight,
+                    }}
+                    className="fixed overflow-y-auto rounded-2xl shadow-[0_16px_50px_rgba(0,0,0,0.85)] z-[99999] animate-scaleIn origin-bottom bg-[#111214]/98 border border-white/15 backdrop-blur-2xl p-2.5 flex flex-col gap-1.5">
                     <div className="px-2 py-1.5 border-b border-white/10 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                         <Camera size={13} className="text-indigo-400" />
@@ -1486,7 +1531,8 @@ export default function BottomControls({
                         })}
                       </div>
                     )}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}
