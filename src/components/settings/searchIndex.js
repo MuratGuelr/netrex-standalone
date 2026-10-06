@@ -11,6 +11,8 @@ export const SETTINGS_INDEX = [
   { tab: "mic", title: "Giriş hassasiyeti (noise gate)", keywords: "hassasiyet eşik noise gate konuşma algılama ses seviyesi kısık sesim gitmiyor" },
   { tab: "mic", title: "Gürültü azaltma (Krisp)", keywords: "gürültü krisp rnnoise arka plan klavye fan sesi bastırma" },
   { tab: "mic", title: "Yankı engelleme ve otomatik kazanç", keywords: "yankı echo otomatik kazanç agc ses dengeleme" },
+  { tab: "performance", title: "Veri tasarrufu ve ağ kalitesi", keywords: "veri tasarrufu internet yavaş kötü bağlantı mb kota yayın ekran paylaşımı kamera bit hızı fps donuyor kasıyor" },
+  { tab: "performance", title: "Konuşma gecikmesi (ses gecikmesi, ping)", keywords: "gecikme ses gecikmesi geç geliyor ping latency gerçek zamanlı düşük gecikme ultra jitter tampon rtt" },
   { tab: "mic", title: "Mikrofon koruması (sesiniz karşıya gitmiyor uyarısı)", keywords: "mikrofon kapalı uyarı mute unuttum açmayı unuttum karşıya gitmiyor bekleme süresi sesli uyarı" },
 
   // Kamera

@@ -35,6 +35,10 @@ export const useSettingsStore = create(
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
+      // Veri Tasarrufu: bağlantı iyi olsa bile gönderilen veriyi (özellikle yayın/kamera) kısar
+      dataSaver: false,
+      // Konuşma gecikmesi: "normal" (tarayıcı varsayılanı) | "low" (varsayılan) | "ultra"
+      latencyMode: "low",
       rawAudioMode: false,
 
       // Gelişmiş Ses İşleme (Krisp/Discord benzeri)
@@ -209,6 +213,9 @@ export const useSettingsStore = create(
         set((state) => ({ echoCancellation: !state.echoCancellation })),
       toggleAutoGainControl: () =>
         set((state) => ({ autoGainControl: !state.autoGainControl })),
+      toggleDataSaver: () => set((state) => ({ dataSaver: !state.dataSaver })),
+      setLatencyMode: (mode) =>
+        set({ latencyMode: ["normal", "low", "ultra"].includes(mode) ? mode : "low" }),
       toggleRawAudioMode: () =>
         set((state) => ({ rawAudioMode: !state.rawAudioMode })),
 

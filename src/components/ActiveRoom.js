@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { motion, useDragControls, useMotionValue } from "framer-motion";
 import { LiveKitRoom, useTracks, AudioTrack, useRoomContext } from "@livekit/components-react";
-import { Track, DisconnectReason } from "livekit-client";
+import { Track, DisconnectReason, ConnectionErrorReason } from "livekit-client";
 import "@livekit/components-styles";
 import {
   MessageSquare,
@@ -23,6 +23,8 @@ import { toast } from "sonner";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useMicStatusStore } from "@/src/store/micStatusStore";
 import { useVoiceProcessor } from "@/src/hooks/useVoiceProcessor";
+import { useAdaptiveBandwidth } from "@/src/hooks/useAdaptiveBandwidth";
+import { useLatencyOptimizer } from "@/src/hooks/useLatencyOptimizer";
 import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useAuthStore } from "@/src/store/authStore";
@@ -90,6 +92,18 @@ function RemoteMicrophonePlayer() {
 }
 
 // GlobalChatListener moved to active-room/GlobalChatListener.js
+
+// Zayıf internette gönderilen veriyi kademeli azaltır (bkz. useAdaptiveBandwidth)
+function AdaptiveBandwidthHandler() {
+  useAdaptiveBandwidth();
+  return null;
+}
+
+// Alıcı tarafı ses gecikmesini düşürür ve ölçer (bkz. useLatencyOptimizer)
+function LatencyOptimizerHandler() {
+  useLatencyOptimizer();
+  return null;
+}
 
 // VoiceProcessorHandler
 // ✅ FIX: Hook koşulsuz çağrılmalı - ayrı bileşene taşı
@@ -1054,6 +1068,25 @@ export default function ActiveRoom({
     console.error("LiveKit bağlantı hatası:", error);
 
     const errorMessage = error?.message || "";
+    // LiveKit bir bağlantıyı reddedince hata nesnesi `reason` (NotAllowed...) ve HTTP `status` taşır; mesaj ise
+    // sunucunun ham cevabıdır ve "quota" gibi bir kelime içermeyebilir. Metne bağımlı kalmayalım.
+    const errStatus = typeof error?.status === "number" ? error.status : null;
+    const errReason = typeof error?.reason === "number" ? error.reason : null;
+    console.warn("🔎 LiveKit hata ayrıntısı:", {
+      name: error?.name,
+      message: errorMessage,
+      status: errStatus,
+      reason: errReason,
+      reasonName: error?.reasonName,
+      hasConnectedOnce: hasConnectedOnceRef.current,
+      serverIndex: serverIndexRef.current,
+    });
+    // Sunucu ulaşılabilir ama bizi reddetti (4xx/5xx): kota dolu, plan limiti, geçersiz anahtar vb.
+    // Başka sunucu denemek mantıklı. Salt ağ kopukluğunda (status yok) bu tetiklenmez.
+    const isServerRefusal =
+      errStatus !== null &&
+      (errStatus === 402 || errStatus === 403 || errStatus === 429 || errStatus >= 500 ||
+        (errReason === ConnectionErrorReason.NotAllowed && errStatus >= 400));
 
     // Quota/limit hataları - server pool ile çözülebilir
     const quotaErrors = [
@@ -1072,9 +1105,9 @@ export default function ActiveRoom({
       "server_shutdown",
     ];
 
-    const isQuotaError = quotaErrors.some((q) =>
-      errorMessage.toLowerCase().includes(q.toLowerCase()),
-    );
+    const isQuotaError =
+      isServerRefusal ||
+      quotaErrors.some((q) => errorMessage.toLowerCase().includes(q.toLowerCase()));
 
     // Server pool modunda ve quota hatası aldıysak
     // NOT: isQuotaError false olsa bile, bağlantı hatası da rotation tetikleyebilir
@@ -1087,6 +1120,13 @@ export default function ActiveRoom({
         "timeout",
         "network error",
         "disconnect:",
+        // LiveKit istemcisinin gerçek bağlantı hata metinleri ("could not connect" bunlardan hiçbirini yakalamıyordu)
+        "could not establish signal connection",
+        "could not establish pc connection",
+        "room connection has timed out",
+        "websocket got closed during",
+        "server was not reachable",
+        "did not receive join response",
       ].some((c) => errorMessage.toLowerCase().includes(c.toLowerCase()));
 
     // 🚀 v5.6: Ref bazlı kontrol (Stale closure koruması)
@@ -1236,7 +1276,9 @@ export default function ActiveRoom({
 
   // Bağlantı koptuğunda (sadece başarılı bağlantıdan sonra)
   const handleDisconnect = useCallback(async (reason) => {
-    console.log("LiveKit bağlantısı koptu:", reason);
+    console.log(
+      `LiveKit bağlantısı koptu: ${reason} (${DisconnectReason[Number(reason)] ?? "?"}), sunucu index: ${serverIndexRef.current}`,
+    );
 
     // 🚀 v5.2: Disconnect reason'ı kontrol et - quota/limit hatası olabilir
     // LiveKit quota aşıldığında doğrudan disconnect eder, "error" event'i fırlatmaz
@@ -1514,6 +1556,8 @@ export default function ActiveRoom({
         setShowChatPanel={setShowChatPanel}
       />
       <VoiceProcessorHandler />
+      <AdaptiveBandwidthHandler />
+      <LatencyOptimizerHandler />
       <SpatialAudioHandler channelId={roomName} userId={userId} deafened={isDeafened || serverDeafened} />
       <MicGuardHandler serverMuted={serverMuted} serverDeafened={serverDeafened} />
       <CursorShareHandler />

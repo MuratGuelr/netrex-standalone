@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { ConnectionQuality, RoomEvent } from "livekit-client";
+import { useLatencyStatsStore } from "@/src/store/latencyStatsStore";
 
 // Bağlantı Durumu Göstergesi (Kalite)
 export default function ConnectionStatusIndicator() {
@@ -71,6 +72,15 @@ export default function ConnectionStatusIndicator() {
 
   const qualityInfo = getQualityInfo(connectionQuality);
 
+  // Ses gecikmesi ölçümleri (useLatencyOptimizer yazar)
+  const rttMs = useLatencyStatsStore((s) => s.rttMs);
+  const jitterBufferMs = useLatencyStatsStore((s) => s.jitterBufferMs);
+  const concealPct = useLatencyStatsStore((s) => s.concealPct);
+  // Yaklaşık: tek yön ağ (RTT/2) + alıcı tamponu + sabit kalem (yakalama, kodlama, çözme, çıkış cihazı ≈ 50 ms).
+  // Bluetooth kulaklık gibi çıkış cihazları bunun üstüne yüzlerce ms ekleyebilir; bu yüzden "tahmini".
+  const estimatedMs =
+    rttMs != null && jitterBufferMs != null ? Math.round(rttMs / 2 + jitterBufferMs + 50) : null;
+
   // Room veya localParticipant yoksa hiçbir şey gösterme
   if (!room || !localParticipant) {
     return null;
@@ -121,6 +131,32 @@ export default function ConnectionStatusIndicator() {
               {qualityInfo.label}
             </span>
           </div>
+          {rttMs != null && (
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-[#949ba4] font-medium">Sunucu gecikmesi (RTT)</span>
+              <span className="font-bold text-white">{rttMs} ms</span>
+            </div>
+          )}
+          {jitterBufferMs != null && (
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-[#949ba4] font-medium">Alıcı tamponu</span>
+              <span className="font-bold text-white">{jitterBufferMs} ms</span>
+            </div>
+          )}
+          {estimatedMs != null && (
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-[#949ba4] font-medium">Tahmini ses gecikmesi</span>
+              <span className="font-bold text-white">≈ {estimatedMs} ms</span>
+            </div>
+          )}
+          {concealPct != null && concealPct > 0 && (
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-[#949ba4] font-medium">Takılma oranı</span>
+              <span className="font-bold" style={{ color: concealPct > 3 ? "#f0b232" : "#23a559" }}>
+                %{concealPct}
+              </span>
+            </div>
+          )}
         </div>
         {/* Arrow */}
         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">

@@ -252,8 +252,9 @@ export default function RoomEventsHandler({
       
       setInVoiceRoom(true);
 
-      // Diğer katılımcılar, mikrofonumuz hazır olana kadar bizi "bağlanıyor" olarak görsün (sesimiz henüz gitmiyor)
-      let flaggedConnecting = false;
+      // Diğer katılımcılar, mikrofonumuz hazır olana kadar bizi "bağlanıyor" olarak görür (sesimiz henüz gitmiyor).
+      // Öznitelik token'a gömülü geldiği için katılır katılmaz görünür; burada yalnızca (yedek olarak) ayarlayıp
+      // hazır olunca temizliyoruz.
 
       // ✅ CRITICAL: Guard ile sadece 1 kez mikrofon publish et
       // Önceki kod: hem Connected event hem ConnectionStateChanged tetikleyince
@@ -262,7 +263,6 @@ export default function RoomEventsHandler({
         console.log("🎤 Mikrofon zaten publish edildi, atlanıyor");
       } else {
         micPublishedRef.current = true;
-        flaggedConnecting = true;
         setLocalMicConnecting(room?.localParticipant, true);
         try {
           if (room?.localParticipant) {
@@ -284,8 +284,9 @@ export default function RoomEventsHandler({
       try {
         await waitForMicReady(5000);
       } finally {
-        // Hata/zaman aşımı olsa da bayrak takılı kalmasın
-        if (flaggedConnecting) setLocalMicConnecting(room?.localParticipant, false);
+        // Hata/zaman aşımı olsa da bayrak takılı kalmasın. Koşulsuz temizliyoruz: yeniden katılımda token'daki
+        // öznitelik yeniden uygulanmış olabilir (mikrofon zaten hazırsa hemen temizlenir).
+        setLocalMicConnecting(room?.localParticipant, false);
       }
 
       if (onConnected) onConnected();
@@ -428,6 +429,8 @@ export default function RoomEventsHandler({
       if (process.env.NODE_ENV === "development") {
         console.log("Room reconnected");
       }
+      // Token'daki "bağlanıyor" özniteliği tam yeniden katılımda tekrar uygulanabilir; mikrofon zaten hazır, temizle
+      setLocalMicConnecting(room?.localParticipant, false);
       if (onConnected) onConnected();
     };
 

@@ -11,6 +11,16 @@ export default function PerformanceSettings() {
   const toggleDisableAnimations = useSettingsStore(state => state.toggleDisableAnimations);
   const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
   const toggleDisableBackgroundEffects = useSettingsStore(state => state.toggleDisableBackgroundEffects);
+  const dataSaver = useSettingsStore(state => state.dataSaver);
+  const toggleDataSaver = useSettingsStore(state => state.toggleDataSaver);
+  const latencyMode = useSettingsStore(state => state.latencyMode ?? "low");
+  const setLatencyMode = useSettingsStore(state => state.setLatencyMode);
+
+  const LATENCY_MODES = [
+    { id: "normal", label: "Normal", desc: "Tarayıcı varsayılanı. En kararlı, biraz daha gecikmeli." },
+    { id: "low", label: "Düşük", desc: "Önerilen. Alıcı tamponu küçülür; ağ takılırsa otomatik geri açılır." },
+    { id: "ultra", label: "Ultra", desc: "Olabildiğince az gecikme. Zayıf ağda ses daha çok kırılabilir; koruma devreye girer." },
+  ];
 
   const QUALITY_EFFECTS = {
     ultra: "Animasyonlar, arka plan ışıkları ve GPU hızlandırma açık. En zengin görünüm.",
@@ -206,6 +216,56 @@ export default function PerformanceSettings() {
             checked={disableBackgroundEffects}
             onChange={toggleDisableBackgroundEffects}
           />
+        </div>
+      </div>
+
+      {/* Ağ ve Veri Kullanımı */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+            <Zap size={14} className="text-cyan-400" />
+          </div>
+          Ağ ve Veri Kullanımı
+        </h4>
+        <p className="text-xs text-[#949ba4] mb-3 relative z-10">
+          Bağlantın zayıfladığında yayın ve kamera kalitesi otomatik olarak düşürülür, konuşman her zaman öncelikli kalır.
+        </p>
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-cyan-500/20 transition-colors duration-300">
+          <ToggleSwitch
+            label="Veri Tasarrufu"
+            description="Bağlantın iyi olsa bile ekran paylaşımı ve kameranın gönderdiği veriyi kısar (bit hızı yarıya, en fazla 20 FPS). Mobil internet veya sınırlı kotada işe yarar. Ses kalitesi etkilenmez."
+            checked={dataSaver}
+            onChange={toggleDataSaver}
+          />
+        </div>
+
+        <div className="relative z-10 mt-4">
+          <p className="text-xs font-bold text-white mb-1">Konuşma Gecikmesi</p>
+          <p className="text-xs text-[#949ba4] mb-3">
+            Karşındakinin sesinin sana ne kadar hızlı ulaşacağını belirler. Gerçek gecikme ağına ve ses cihazına da bağlıdır
+            (Bluetooth kulaklık yüzlerce ms ekler). Canlı değeri, odadaki bağlantı kalitesi göstergesinin üzerine gelince görebilirsin.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {LATENCY_MODES.map((m) => {
+              const active = latencyMode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setLatencyMode(m.id)}
+                  className={`p-3 rounded-xl border-2 text-left transition-all duration-300 focus:outline-none ${
+                    active
+                      ? "border-cyan-500 bg-cyan-500/10 text-white"
+                      : "border-white/5 bg-[#1e1f22] text-[#949ba4] hover:border-white/20 hover:bg-[#2b2d31]"
+                  }`}
+                >
+                  <span className={`block font-bold text-xs mb-1 ${active ? "text-cyan-400" : "text-white"}`}>{m.label}</span>
+                  <span className="block text-[10px] opacity-70 leading-tight">{m.desc}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

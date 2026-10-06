@@ -81,6 +81,9 @@ export async function POST(request) {
       identity,
       name,
       ttl: '24h',
+      // Katılımcı odaya girer girmez diğerleri "bağlanıyor" görsün (mikrofon hazır olunca istemci temizler).
+      // Anahtar adı: src/utils/micConnectingAttr.js ile aynı olmalı.
+      attributes: { netrexMicConnecting: '1' },
     });
     
     at.addGrant({
