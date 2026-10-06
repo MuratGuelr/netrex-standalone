@@ -33,8 +33,18 @@ export function useApplyParticipantVolumes() {
   useEffect(() => {
     if (!participants || participants.length === 0) return;
 
-    // 🎧 Spatial mod aktifse bu hook devre dışı — useSpatialAudio yönetir
-    if (spatialEnabled) return;
+    // 🎧 Spatial mod aktifse bu hook devre dışı — useSpatialAudio yönetir.
+    // Ses >%100 olanlar için kurulmuş yükseltme düğümleri kapatılır: kalırsa aynı kişi hem buradan hem
+    // uzamsal boru hattından çalıp çift ses verir. Önbellek de sıfırlanır; mod kapanınca ses seviyeleri yeniden uygulanır.
+    if (spatialEnabled) {
+      Object.values(gainNodesRef.current).forEach(({ source, gainNode }) => {
+        try { source.disconnect(); } catch (e) {}
+        try { gainNode.disconnect(); } catch (e) {}
+      });
+      gainNodesRef.current = {};
+      appliedVolumesRef.current = {};
+      return;
+    }
 
     participants.forEach(participant => {
       if (participant.isLocal) return;

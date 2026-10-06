@@ -130,8 +130,9 @@ function CursorShareHandler() {
 }
 
 // 🎧 Spatial Audio Handler — LiveKitRoom içinde çalışmalı
-function SpatialAudioHandler() {
-  useSpatialAudio();
+function SpatialAudioHandler({ channelId, userId, deafened }) {
+  // deafened: uzamsal modda sağırlaştırma ana ses düğümünden uygulanır (eskiden hiç uygulanmıyordu)
+  useSpatialAudio({ channelId, userId, deafened });
   return null;
 }
 
@@ -229,6 +230,8 @@ function DeafenManager({ isDeafened, serverDeafened }) {
     const applyMute = () => {
       // 1. Tüm HTML Audio elementlerini sustur
       document.querySelectorAll("audio").forEach((el) => {
+        // Uzamsal ses motoru bu öğeyi KENDİ sustardı (sesi AudioContext'ten çalıyor); açılırsa aynı ses iki kez çalar
+        if (!shouldMute && el.dataset.netrexSpatial === "1") return;
         el.muted = shouldMute;
         if (shouldMute) {
           el.volume = 0;
@@ -245,6 +248,7 @@ function DeafenManager({ isDeafened, serverDeafened }) {
               }
               if (pub.track.attachedElements) {
                 pub.track.attachedElements.forEach((el) => {
+                  if (!shouldMute && el.dataset.netrexSpatial === "1") return;
                   el.muted = shouldMute;
                   if (shouldMute) el.volume = 0;
                 });
@@ -1500,7 +1504,7 @@ export default function ActiveRoom({
         setShowChatPanel={setShowChatPanel}
       />
       <VoiceProcessorHandler />
-      <SpatialAudioHandler />
+      <SpatialAudioHandler channelId={roomName} userId={userId} deafened={isDeafened || serverDeafened} />
       <MicGuardHandler serverMuted={serverMuted} serverDeafened={serverDeafened} />
       <CursorShareHandler />
       <OverlayBridge

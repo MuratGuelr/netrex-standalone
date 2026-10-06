@@ -28,8 +28,21 @@ export const VOICE_COMMAND_PERMISSION = {
   DISCONNECT: "KICK_VOICE_MEMBERS",
 };
 
+let lastError = null; // en son gönderim hatası (kullanıcıya anlaşılır mesaj vermek için)
+
+/** Son gönderim hatasının kullanıcıya gösterilecek açıklaması */
+export function describeVoiceCommandError(fallback = "İstek gönderilemedi.") {
+  const text = String(lastError?.code || lastError?.message || "");
+  if (/permission[_ ]denied/i.test(text)) {
+    return "Gönderilemedi: Realtime Database kuralları 'voice_commands' yoluna izin vermiyor. database.rules.json içeriğini Firebase konsolunda yayınla.";
+  }
+  if (/network|offline|disconnect/i.test(text)) return "Gönderilemedi: internet bağlantısı yok gibi görünüyor.";
+  return text ? `${fallback} (${text})` : fallback;
+}
+
 /** Hedef kullanıcıya komut gönderir. Başarılıysa true. */
 export async function sendVoiceCommand({ serverId, targetUid, type, toChannelId = null, byUid, byName }) {
+  lastError = null;
   if (!serverId || !targetUid || !type || !byUid) return false;
   try {
     await push(ref(rtdb, `voice_commands/${targetUid}`), {
@@ -42,6 +55,7 @@ export async function sendVoiceCommand({ serverId, targetUid, type, toChannelId 
     });
     return true;
   } catch (e) {
+    lastError = e;
     console.error("Sesli komut gönderilemedi:", e);
     return false;
   }

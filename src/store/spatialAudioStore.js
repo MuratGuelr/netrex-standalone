@@ -268,7 +268,22 @@ export const useSpatialAudioStore = create(
     }),
     {
       name: 'netrex-spatial-audio',
-      version: 1,
+      version: 2,
+      // v2: eski sürümün herkesi merkeze kaydettiği kayıtları temizle (varsayılan çember geçerli olsun)
+      migrate: (persisted, version) => {
+        if (version < 2 && persisted?.positions) {
+          const cleaned = {};
+          Object.entries(persisted.positions).forEach(([channelId, map]) => {
+            const kept = {};
+            Object.entries(map || {}).forEach(([userId, p]) => {
+              if (p && Math.hypot(p.x - 300, p.y - 300) > 8) kept[userId] = p;
+            });
+            if (Object.keys(kept).length > 0) cleaned[channelId] = kept;
+          });
+          persisted.positions = cleaned;
+        }
+        return persisted;
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         enabled: state.enabled,

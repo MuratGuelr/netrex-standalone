@@ -15,7 +15,13 @@ import {
   Circle
 } from 'lucide-react';
 import { useSpatialAudioStore } from '@/src/store/spatialAudioStore';
-import { calculateAudioFromPosition, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/src/hooks/useSpatialAudio';
+import {
+  calculateAudioFromPosition,
+  resolveLayout,
+  defaultLayout,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+} from '@/src/utils/spatialMath';
 
 // ──────────────────────────────────────────────────
 // CONSTANTS
@@ -174,7 +180,7 @@ SpatialAvatar.displayName = 'SpatialAvatar';
 // ──────────────────────────────────────────────────
 // PRESET PANEL
 // ──────────────────────────────────────────────────
-const PresetPanel = memo(({ channelId, participantCount, localUserId }) => {
+const PresetPanel = memo(({ channelId, participantCount, localUserId, participantIds }) => {
   const [showPanel, setShowPanel] = useState(false);
   const [presetName, setPresetName] = useState('');
   const customPresets = useSpatialAudioStore(s => s.customPresets);
@@ -185,36 +191,12 @@ const PresetPanel = memo(({ channelId, participantCount, localUserId }) => {
   const resetPositions = useSpatialAudioStore(s => s.resetPositions);
 
   const handleDistributeEvenly = useCallback(() => {
-    if (!channelId || participantCount <= 1) return;
+    if (!channelId || !participantIds || participantIds.length <= 1) return;
 
-    const state = useSpatialAudioStore.getState();
-    const channelPositions = state.positions[channelId] || {};
-    const userIds = Object.keys(channelPositions);
-    
-    const cx = CANVAS_WIDTH / 2;
-    const cy = CANVAS_HEIGHT / 2;
-    const radius = Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.3;
-    const newPositions = {};
-
-    // Local user'ı (kendini) merkeze sabitle, SADECE diğerlerini dağıt
-    const otherUsers = userIds.filter(id => id !== localUserId);
-
-    if (otherUsers.length === 0) return;
-    
-    // Local user'ı merkeze yerleştir
-    newPositions[localUserId] = { x: cx, y: cy };
-
-    // Diğerlerini eşit aralıklı çember üzerine dağıt
-    otherUsers.forEach((userId, index) => {
-      const angle = (2 * Math.PI * index) / otherUsers.length - Math.PI / 2;
-      newPositions[userId] = {
-        x: cx + Math.cos(angle) * radius,
-        y: cy + Math.sin(angle) * radius
-      };
-    });
-
-    setPositions(channelId, newPositions);
-  }, [channelId, participantCount, setPositions, localUserId]);
+    // Odadaki HERKESİ çember üzerine eşit dağıt (yerel kullanıcı merkezde kalır, dinleyici odur).
+    // Eşit dağıtım varsayılan yerleşimle aynıdır, ama burada açıkça KAYDEDİLİR (oda kalabalığı değişse de kişiler yerinde kalır).
+    setPositions(channelId, defaultLayout(participantIds, localUserId));
+  }, [channelId, participantIds, setPositions, localUserId]);
 
   const handleSavePreset = useCallback(() => {
     if (!presetName.trim() || !channelId) return;
@@ -255,7 +237,7 @@ const PresetPanel = memo(({ channelId, participantCount, localUserId }) => {
                 onClick={() => resetPositions(channelId)}
                 className="w-full mt-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
               >
-                <RotateCcw size={11} /> Varsayılan (Merkez)
+                <RotateCcw size={11} /> Varsayılan (Çember)
               </button>
               <button
                 onClick={handleDistributeEvenly}
@@ -347,6 +329,15 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
   // ──────────────────────────────────────────────────
   // Participant bilgilerini topla
   // ──────────────────────────────────────────────────
+  const identities = useMemo(() => participants.map(p => p.identity), [participants]);
+
+  // Geçerli yerleşim: kaydedilmiş konum varsa o, yoksa varsayılan çember. Yerel kullanıcı her zaman merkezde.
+  // (Motor aynı fonksiyonu kullanır; ekranda gördüğün = kulağına gelen.)
+  const layout = useMemo(
+    () => resolveLayout(positions[channelId], identities, localUserId),
+    [positions, channelId, identities, localUserId],
+  );
+
   const participantData = useMemo(() => {
     return participants.map(p => {
       let metadata = {};
@@ -355,11 +346,7 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
       } catch (e) {}
 
       const isLocal = p.identity === localUserId;
-      const channelPositions = positions[channelId] || {};
-      const pos = channelPositions[p.identity] || {
-        x: CANVAS_WIDTH / 2,
-        y: CANVAS_HEIGHT / 2
-      };
+      const pos = layout[p.identity] || { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
 
       return {
         userId: p.identity,
@@ -372,29 +359,14 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
         y: pos.y,
       };
     });
-  }, [participants, positions, channelId, localUserId]);
+  }, [participants, layout, localUserId]);
 
-  // ──────────────────────────────────────────────────
-  // İlk yükleme: Pozisyonu olmayan kullanıcıları merkeze yerleştir
-  // ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!channelId || participants.length === 0) return;
-
-    const channelPositions = positions[channelId] || {};
-    
-    participants.forEach(p => {
-      if (!channelPositions[p.identity]) {
-        setPosition(channelId, p.identity, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-      }
-    });
-  }, [channelId, participants, positions, setPosition]);
 
   // ──────────────────────────────────────────────────
   // Collision Detection
   // ──────────────────────────────────────────────────
   const findNearestFreePosition = useCallback((targetX, targetY, draggedUserId) => {
-    const channelPositions = positions[channelId] || {};
-    const otherPositions = Object.entries(channelPositions)
+    const otherPositions = Object.entries(layout)
       .filter(([id]) => id !== draggedUserId)
       .map(([, pos]) => pos);
 
@@ -442,7 +414,7 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
     }
 
     return { x, y };
-  }, [positions, channelId, snapToGrid, gridSize]);
+  }, [layout, snapToGrid, gridSize]);
 
   // ──────────────────────────────────────────────────
   // DRAG HANDLERS — requestAnimationFrame ile senkronize
@@ -454,8 +426,7 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
     const canvasRect = canvasRef.current?.getBoundingClientRect();
     if (!canvasRect) return;
 
-    const channelPositions = positions[channelId] || {};
-    const currentPos = channelPositions[userId] || { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
+    const currentPos = layout[userId] || { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
 
     const mouseX = (e.clientX - canvasRect.left) / scale;
     const mouseY = (e.clientY - canvasRect.top) / scale;
@@ -466,7 +437,7 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
       y: mouseY - currentPos.y
     });
     setTempPosition(currentPos);
-  }, [localUserId, positions, channelId, scale]);
+  }, [localUserId, layout, scale]);
 
   useEffect(() => {
     if (!draggingUser) return;
@@ -551,7 +522,7 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
         </div>
 
         <div className="flex items-center gap-1.5 pointer-events-auto" onPointerDown={(e) => e.stopPropagation()}>
-          <PresetPanel channelId={channelId} participantCount={participants.length} localUserId={localUserId} />
+          <PresetPanel channelId={channelId} participantCount={participants.length} localUserId={localUserId} participantIds={identities} />
 
           <button
             onClick={toggleSnapToGrid}
@@ -605,6 +576,11 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
             backgroundSize: `100% 100%, ${snapToGrid ? gridSize * scale : 40 * scale}px ${snapToGrid ? gridSize * scale : 40 * scale}px, ${snapToGrid ? gridSize * scale : 40 * scale}px ${snapToGrid ? gridSize * scale : 40 * scale}px`,
           }}
         />
+
+        {/* Yön: üst = senin ÖNÜN. Kim yukarıdaysa karşında, aşağıdaysa arkanda duyulur. */}
+        <div className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-[0.2em] text-indigo-300/50 pointer-events-none select-none">
+          ▲ ÖN
+        </div>
 
         {/* Center crosshair */}
         <div className="absolute pointer-events-none" style={{

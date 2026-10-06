@@ -15,7 +15,7 @@ import ChannelContextMenu from "./ChannelContextMenu";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import VoiceParticipantContextMenu from "./VoiceParticipantContextMenu";
 import { USER_MIME } from "./sidebar/dnd";
-import { sendVoiceCommand, VOICE_COMMAND_TYPES } from "@/src/utils/voiceCommands";
+import { sendVoiceCommand, describeVoiceCommandError, VOICE_COMMAND_TYPES } from "@/src/utils/voiceCommands";
 import { toast } from "@/src/utils/toast";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 import {
@@ -203,7 +203,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
         byName: user.displayName,
       });
       if (ok) toast.success(`"${toChannel.name}" kanalına taşıma isteği gönderildi.`);
-      else toast.error("Taşıma isteği gönderilemedi.");
+      else toast.error(describeVoiceCommandError("Taşıma isteği gönderilemedi."), { duration: 9000 });
     },
     [currentServer, user, channels, canMoveMembers, onJoinChannel],
   );
@@ -223,7 +223,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
         byName: user.displayName,
       });
       if (ok) toast.success("Sesli kanaldan atma isteği gönderildi.");
-      else toast.error("İstek gönderilemedi.");
+      else toast.error(describeVoiceCommandError("İstek gönderilemedi."), { duration: 9000 });
     },
     [currentServer, user, canDisconnectMembers],
   );
