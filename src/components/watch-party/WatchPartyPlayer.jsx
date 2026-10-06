@@ -3,6 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import ReactPlayer from 'react-player';
+import { toast } from 'sonner';
 import { motion, AnimatePresence, useDragControls, useMotionValue, animate } from 'framer-motion';
 import { useMaybeRoomContext } from '@livekit/components-react';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
@@ -274,6 +275,90 @@ function YouTubePlayer({
       ref={wrapperRef} 
       className={`w-full bg-black pointer-events-none select-none ${videoFS ? 'absolute inset-0 h-full z-0' : ''}`} 
       style={videoFS ? { height: '100%' } : { height: 220 }} 
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// GENEL OYNATICI (Vimeo, doğrudan ses/video dosyası, HLS, DASH, Wistia, Mux)
+// react-player v3: ref doğrudan <video>/<audio> benzeri öğedir (currentTime, duration...); v2'deki
+// getCurrentTime/seekTo/onProgress YOKTUR. Burada v3 olayları, senkron kodunun beklediği adaptöre çevrilir.
+// ═══════════════════════════════════════════════════════════
+function GenericPlayer({
+  src,
+  shouldPlay,
+  effectiveVolume,
+  playerApiRef,
+  onReady,
+  onProgress,
+  onDuration,
+  onEnded,
+  onError,
+  onBuffering,
+}) {
+  const elRef = useRef(null);
+
+  const attachRef = useCallback((el) => {
+    elRef.current = el;
+    if (!el) return;
+    playerApiRef.current = {
+      seekTo: (s) => { try { el.currentTime = Math.max(0, s); } catch {} },
+      getCurrentTime: () => { try { return el.currentTime || 0; } catch { return 0; } },
+      getDuration: () => { try { const d = el.duration; return Number.isFinite(d) ? d : 0; } catch { return 0; } },
+      __generic: el,
+    };
+  }, [playerApiRef]);
+
+  // Parça değişince/oynatıcı sökülünce eski adaptör kalmasın (başka oynatıcı kendi adaptörünü kurar)
+  useEffect(() => () => {
+    if (playerApiRef.current?.__generic) playerApiRef.current = null;
+  }, [playerApiRef]);
+
+  const reportDuration = useCallback((e) => {
+    const el = e?.currentTarget || elRef.current;
+    const d = el?.duration;
+    if (Number.isFinite(d) && d > 0) onDuration(d);
+  }, [onDuration]);
+
+  // react-player v3'ün onReady'si `loadstart`ta (süre/konum henüz bilinmezken) tetiklenir; erken seek yok sayılabilir.
+  // Başlangıç senkronu için meta veri yüklenince (süre biliniyor, seek güvenli) bir kez "hazır" deriz.
+  const readyFiredRef = useRef(false);
+  const handleMetadata = useCallback((e) => {
+    reportDuration(e);
+    if (!readyFiredRef.current) {
+      readyFiredRef.current = true;
+      onReady();
+    }
+  }, [reportDuration, onReady]);
+
+  const reportTime = useCallback((e) => {
+    const el = e?.currentTarget || elRef.current;
+    if (!el) return;
+    const t = el.currentTime || 0;
+    const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    onProgress({ played: d > 0 ? t / d : 0, playedSeconds: t });
+  }, [onProgress]);
+
+  return (
+    <ReactPlayer
+      ref={attachRef}
+      src={src}
+      playing={shouldPlay}
+      volume={effectiveVolume}
+      muted={effectiveVolume === 0}
+      controls={false}
+      playsInline
+      width="100%"
+      height="100%"
+      style={{ width: '100%', height: '100%' }}
+      onLoadedMetadata={handleMetadata}
+      onDurationChange={reportDuration}
+      onTimeUpdate={reportTime}
+      onEnded={onEnded}
+      onError={onError}
+      onWaiting={() => onBuffering(true)}
+      onPlaying={() => onBuffering(false)}
+      onCanPlay={() => onBuffering(false)}
     />
   );
 }
@@ -579,6 +664,7 @@ export function WatchPartyPlayer({ serverId, channelId }) {
     const msg = error?.message || String(error) || '';
     if (msg.includes('AbortError') || msg.includes('interrupted')) return;
     console.warn('[WatchParty] ReactPlayer error:', error);
+    toast.error('Bu bağlantı oynatılamadı. Site dışarıdan oynatmaya izin vermiyor ya da dosya biçimi desteklenmiyor.', { id: 'wp-generic-error' });
   }, []);
 
   useEffect(() => {
@@ -897,12 +983,11 @@ export function WatchPartyPlayer({ serverId, channelId }) {
 
             {isGeneric && (
               <div className={videoFS ? "absolute inset-0 w-full h-full" : "w-full h-full"}>
-                <ReactPlayer ref={playerRef} url={currentTrack.url} playing={shouldPlay}
-                  volume={effectiveVolume} muted={effectiveVolume === 0}
-                  onReady={handleRPReady} onProgress={handleRPProgress}
-                  onEnded={handleRPEnded} onError={handleRPError}
-                  progressInterval={500} width="100%" height="100%"
-                  config={{ file: { attributes: { crossOrigin: 'anonymous', preload: 'auto' } } }} />
+                <GenericPlayer
+                  key={currentTrack.url} src={currentTrack.url} shouldPlay={shouldPlay}
+                  effectiveVolume={effectiveVolume} playerApiRef={playerRef}
+                  onReady={handleRPReady} onProgress={handleRPProgress} onDuration={handleSCDuration}
+                  onEnded={handleRPEnded} onError={handleRPError} onBuffering={setBuffering} />
               </div>
             )}
           </div>

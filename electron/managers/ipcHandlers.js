@@ -15,6 +15,7 @@ const { quitAndInstall: updateQuitAndInstall } = require("./updateManager");
 // Local imports
 const { getLoginHtml, getSuccessHtml } = require("./utils");
 const http = require("http");
+const { fetchYouTubePlaylist } = require("./youtubePlaylist");
 const url = require("url");
 const fs = require("fs");
 
@@ -292,6 +293,15 @@ function registerIpcHandlers(
   });
   ipcMain.on("ticker-message-geom", (event, geom) => {
     if (setTickerMessageGeom) setTickerMessageGeom(geom);
+  });
+
+  // 📃 Watch Party: YouTube çalma listesini oku (tarayıcıdan CORS'a takılır, bu yüzden ana süreçte)
+  ipcMain.handle("fetch-youtube-playlist", async (event, listId) => {
+    try {
+      return { ok: true, ...(await fetchYouTubePlaylist(String(listId || ""))) };
+    } catch (error) {
+      return { ok: false, error: error.message || "Liste alınamadı." };
+    }
   });
 
   ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {

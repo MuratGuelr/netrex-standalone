@@ -106,6 +106,21 @@ export async function addTrackToPlaylist(serverId, channelId, trackData) {
   return track;
 }
 
+// Birden çok parçayı TEK yazmada ekler (çalma listesi içe aktarma). arrayUnion verilen sırayla ekler;
+// böylece liste YouTube'daki sırasıyla kalır. Eklenen (id'li) parçaları döndürür.
+export async function addTracksToPlaylist(serverId, channelId, tracks) {
+  if (!tracks?.length) return [];
+  const base = Date.now();
+  const built = tracks.map((t, i) => ({
+    ...t,
+    id: `track_${base}_${i}_${Math.random().toString(36).slice(2, 8)}`,
+    addedAt: base + i,
+  }));
+  const { arrayUnion } = await import('firebase/firestore');
+  await updateDoc(getRef(serverId, channelId), { playlist: arrayUnion(...built) });
+  return built;
+}
+
 export async function removeTrackFromPlaylist(serverId, channelId, track) {
   const ref = getRef(serverId, channelId);
   const { arrayRemove } = await import('firebase/firestore');

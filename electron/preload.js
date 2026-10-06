@@ -176,6 +176,8 @@ contextBridge.exposeInMainWorld("netrex", {
   closeTicker: () => ipcRenderer.send("ticker-close"),
   reportTickerButtonRect: (rect) => ipcRenderer.send("ticker-button-rect", rect),
   reportTickerMessageGeom: (geom) => ipcRenderer.send("ticker-message-geom", geom),
+  // Watch Party: YouTube çalma listesi (CORS yüzünden ana süreçten)
+  fetchYouTubePlaylist: (listId) => ipcRenderer.invoke("fetch-youtube-playlist", listId),
   // ============================================
   // VOICE OVERLAY (Oyun İçi Overlay)
   // ============================================

@@ -1,20 +1,28 @@
 // src/components/watch-party/WatchPartyPlaylist.jsx
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import ReactPlayer from 'react-player';
+import { toast } from 'sonner';
 import { useWatchPartyStore } from '@/src/store/watchPartyStore';
 import { useWatchPartyVote } from '@/src/hooks/useWatchPartyVote';
 import { useAuthStore } from '@/src/store/authStore';
 import {
   addTrackToPlaylist,
+  addTracksToPlaylist,
   removeTrackFromPlaylist,
   clearCurrentTrackInDb,
 } from '@/src/services/watchPartyService';
 import {
+  classifyUrl,
+  fetchPlaylistTracks,
+  titleFromFileUrl,
+  SUPPORTED_SITES_HINT,
+  MAX_PLAYLIST_TRACKS,
+} from '@/src/utils/watchPartyUrl';
+import {
   Plus, Trash2, Play, Link, Loader2,
-  ThumbsUp, ThumbsDown, X, Music, ListMusic,
+  ThumbsUp, ThumbsDown, X, Music, ListMusic, ListPlus,
 } from 'lucide-react';
 
 export function WatchPartyPlaylist({
@@ -35,154 +43,145 @@ export function WatchPartyPlaylist({
   // ─── Skor'a göre sırala (store'daki getSortedPlaylist kullan) ───
   const sortedPlaylist = useWatchPartyStore((s) => s.getSortedPlaylist());
 
-  // ─── Parça Ekle ───
-  const handleAdd = useCallback(async () => {
-    let finalUrl = inputUrl.trim();
-    if (!finalUrl || !permissions.canManageTracks) return;
+  // Yapıştırılan bağlantının türü (canlı): çalma listesi bağlantısında ek düğme göstermek için
+  const parsed = useMemo(() => (inputUrl.trim() ? classifyUrl(inputUrl) : null), [inputUrl]);
 
+  // ─── Başlık / küçük resim (tek parça) ───
+  const resolveMeta = useCallback(async (info) => {
+    let url = info.url;
+    let title = info.kind === 'file' ? titleFromFileUrl(url) : url;
+    let thumbnail = '';
+
+    const fetchJson = async (endpoint, ms = 4000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ms);
+      try {
+        const res = await fetch(endpoint, { signal: controller.signal });
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    try {
+      if (info.kind === 'youtube') {
+        thumbnail = `https://img.youtube.com/vi/${info.videoId}/mqdefault.jpg`;
+        let data = null;
+        try {
+          data = await fetchJson(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        } catch {
+          try { data = await fetchJson(`https://noembed.com/embed?url=${encodeURIComponent(url)}`); } catch {}
+        }
+        if (data?.title) title = data.title;
+        if (data?.thumbnail_url) thumbnail = data.thumbnail_url;
+      } else if (info.kind === 'soundcloud') {
+        const data = await fetchJson(`https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        if (data?.title) title = data.title;
+        if (data?.thumbnail_url) thumbnail = data.thumbnail_url;
+        // Gerçek parça URL'ini çek
+        if (data?.html) {
+          const m = data.html.match(/url=([^&"'>]+)/);
+          if (m?.[1]) url = decodeURIComponent(m[1]);
+        }
+      } else if (info.kind === 'vimeo' || info.kind === 'wistia') {
+        const data = await fetchJson(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+        if (data?.title) title = data.title;
+        if (data?.thumbnail_url) thumbnail = data.thumbnail_url;
+      }
+      // Doğrudan dosya / HLS / DASH: başlık dosya adından üretilir (ağ isteği gerekmez)
+    } catch {
+      /* başlık alınamazsa bağlantı/dosya adıyla eklenir */
+    }
+    return { url, title, thumbnail };
+  }, []);
+
+  // ─── Çalma listesinin TAMAMINI ekle ───
+  const handleAddPlaylist = useCallback(async (listId) => {
+    if (!permissions.canManageTracks || !listId) return;
     setError('');
 
-    // Shorts → normal URL
-    if (finalUrl.includes('youtube.com/shorts/')) {
-      finalUrl = finalUrl.replace('youtube.com/shorts/', 'youtube.com/watch?v=');
-    }
-
-    const isSoundcloud = finalUrl.includes('soundcloud.com/');
-    const isYouTube    = finalUrl.includes('youtube.com/') || finalUrl.includes('youtu.be/');
-
-    if (finalUrl.includes('twitch.tv')) {
-      setError('Twitch yayınları stabilite sorunları nedeniyle desteklenmiyor.');
-      return;
-    }
-    if (finalUrl.includes('kick.com/')) {
-      setError('Kick platformu API kısıtlamaları nedeniyle desteklenmiyor.');
+    const room = MAX_PLAYLIST_TRACKS - playlist.length;
+    if (room <= 0) {
+      setError(`Liste dolu (en fazla ${MAX_PLAYLIST_TRACKS} parça).`);
       return;
     }
 
-    // SoundCloud playlist kontrolü
-    if (isSoundcloud && finalUrl.includes('/sets/')) {
-      setError('SoundCloud playlist desteklenmiyor. Tek parça linki girin.');
-      return;
-    }
+    setIsAdding(true);
+    try {
+      const res = await fetchPlaylistTracks(listId);
 
-    // SoundCloud query string temizle
-    if (isSoundcloud && finalUrl.includes('?')) {
-      finalUrl = finalUrl.split('?')[0];
-    }
+      const existing = new Set(playlist.map((t) => t.url));
+      const fresh = res.tracks
+        .map((t) => ({
+          url: `https://www.youtube.com/watch?v=${t.videoId}`,
+          title: t.title,
+          thumbnail: t.thumbnail,
+          duration: t.duration || 0,
+          addedBy: currentUser?.uid || '',
+          addedByName: currentUser?.displayName || 'Bilinmeyen',
+        }))
+        .filter((t) => !existing.has(t.url));
 
-    // YouTube playlist parametrelerini temizle
-    if (isYouTube) {
-      try {
-        const urlObj = new URL(finalUrl);
-        const hasVideoId  = urlObj.searchParams.get('v');
-        const hasPlaylist = urlObj.searchParams.get('list');
-
-        if (!hasVideoId && hasPlaylist) {
-          setError('YouTube playlist desteklenmiyor. Tek video linki girin.');
-          return;
-        }
-        if (hasVideoId && hasPlaylist) {
-          urlObj.searchParams.delete('list');
-          urlObj.searchParams.delete('index');
-          urlObj.searchParams.delete('start_radio');
-          finalUrl = urlObj.toString();
-        }
-      } catch {
-        setError('Geçersiz URL formatı.');
+      if (fresh.length === 0) {
+        setError('Bu listedeki tüm parçalar zaten ekli.');
         return;
       }
-    }
 
-    // ReactPlayer desteği kontrolü (SoundCloud hariç)
-    if (!isSoundcloud && !ReactPlayer.canPlay(finalUrl)) {
-      setError('Bu link desteklenmiyor. Lütfen geçerli bir YouTube veya SoundCloud linki girin.');
+      const toAdd = fresh.slice(0, room);
+      const added = await addTracksToPlaylist(serverId, channelId, toAdd);
+      setInputUrl('');
+
+      const notes = [];
+      if (fresh.length > toAdd.length) notes.push(`liste dolduğu için ${fresh.length - toAdd.length} parça eklenemedi`);
+      if (res.truncated) notes.push('çok uzun liste, ilk parçalar alındı');
+      toast.success(`"${res.title}" listesinden ${toAdd.length} parça eklendi${notes.length ? ` (${notes.join('; ')})` : ''}.`);
+
+      // Hiçbir şey çalmıyorsa (müzik dinlemek için ideal) ilk parçadan başla
+      if (!currentTrack && permissions.canControl && added[0]) onPlayTrack(added[0]);
+    } catch (err) {
+      setError(err?.message || 'Liste eklenemedi.');
+    } finally {
+      setIsAdding(false);
+    }
+  }, [permissions, playlist, currentUser, serverId, channelId, currentTrack, onPlayTrack]);
+
+  // ─── Parça Ekle ───
+  const handleAdd = useCallback(async () => {
+    if (!inputUrl.trim() || !permissions.canManageTracks) return;
+    setError('');
+
+    const info = classifyUrl(inputUrl);
+    if (info.kind === 'invalid' || info.kind === 'unsupported') {
+      setError(info.reason);
+      return;
+    }
+    // Yalnızca liste bağlantısı: hepsini ekle
+    if (info.kind === 'youtube-playlist') {
+      await handleAddPlaylist(info.listId);
       return;
     }
 
-    if (playlist.some((track) => track.url === finalUrl)) {
+    if (playlist.length >= MAX_PLAYLIST_TRACKS) {
+      setError(`Liste dolu (en fazla ${MAX_PLAYLIST_TRACKS} parça).`);
+      return;
+    }
+    if (playlist.some((track) => track.url === info.url)) {
       setError('Bu parça zaten listeye eklenmiş!');
       setInputUrl('');
       return;
     }
 
     setIsAdding(true);
-
     try {
-      let title     = finalUrl;
-      let thumbnail = '';
-
-      // YouTube meta
-      const ytMatch = finalUrl.match(
-        /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&?\s#/]+)/
-      );
-      if (ytMatch) {
-        thumbnail = `https://img.youtube.com/vi/${ytMatch[1]}/mqdefault.jpg`;
-        try {
-          const res  = await fetch(
-            `https://www.youtube.com/oembed?url=${encodeURIComponent(finalUrl)}&format=json`
-          );
-          const data = await res.json();
-          if (data.title)         title     = data.title;
-          if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-        } catch {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
-            const res  = await fetch(
-              `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`,
-              { signal: controller.signal }
-            );
-            clearTimeout(timeoutId);
-            const data = await res.json();
-            if (data.title)         title     = data.title;
-            if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-          } catch {}
-        }
-      }
-
-      // SoundCloud meta
-      else if (isSoundcloud) {
-        try {
-          const res  = await fetch(
-            `https://soundcloud.com/oembed?url=${encodeURIComponent(finalUrl)}&format=json`
-          );
-          const data = await res.json();
-          if (data.title)         title     = data.title;
-          if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-          // Gerçek track URL'ini çek
-          if (data.html) {
-            const m = data.html.match(/url=([^&"'>]+)/);
-            if (m?.[1]) finalUrl = decodeURIComponent(m[1]);
-          }
-        } catch {}
-      }
-
-
-      // Diğerleri
-      else {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
-          const res  = await fetch(
-            `https://noembed.com/embed?url=${encodeURIComponent(finalUrl)}`,
-            { signal: controller.signal }
-          );
-          clearTimeout(timeoutId);
-          const data = await res.json();
-          if (data.title)         title     = data.title;
-          if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-        } catch {}
-      }
-
+      const meta = await resolveMeta(info);
       await addTrackToPlaylist(serverId, channelId, {
-        url:         finalUrl,
-        title,
-        thumbnail,
+        url:         meta.url,
+        title:       meta.title,
+        thumbnail:   meta.thumbnail,
         duration:    0,
         addedBy:     currentUser?.uid || '',
         addedByName: currentUser?.displayName || 'Bilinmeyen',
       });
-
       setInputUrl('');
     } catch (err) {
       console.error('[WatchPartyPlaylist] Ekleme hatası:', err);
@@ -190,7 +189,7 @@ export function WatchPartyPlaylist({
     } finally {
       setIsAdding(false);
     }
-  }, [inputUrl, serverId, channelId, permissions, currentUser]);
+  }, [inputUrl, serverId, channelId, permissions, currentUser, playlist, resolveMeta, handleAddPlaylist]);
 
   // ─── Animasyon varyantları ───
   const variants = videoFS
@@ -258,7 +257,7 @@ export function WatchPartyPlaylist({
               <Link size={14} className="text-white/30 shrink-0" />
               <input
                 type="text"
-                placeholder="YouTube veya SoundCloud linki..."
+                placeholder="YouTube, SoundCloud, Vimeo veya ses/video linki..."
                 value={inputUrl}
                 onChange={(e) => { setInputUrl(e.target.value); setError(''); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
@@ -279,9 +278,30 @@ export function WatchPartyPlaylist({
               }
             </button>
           </div>
-          {error && (
-            <p className="text-[11px] text-red-400 mt-1.5 ml-1">{error}</p>
+          {/* Video bağlantısı bir çalma listesinden geliyorsa tüm listeyi ekleme seçeneği */}
+          {parsed?.kind === 'youtube' && parsed.listId && !isAdding && (
+            <button
+              onClick={() => handleAddPlaylist(parsed.listId)}
+              className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                         bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25
+                         text-emerald-300 text-xs font-semibold transition-all active:scale-[0.98]"
+            >
+              <ListPlus size={14} />
+              Videonun bulunduğu tüm çalma listesini ekle
+            </button>
           )}
+          {parsed?.kind === 'youtube-playlist' && (
+            <p className="text-[11px] text-emerald-300/80 mt-1.5 ml-1">
+              Bu bir çalma listesi: tüm parçalar eklenecek (en fazla 200).
+            </p>
+          )}
+          {error ? (
+            <p className="text-[11px] text-red-400 mt-1.5 ml-1">{error}</p>
+          ) : !parsed ? (
+            <p className="text-[10px] text-white/25 mt-1.5 ml-1 leading-snug">
+              Desteklenenler: {SUPPORTED_SITES_HINT}.
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="px-4 py-2.5 border-b border-white/5 bg-black/20 shrink-0">
