@@ -83,9 +83,10 @@ export function useVoiceProcessor() {
       const { rms, rawRms, isTransient, isSustainedVoice, hasPotentialVoice } = data;
       const nsMode = noiseSettingsRef.current.mode;
 
-      // Seviye: yumuşatılmış değer (yavaş sönümlenir, konuşma arasını köprüler) ile anlık değerin büyüğü;
-      // anlık değer kelimenin başında smoothed'ın yetişmesini beklemeden kapıyı açar.
-      const level = Math.max(rms, rawRms ?? 0);
+      // Seviye: anlık değer (worklet artık rms'i de anlık gönderiyor). Eskiden yumuşatılmış değer kullanılıyordu;
+      // sönmesi saniyeler sürdüğü için konuşma animasyonu ve kapı gereksiz uzun açık kalıyordu.
+      // Konuşma arası boşlukları GATE_HOLD_MS köprüler.
+      const level = rawRms ?? rms;
       // Histerezis: kapı açıkken eşiğin bir kısmının altına inmeden kapanmaz
       const threshold = cachedThresholdRef.current * (gateOpenRef.current ? CONFIG.GATE_CLOSE_RATIO : 1);
 

@@ -19,57 +19,7 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSpeakingStore } from "@/src/store/speakingStore";
 import { useAuthStore } from "@/src/store/authStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
-
-// ✅ Client-side audio level based speaking detection
-// LiveKit sunucusunun isSpeaking eşiği yüksek - düşük sesler algılanmıyor.
-const AUDIO_LEVEL_THRESHOLD = 0.005; // Çok hassas - kullanıcının duyduğu sesleri yakala
-const AUDIO_LEVEL_CHECK_INTERVAL = 100; // ms - ✅ CPU VE TEPKİ ORTA NOKTASI: Aniden sönme başlar, Re-render ref ile kilitlenir.
-
-function useRemoteAudioLevelSpeaking(participant, isLocal) {
-  const [isAudioSpeaking, setIsAudioSpeaking] = useState(false);
-  const speakingTimeoutRef = useRef(null);
-  const lastStateRef = useRef(false); // ✅ CPU OPT: Gereksiz setState önle
-  
-  useEffect(() => {
-    // Lokal kullanıcı için bu hook kullanılmaz
-    if (isLocal || !participant) return;
-    
-    const checkLevel = setInterval(() => {
-      const level = participant.audioLevel || 0;
-      if (level > AUDIO_LEVEL_THRESHOLD) {
-        if (speakingTimeoutRef.current) {
-          clearTimeout(speakingTimeoutRef.current);
-          speakingTimeoutRef.current = null;
-        }
-        // ✅ CPU OPT: Sadece state değiştiğinde setState çağır
-        if (!lastStateRef.current) {
-          lastStateRef.current = true;
-          setIsAudioSpeaking(true);
-        }
-      } else {
-        if (!speakingTimeoutRef.current) {
-          speakingTimeoutRef.current = setTimeout(() => {
-            // ✅ CPU OPT: Sadece state değiştiğinde setState çağır
-            if (lastStateRef.current) {
-              lastStateRef.current = false;
-              setIsAudioSpeaking(false);
-            }
-            speakingTimeoutRef.current = null;
-          }, 50); // Çift debounce / gereksiz bekletme kaldırıldı (Hızlı tepkime süresi)
-        }
-      }
-    }, AUDIO_LEVEL_CHECK_INTERVAL);
-    
-    return () => {
-      clearInterval(checkLevel);
-      if (speakingTimeoutRef.current) {
-        clearTimeout(speakingTimeoutRef.current);
-      }
-    };
-  }, [participant, isLocal]);
-  
-  return isAudioSpeaking;
-}
+import { useRemoteSpeaking } from "@/src/hooks/useRemoteSpeaking";
 
 const UserCard = ({
   participant,
@@ -88,7 +38,7 @@ const UserCard = ({
 
   // ✅ CPU OPT: LiveKit VAD'in (useIsSpeaking) saniyede yüzlerce kez zorlayıcı State güncellemelerini Kestik! 
   // Orijinal hook'ları devre dışı bırakıp, sadece 250ms'lik (4 FPS) kontrollü sınırlı AudioLevel kullanacağız.
-  const audioLevelSpeaking = useRemoteAudioLevelSpeaking(participant, participant.isLocal);
+  const audioLevelSpeaking = useRemoteSpeaking(participant, participant.isLocal);
 
 
   const displayName = name || identity || "User";

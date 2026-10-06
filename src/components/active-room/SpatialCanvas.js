@@ -15,6 +15,8 @@ import {
   Circle
 } from 'lucide-react';
 import { useSpatialAudioStore } from '@/src/store/spatialAudioStore';
+import { useSpeakingStore } from '@/src/store/speakingStore';
+import { useSettingsStore } from '@/src/store/settingsStore';
 import {
   calculateAudioFromPosition,
   resolveLayout,
@@ -330,6 +332,8 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
   // Participant bilgilerini topla
   // ──────────────────────────────────────────────────
   const identities = useMemo(() => participants.map(p => p.identity), [participants]);
+  const speakingMap = useSpeakingStore((s) => s.speakingParticipants);
+  const localIsSpeaking = useSettingsStore((s) => s.localIsSpeaking);
 
   // Geçerli yerleşim: kaydedilmiş konum varsa o, yoksa varsayılan çember. Yerel kullanıcı her zaman merkezde.
   // (Motor aynı fonksiyonu kullanır; ekranda gördüğün = kulağına gelen.)
@@ -353,13 +357,14 @@ export default function SpatialCanvas({ channelId, localUserId, onUpdatePosition
         displayName: metadata.displayName || p.name || p.identity,
         photoURL: metadata.photoURL || null,
         profileColor: metadata.profileColor || '#6366f1',
-        isSpeaking: p.isSpeaking,
+        // Yerel: anlık VAD; uzak: gelen sesten ölçülen değer (UserCard yazar). Yoksa LiveKit'in (gecikmeli) değerine düş.
+        isSpeaking: isLocal ? localIsSpeaking : (speakingMap[p.identity] ?? p.isSpeaking),
         isLocal,
         x: pos.x,
         y: pos.y,
       };
     });
-  }, [participants, layout, localUserId]);
+  }, [participants, layout, localUserId, speakingMap, localIsSpeaking]);
 
 
   // ──────────────────────────────────────────────────

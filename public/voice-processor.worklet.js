@@ -156,7 +156,10 @@ class VoiceProcessor extends AudioWorkletProcessor {
     // RMS Smoothing
     const smoothingFactor = rawRms > this._smoothedRms ? this._rmsAttack : this._rmsRelease;
     this._smoothedRms = this._smoothedRms * (1 - smoothingFactor) + rawRms * smoothingFactor;
-    const rms = this._smoothedRms;
+    // Karar ve sınıflandırma ANLIK seviyeye bakar. Yumuşatılmış değer (sönme katsayısı 0.03) konuşma bittikten
+    // sonra saniyelerce eşiğin üstünde kalıyor, konuşma animasyonunu ve noise gate'i gereksiz uzatıyordu.
+    // Konuşma arası boşluklar için kapıda zaten 300 ms hold var. _smoothedRms yalnızca ölçüm amaçlı kalır.
+    const rms = rawRms;
     
     // 2. FFT
     const dataLen = Math.min(validData.length, this._bufferSize);
