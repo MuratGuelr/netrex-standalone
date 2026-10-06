@@ -342,17 +342,18 @@ function StreamContextMenu({
               <MessageSquareText size={11} />
               Hızlı mesaj
             </div>
-            {QUICK_MESSAGES.map((msg) => (
+            {QUICK_MESSAGES.map((m) => (
               <button
-                key={msg}
+                key={m.text}
                 disabled={cooling}
                 onClick={() => {
-                  onQuickMessage(msg);
+                  onQuickMessage(m.text);
                   onClose();
                 }}
-                className="w-full px-3 py-1.5 text-xs font-medium text-left text-[#dbdee1] hover:bg-white/[0.06] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#dbdee1] transition-colors"
+                className="w-full px-3 py-1.5 text-xs font-medium text-left flex items-center gap-2.5 text-[#dbdee1] hover:bg-white/[0.06] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#dbdee1] transition-colors"
               >
-                {msg}
+                <span className="w-4 text-center text-sm leading-none">{m.icon}</span>
+                {m.text}
               </button>
             ))}
             {cooling && (

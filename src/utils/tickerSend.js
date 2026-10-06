@@ -16,14 +16,15 @@ import {
  */
 
 // Mikrofonu açamayan biri için tek tıkla gönderilebilen hazır mesajlar
+// icon: kısayol karesinde gösterilen simge, text: yayıncıya giden yazı
 export const QUICK_MESSAGES = [
-  "Konuşamıyorum",
-  "Baskın!",
-  "Sesin gelmiyor",
-  "Bir dakika",
-  "Tamam 👍",
-  "Geliyorum",
-  "Teşekkürler",
+  { icon: "🤐", text: "Konuşamıyorum" },
+  { icon: "⚠️", text: "Baskın!" },
+  { icon: "🔇", text: "Sesin gelmiyor" },
+  { icon: "⏳", text: "Bir dakika" },
+  { icon: "👍", text: "Tamam" },
+  { icon: "🏃", text: "Geliyorum" },
+  { icon: "🙏", text: "Teşekkürler" },
 ];
 
 const sentTimes = []; // son gönderim zamanları (dakika sınırı için)

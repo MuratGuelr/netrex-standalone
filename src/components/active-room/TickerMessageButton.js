@@ -15,9 +15,9 @@ import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/ti
  * Mikrofonunu o an açamayan izleyici, yayıncıya kısa bir yazı gönderir; yayıncının ekranında
  * (hangi uygulamada olursa olsun) en üstte kayan yazı olarak görünür.
  *
- * Mesaj kutusu, izlenen yayının KENDİ kutusunun içine (alt orta) açılır: grid/spotlight'ta o yayına ait
- * olduğu belli olur, tam ekranda da aynı yerde kalır ve üst çubuk fare hareketsizliğinde gizlense bile
- * yazarken kaybolmaz.
+ * Görünüm "Hızlı Durum" kısayollarıyla aynı dilde, küçük ve sade: emojili kareler + tek satırlık yazma alanı.
+ * Kutu, izlenen yayının kendi kutusunun içine (alt orta) açılır; tam ekranda da aynı yerde kalır ve üst çubuk
+ * gizlense bile yazarken kaybolmaz.
  *
  * En hızlı yol: yayına SAĞ TIK → "Hızlı mesaj" (işaretçi izni varsa Shift + sağ tık). Gönderme sınırları
  * (bekleme, dakika sınırı) o menüyle ortaktır: src/utils/tickerSend.js
@@ -41,15 +41,23 @@ export default function TickerMessageButton({ targetParticipant }) {
   };
   const closeBox = useCallback(() => setOpen(false), []);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+  // Hazır mesajlarla hızlıca gönderilebildiği için yazma alanına odaklanmıyoruz; yazmak isteyen tıklar.
 
   // Kutu açıkken bekleme geri sayımı canlı kalsın (menüden ya da buradan gönderilmiş olabilir)
   useEffect(() => {
     if (!open) return;
     const t = setInterval(() => forceTick((n) => n + 1), 500);
     return () => clearInterval(t);
+  }, [open]);
+
+  // Esc ile kapat (yazma alanında değilken de çalışsın)
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
   const send = (override) => {
@@ -89,99 +97,96 @@ export default function TickerMessageButton({ targetParticipant }) {
           <div
             // data-pointer-toolbar: işaretçi yakalayıcı bu kutudaki tıklamaları ekran işareti saymasın
             data-pointer-toolbar
-            className="absolute left-1/2 -translate-x-1/2 bottom-20 z-[60] w-[min(94%,440px)] rounded-2xl border border-white/10 bg-[#111214]/90 backdrop-blur-2xl shadow-[0_16px_48px_rgba(0,0,0,0.6)] overflow-hidden animate-in fade-in slide-in-from-bottom-3 duration-200"
+            className="absolute left-1/2 -translate-x-1/2 bottom-16 z-[60] w-[232px] max-w-[94%] rounded-2xl border border-white/10 bg-[#111214]/95 backdrop-blur-xl shadow-2xl p-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150"
             // Tıklamalar altındaki yayın kutusuna (çift tıkla tam ekran, sağ tık menüsü vb.) geçmesin
             onMouseDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.stopPropagation()}
           >
-            {/* Üst şerit: ince vurgu çizgisi (uygulamanın cam kartlarıyla aynı dil) */}
-            <div className="h-px w-full bg-gradient-to-r from-transparent via-[#5865f2]/60 to-transparent" />
-
-            <div className="p-3 sm:p-3.5">
-              {/* Başlık */}
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#5865f2]/30 to-purple-500/20 border border-[#5865f2]/30 flex items-center justify-center shrink-0">
-                  <MessageSquareText size={15} className="text-indigo-300" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-white leading-tight truncate">
-                    {targetName} ekranına mesaj
-                  </p>
-                  <p className="text-[11px] text-[#949ba4] leading-tight">Kayan yazı olarak görünür</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeBox}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-[#949ba4] hover:text-white hover:bg-white/10 transition-colors shrink-0"
-                  title="Kapat (Esc)"
-                >
-                  <X size={14} />
-                </button>
+            {/* Başlık: "Hızlı Durum" ile aynı küçük büyük harfli stil */}
+            <div className="flex items-center justify-between px-1 mb-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <MessageSquareText size={12} className="text-indigo-400 shrink-0" />
+                <span className="text-[10px] font-bold text-[#949ba4] uppercase tracking-wider truncate">
+                  {targetName}
+                </span>
               </div>
-
-              {/* Hazır mesajlar */}
-              <div className="flex flex-wrap gap-1.5 mb-2.5">
-                {QUICK_MESSAGES.map((msg) => (
-                  <button
-                    key={msg}
-                    type="button"
-                    onClick={() => send(msg)}
-                    disabled={cooling}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/[0.06] text-[#dbdee1] border border-white/[0.06] hover:bg-[#5865f2]/20 hover:border-[#5865f2]/40 hover:text-white active:scale-95 disabled:opacity-40 disabled:hover:bg-white/[0.06] disabled:hover:border-white/[0.06] disabled:hover:text-[#dbdee1] disabled:active:scale-100 transition-all"
-                  >
-                    {msg}
-                  </button>
-                ))}
-              </div>
-
-              {/* Yazma alanı */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    ref={inputRef}
-                    value={text}
-                    maxLength={TICKER_MAX_CHARS}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation(); // yazarken uygulama kısayolları tetiklenmesin
-                      if (e.key === "Enter") send();
-                      else if (e.key === "Escape") closeBox();
-                    }}
-                    placeholder="Kısa bir mesaj yaz..."
-                    className="w-full h-10 bg-black/30 border border-white/10 text-white text-sm pl-3 pr-12 rounded-xl outline-none placeholder:text-[#5c5e66] focus:border-[#5865f2]/60 focus:shadow-[0_0_0_3px_rgba(88,101,242,0.15)] transition-all"
-                  />
-                  {/* Kalan karakter: 30'un altına inince görünür */}
-                  {remaining <= 30 && (
-                    <span
-                      className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] tabular-nums font-semibold ${
-                        remaining <= 10 ? "text-red-400" : "text-[#949ba4]"
-                      }`}
-                    >
-                      {remaining}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => send()}
-                  disabled={!canSend}
-                  className="w-10 h-10 rounded-xl bg-[#5865f2] text-white flex items-center justify-center shrink-0 hover:bg-[#4752c4] active:scale-95 disabled:opacity-35 disabled:hover:bg-[#5865f2] disabled:active:scale-100 transition-all shadow-lg shadow-[#5865f2]/25"
-                  title={cooling ? `${waitSec} sn sonra gönderebilirsin` : "Gönder (Enter)"}
-                >
-                  {cooling ? <span className="text-xs font-bold tabular-nums">{waitSec}</span> : <Send size={16} />}
-                </button>
-              </div>
-
-              {cooling && (
-                <p className="mt-2 text-[11px] text-amber-300/90">
-                  {wait.limit
-                    ? `Dakikada en fazla ${TICKER_MAX_PER_MINUTE} mesaj gönderebilirsin. ${waitSec} sn sonra tekrar yazabilirsin.`
-                    : `Mesajlar arasında kısa bir ara gerekiyor (${waitSec} sn).`}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={closeBox}
+                className="w-5 h-5 rounded-md flex items-center justify-center text-[#5c5e66] hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                title="Kapat (Esc)"
+              >
+                <X size={11} />
+              </button>
             </div>
+
+            {/* Hazır mesajlar: Hızlı Durum kareleri gibi emoji + küçük etiket */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {QUICK_MESSAGES.map((m) => (
+                <button
+                  key={m.text}
+                  type="button"
+                  onClick={() => send(m.text)}
+                  disabled={cooling}
+                  title={m.text}
+                  className="group/q flex flex-col items-center justify-center h-[52px] rounded-xl border bg-[#1a1b1e] border-white/5 hover:border-white/10 hover:bg-[#202225] active:scale-95 disabled:opacity-40 disabled:hover:bg-[#1a1b1e] disabled:hover:border-white/5 disabled:active:scale-100 transition-all duration-150"
+                >
+                  <span className="text-lg leading-none mb-0.5 transition-transform duration-150 group-hover/q:scale-110 group-disabled/q:scale-100">
+                    {m.icon}
+                  </span>
+                  <span className="text-[9px] font-semibold text-[#949ba4] group-hover/q:text-white w-full px-1 text-center truncate transition-colors">
+                    {m.text}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Kendin yaz */}
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  ref={inputRef}
+                  value={text}
+                  maxLength={TICKER_MAX_CHARS}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation(); // yazarken uygulama kısayolları tetiklenmesin
+                    if (e.key === "Enter") send();
+                    else if (e.key === "Escape") closeBox();
+                  }}
+                  placeholder="Kendin yaz..."
+                  className="w-full h-8 bg-[#1a1b1e] border border-white/5 text-white text-xs pl-2.5 pr-8 rounded-lg outline-none placeholder:text-[#5c5e66] focus:border-[#5865f2]/50 transition-colors"
+                />
+                {remaining <= 30 && (
+                  <span
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 text-[9px] tabular-nums font-semibold ${
+                      remaining <= 10 ? "text-red-400" : "text-[#949ba4]"
+                    }`}
+                  >
+                    {remaining}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => send()}
+                disabled={!canSend}
+                className="w-8 h-8 rounded-lg bg-[#5865f2] text-white flex items-center justify-center shrink-0 hover:bg-[#4752c4] active:scale-95 disabled:opacity-35 disabled:hover:bg-[#5865f2] disabled:active:scale-100 transition-all"
+                title={cooling ? `${waitSec} sn sonra gönderebilirsin` : "Gönder (Enter)"}
+              >
+                {cooling ? <span className="text-[10px] font-bold tabular-nums">{waitSec}</span> : <Send size={13} />}
+              </button>
+            </div>
+
+            {cooling && (
+              <p className="mt-1.5 px-1 text-[10px] text-amber-300/90 leading-snug">
+                {wait.limit
+                  ? `Dakikada en fazla ${TICKER_MAX_PER_MINUTE} mesaj. ${waitSec} sn sonra tekrar.`
+                  : `Kısa bir ara gerekiyor (${waitSec} sn).`}
+              </p>
+            )}
           </div>,
           host,
         )}
