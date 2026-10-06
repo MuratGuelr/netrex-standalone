@@ -270,11 +270,16 @@ export default function Home() {
   }, [friends, triggerNotification]);
 
   // Çağrı durumu 'accepted' olduğunda arayanı da odaya al
+  // (aynı kabul birkaç sohbet güncellemesi boyunca görünür kalabilir; odaya iki kez girmesin)
+  const handledAcceptedCalls = useRef(new Set());
   useEffect(() => {
     if (!conversations.length || !user?.uid) return;
     
     conversations.forEach(c => {
       if (c.callData?.status === 'accepted' && c.callData?.callerId === user.uid) {
+        if (handledAcceptedCalls.current.has(c.id)) return;
+        handledAcceptedCalls.current.add(c.id);
+        setTimeout(() => handledAcceptedCalls.current.delete(c.id), 5000);
         playSound("join");
         selectConversation(c); // ✅ Açılan DMyi seç (chat butonu için gerekli)
         // Odaya gir
@@ -843,7 +848,12 @@ export default function Home() {
         onAccept={async () => {
           if (!incomingCallConvo) return;
           // Accept the call - this will change status to 'accepted'
-          await acceptCall(incomingCallConvo.id);
+          const accepted = await acceptCall(incomingCallConvo.id);
+          if (!accepted) {
+            // Arayan bu arada vazgeçtiyse boş odaya girme
+            toast.info("Arama sonlandırılmış.");
+            return;
+          }
           selectConversation(incomingCallConvo); // ✅ 
           playSound("join");
           // And we join locally immediately

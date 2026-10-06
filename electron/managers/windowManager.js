@@ -477,6 +477,168 @@ function closePointerOverlay() {
 }
 
 // ============================================
+// 💬 KAYAN MESAJ OVERLAY (ticker)
+// ============================================
+// Mikrofonu kapalı bir izleyicinin yazdığı kısa mesajı, yayıncının ekranında en üstte, kayan yazı olarak gösterir.
+// Tıklamayı geçirir (oyunu/uygulamayı engellemez); yalnızca sağ uçtaki küçük ✕ düğmesinin üstündeyken tıklanabilir.
+let tickerWindow = null;
+let tickerReady = false;
+let tickerPending = [];
+let tickerButtonRect = null;
+let tickerInteractive = false;
+let tickerHoverTimer = null;
+let tickerTopTimer = null;
+let antiCheatCache = { at: 0, detected: false };
+
+// Anti-cheat süreci çalışıyor mu? (ses overlay'i ile aynı koruma; 20 sn önbellek)
+function detectAntiCheat() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') return resolve(false);
+    if (Date.now() - antiCheatCache.at < 20000) return resolve(antiCheatCache.detected);
+    const { exec } = require('child_process');
+    exec('tasklist /FO CSV /NH', { timeout: 5000 }, (err, stdout) => {
+      const detected = !err && !!stdout && ANTICHEAT_PROCESSES.some((p) => stdout.toLowerCase().includes(p.toLowerCase()));
+      antiCheatCache = { at: Date.now(), detected };
+      resolve(detected);
+    });
+  });
+}
+
+function stopTickerTimers() {
+  if (tickerHoverTimer) { clearInterval(tickerHoverTimer); tickerHoverTimer = null; }
+  if (tickerTopTimer) { clearInterval(tickerTopTimer); tickerTopTimer = null; }
+}
+
+function createTickerWindow() {
+  if (tickerWindow && !tickerWindow.isDestroyed()) return tickerWindow;
+
+  const { screen } = require('electron');
+  const b = screen.getPrimaryDisplay().bounds;
+  const height = 76;
+  const y = b.y + Math.round(b.height * 0.06); // üst kenara yakın, başlık çubuklarının hemen altı
+
+  tickerReady = false;
+  tickerButtonRect = null;
+  tickerInteractive = false;
+
+  tickerWindow = new BrowserWindow({
+    x: b.x,
+    y,
+    width: b.width,
+    height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    hasShadow: false,
+    focusable: false,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+    icon: getIconPath(),
+  });
+
+  const win = tickerWindow;
+  try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (e) {}
+  try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.loadFile(path.join(__dirname, '../overlays/ticker-overlay.html'));
+
+  win.webContents.on('did-finish-load', () => {
+    tickerReady = true;
+    const queued = tickerPending;
+    tickerPending = [];
+    queued.forEach((m) => { if (!win.isDestroyed()) win.webContents.send('ticker-message-data', m); });
+  });
+
+  // Yalnızca ✕ düğmesinin üstündeyken tıklanabilir (hover algısı ana süreçte)
+  tickerHoverTimer = setInterval(() => {
+    try {
+      if (!win || win.isDestroyed() || !win.isVisible() || !tickerButtonRect || !tickerButtonRect.width) return;
+      const pt = screen.getCursorScreenPoint();
+      const wb = win.getBounds();
+      const lx = pt.x - wb.x;
+      const ly = pt.y - wb.y;
+      const r = tickerButtonRect;
+      const pad = 6;
+      const inside = lx >= r.x - pad && lx <= r.x + r.width + pad && ly >= r.y - pad && ly <= r.y + r.height + pad;
+      if (inside !== tickerInteractive) {
+        tickerInteractive = inside;
+        win.setIgnoreMouseEvents(!inside, { forward: true });
+      }
+    } catch (e) {}
+  }, 50);
+
+  // Başka pencereler öne geçerse tekrar en üste al
+  tickerTopTimer = setInterval(() => {
+    try {
+      if (!win || win.isDestroyed() || !win.isVisible()) return;
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.moveTop();
+    } catch (e) {}
+  }, 2500);
+
+  win.on('closed', () => {
+    stopTickerTimers();
+    tickerWindow = null;
+    tickerReady = false;
+    tickerPending = [];
+    tickerButtonRect = null;
+    tickerInteractive = false;
+  });
+
+  return win;
+}
+
+/**
+ * Kayan mesajı gösterir. { shown: boolean, reason? } döner; shown=false ise çağıran (arayüz) kendi
+ * uygulama içi bildirimine düşer.
+ */
+async function showTickerMessage(msg, { checkAntiCheat = true } = {}) {
+  const text = String(msg?.text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) return { shown: false, reason: 'empty' };
+
+  if (checkAntiCheat && (await detectAntiCheat())) {
+    return { shown: false, reason: 'anticheat' };
+  }
+
+  const opacity = Math.max(0.3, Math.min(1, Number(msg?.opacity) || 0.8));
+  const payload = { text, name: String(msg?.name ?? '').slice(0, 40), opacity };
+
+  const win = tickerWindow && !tickerWindow.isDestroyed() ? tickerWindow : createTickerWindow();
+  if (!win.isVisible()) win.showInactive();
+
+  if (tickerReady) win.webContents.send('ticker-message-data', payload);
+  else tickerPending.push(payload);
+  return { shown: true };
+}
+
+// Sıra bitti: pencereyi gizle (yok etme; sonraki mesaj hızlı açılsın)
+function hideTicker() {
+  if (tickerWindow && !tickerWindow.isDestroyed() && tickerWindow.isVisible()) tickerWindow.hide();
+}
+
+// Kullanıcı ✕ ile kapattı: tüm sırayı temizle ve gizle
+function closeTicker() {
+  tickerPending = [];
+  if (tickerWindow && !tickerWindow.isDestroyed()) {
+    tickerWindow.webContents.send('ticker-clear');
+    tickerWindow.hide();
+  }
+}
+
+function setTickerButtonRect(rect) {
+  if (!rect || typeof rect !== 'object') return;
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  tickerButtonRect = { x: n(rect.x), y: n(rect.y), width: n(rect.width), height: n(rect.height) };
+}
+
+// ============================================
 // 🎮 VOICE OVERLAY WINDOW — Discord Style
 // ============================================
 const ANTICHEAT_PROCESSES = ['vgc.exe', 'BEService.exe', 'EasyAntiCheat.exe', 'EasyAntiCheat_EOS.exe', 'mhyprot2.sys'];
@@ -1149,6 +1311,11 @@ module.exports = {
     sendPointerOverlayEvent,
     setPointerOverlayWidgetRect,
     closePointerOverlay,
+    // Kayan mesaj (ticker)
+    showTickerMessage,
+    hideTicker,
+    closeTicker,
+    setTickerButtonRect,
     // Voice Overlay
     createVoiceOverlayWindow,
     updateVoiceOverlay,

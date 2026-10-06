@@ -7,6 +7,7 @@ import { useAuthStore } from '@/src/store/authStore';
 import { useServerStore } from '@/src/store/serverStore';
 import { useSettingsStore } from '@/src/store/settingsStore';
 import { registerCleanupTask } from '@/src/utils/cleanup';
+import { getRtdbPresence, startMyConnectionPresence, markMyConnectionOffline } from '@/src/lib/rtdbPresence';
 
 // Batch update window: collect all status changes within this period
 // ✅ OPTIMIZATION #2: Increased from 2s to 3s for better batching
@@ -18,8 +19,10 @@ const HEARTBEAT_INTERVAL_VOICE = 2 * 60 * 1000; // 2 minutes in voice
 const HEARTBEAT_INTERVAL_IDLE = 5 * 60 * 1000;  // 5 minutes otherwise
 
 // How long before a user is considered "stale" (offline)
-// Should be > HEARTBEAT_INTERVAL to account for network delays
-export const PRESENCE_STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+// Boştaki kullanıcının heartbeat aralığından (5 dk) UZUN olmalı. Eskiden eşik de 5 dk'ydı:
+// boştaki biri bir sonraki sinyalinden hemen önce kısa süre "çevrimdışı" görünüp geri dönüyordu.
+// 8 dk = bir heartbeat + bir kaçırılan sinyal toleransı.
+export const PRESENCE_STALE_THRESHOLD = 8 * 60 * 1000; // 8 minutes
 
 export function usePresence() {
   const { user } = useAuthStore();
@@ -126,6 +129,9 @@ export function usePresence() {
     const currentUser = userRef.current;
     if (!currentUser?.uid) return;
     
+    // Gerçek zamanlı bağlantı bilgisini de hemen kopuk işaretle (diğerleri anında görsün)
+    markMyConnectionOffline(currentUser.uid);
+
     try {
       await updateDoc(doc(db, 'users', currentUser.uid), {
         presence: 'offline',
@@ -196,6 +202,13 @@ export function usePresence() {
       unsubscribe();
     };
   }, [user?.uid, sendHeartbeat]);
+
+  // 🟢 Gerçek zamanlı bağlantı durumu: bağlanınca "bağlı" yazar, koparsa (çökme, internet kesilmesi dahil)
+  // sunucu kendisi "kopuk" yazar. Kurallar izin vermezse sessizce atlanır, heartbeat yöntemi sürer.
+  useEffect(() => {
+    if (!user?.uid) return;
+    return startMyConnectionPresence(user.uid);
+  }, [user?.uid]);
 
   // ✅ OPTIMIZATION #6: Proper cleanup registration (once only)
   useEffect(() => {
@@ -271,6 +284,12 @@ export function getEffectivePresence(member, now = Date.now()) {
   
   // If already offline, return offline
   if (presence === 'offline') return 'offline';
+
+  // 🟢 Canlı bağlantı bilgisi varsa (Realtime Database) heartbeat'e bakmadan ona güven:
+  // bağlantı koptuysa anında çevrimdışı, bağlıysa kullanıcının seçtiği durum.
+  const uid = member.uid || member.id || member.userId;
+  const live = uid ? getRtdbPresence(uid) : undefined;
+  if (live) return live.connected ? presence : 'offline';
   
   // Check if lastSeen exists
   if (!lastSeen) return 'offline';

@@ -91,7 +91,7 @@ export default function MessageList({
             )}
           </div>
           {isDM && (
-            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-[#141518] ${getEffectivePresence(dmPartner) === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-[#141518] ${({ online: 'bg-green-500', idle: 'bg-yellow-500', dnd: 'bg-red-500' })[getEffectivePresence(dmPartner)] || 'bg-gray-500'}`} />
           )}
         </div>
 

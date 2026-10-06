@@ -167,6 +167,15 @@ contextBridge.exposeInMainWorld("netrex", {
   onPointerOverlayEvent: createEventHandler("pointer-overlay-event-data", (_, evt) => [evt]),
   reportPointerOverlayWidgetRect: (rect) => ipcRenderer.send("pointer-overlay-widget-rect", rect),
   // ============================================
+  // KAYAN MESAJ (TICKER)
+  // ============================================
+  showTickerMessage: (msg) => ipcRenderer.invoke("show-ticker-message", msg),
+  onTickerMessage: createEventHandler("ticker-message-data", (_, m) => [m]),
+  onTickerClear: createEventHandler("ticker-clear", () => []),
+  tickerIdle: () => ipcRenderer.send("ticker-idle"),
+  closeTicker: () => ipcRenderer.send("ticker-close"),
+  reportTickerButtonRect: (rect) => ipcRenderer.send("ticker-button-rect", rect),
+  // ============================================
   // VOICE OVERLAY (Oyun İçi Overlay)
   // ============================================
   updateVoiceOverlay: (data) => ipcRenderer.send("update-voice-overlay", data),

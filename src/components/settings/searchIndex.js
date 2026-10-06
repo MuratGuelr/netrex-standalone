@@ -36,6 +36,7 @@ export const SETTINGS_INDEX = [
   { tab: "keybinds", title: "Hızlı durum ve TTS kısayolları", keywords: "hızlı durum tts seslendirmeyi durdur kısayol", electronOnly: true },
 
   // Overlay (yalnızca masaüstü)
+  { tab: "overlay", title: "Kayan mesajlar", keywords: "kayan yazı mesaj izleyici yayın mikrofon kapalı opaklık bildirim ticker", electronOnly: true },
   { tab: "overlay", title: "Oyun içi overlay", keywords: "overlay oyun içi konuşan kişiler yerleşim opaklık anti-cheat kontroller", electronOnly: true },
 
   // Performans

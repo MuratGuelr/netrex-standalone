@@ -7,6 +7,9 @@ export const useSettingsStore = create(
       // Ses Cihazları
       audioInputId: "default",
       audioOutputId: "default",
+      // 💬 Kayan mesajlar (izleyiciden gelen kısa yazılar)
+      tickerMessagesEnabled: true,
+      tickerOpacity: 0.8,
       videoId: "default",
 
       // Global Voice State
@@ -121,6 +124,8 @@ export const useSettingsStore = create(
       // Actions
       setAudioInput: (deviceId) => set({ audioInputId: deviceId }),
       setAudioOutput: (deviceId) => set({ audioOutputId: deviceId }),
+      setTickerMessagesEnabled: (v) => set({ tickerMessagesEnabled: !!v }),
+      setTickerOpacity: (v) => set({ tickerOpacity: Math.max(0.3, Math.min(1, Number(v) || 0.8)) }),
       setVideoInput: (deviceId) => set({ videoId: deviceId }),
 
       // Quick Status Actions

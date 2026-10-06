@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "room_presence": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "user_voice_state": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "user_presence": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Layers, Monitor, Eye, Sliders, Shield, MousePointer, Volume2, LogOut, Mic } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useOverlayStore } from "@/src/store/overlayStore";
+import TickerSettingsCard from "./TickerSettingsCard";
 
 export default function OverlaySettings() {
   const overlayEnabled = useOverlayStore(state => state.overlayEnabled);
@@ -125,6 +126,9 @@ export default function OverlaySettings() {
           </div>
         </div>
       </div>
+
+      {/* Kayan mesajlar: ses overlay'inden bağımsız çalışır */}
+      <TickerSettingsCard />
 
       {/* Warning Modal */}
       {showWarning && (

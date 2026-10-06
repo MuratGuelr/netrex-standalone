@@ -4,6 +4,7 @@ import { RoomEvent } from "livekit-client";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSoundManagerStore } from "@/src/store/soundManagerStore";
+import { useOverlayStore } from "@/src/store/overlayStore";
 import { toast } from "@/src/utils/toast";
 import {
   addClick,
@@ -37,6 +38,20 @@ export const CURSOR_TOPICS = {
   SESSION_START: "cursor_session_start",
   SESSION_END: "cursor_session_end",
 };
+
+// 💬 Kayan mesaj: mikrofonu kapalı izleyici, yayıncıya kısa bir yazı gönderir
+export const TICKER_TOPIC = "screen_note";
+export const TICKER_MAX_CHARS = 140;
+export const TICKER_SEND_COOLDOWN_MS = 3000;
+
+/** Kontrol karakterlerini ve fazla boşlukları temizler, uzunluğu sınırlar */
+export function sanitizeTickerText(raw) {
+  return String(raw ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, TICKER_MAX_CHARS);
+}
 
 const CURSOR_STALE_TIMEOUT = 3000; // 3 saniye hareketsizlik → imleç gizle
 const MAX_PAYLOAD_BYTES = 16 * 1024;
@@ -424,6 +439,54 @@ export function useCursorShareController() {
       if (typeof window !== "undefined") window.netrex?.closePointerOverlay?.();
     }
   }, [isSharing, localParticipant]);
+
+  // ── 4b) Kayan mesajlar: izleyiciden gelen kısa yazıyı en üstte kayan yazı olarak göster ──────────────
+  useEffect(() => {
+    if (!room) return;
+    const lastFrom = new Map(); // gönderen -> son mesaj zamanı (spam koruması)
+
+    const onTicker = (payload, participant, _kind, topic) => {
+      if (topic !== TICKER_TOPIC || !participant || !payload || payload.byteLength > 2048) return;
+      let msg;
+      try {
+        msg = JSON.parse(new TextDecoder().decode(payload));
+      } catch (e) {
+        return;
+      }
+      const text = sanitizeTickerText(msg?.text);
+      if (!text) return;
+
+      const settings = useSettingsStore.getState();
+      if (settings.tickerMessagesEnabled === false) return;
+
+      const senderId = participant.identity;
+      const now = Date.now();
+      if (now - (lastFrom.get(senderId) || 0) < TICKER_SEND_COOLDOWN_MS - 500) return;
+      lastFrom.set(senderId, now);
+
+      const name = participant.name || readMeta(participant).displayName || senderId;
+      // Masaüstü overlay'i gösterilemezse (anti-cheat, web sürümü) uygulama içi bildirime düşülür
+      const fallback = () =>
+        toast.info(`${name}: ${text}`, { duration: Math.min(15000, 4000 + text.length * 80) });
+
+      const api = typeof window !== "undefined" ? window.netrex : null;
+      if (!api?.showTickerMessage) return fallback();
+      api
+        .showTickerMessage({
+          text,
+          name,
+          opacity: settings.tickerOpacity ?? 0.8,
+          antiCheatProtection: useOverlayStore.getState().antiCheatProtection,
+        })
+        .then((res) => {
+          if (!res?.shown) fallback();
+        })
+        .catch(fallback);
+    };
+
+    room.on(RoomEvent.DataReceived, onTicker);
+    return () => room.off(RoomEvent.DataReceived, onTicker);
+  }, [room]);
 
   // ── 5) Odadan çıkınca / bileşen sökülünce her şeyi temizle ──────────────
   useEffect(() => {

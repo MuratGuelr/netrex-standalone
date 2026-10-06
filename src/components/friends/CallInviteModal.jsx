@@ -27,7 +27,7 @@ export default function CallInviteModal({ roomId, onClose }) {
 
     try {
       // Önce arkadaşla olan DM kanalını bul veya oluştur
-      const convoId = await openOrCreateConversation(user.uid, friend.uid);
+      const convoId = await openOrCreateConversation(user.uid, friend.uid, { activate: false }); // arka planda: açık sohbeti değiştirmesin
       if (!convoId) throw new Error("Sohbet açılamadı.");
 
       // Gizli invite kodunu mesaja bas

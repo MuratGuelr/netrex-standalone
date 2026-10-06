@@ -18,6 +18,13 @@ import {
   documentId,
 } from "firebase/firestore";
 import { Virtuoso } from "react-virtuoso";
+import ServerMemberListSkeleton from "@/src/components/server/skeletons/ServerMemberListSkeleton";
+import { useRtdbPresenceWatch } from "@/src/lib/rtdbPresence";
+
+// Kullanıcı profilleri (durum, aktivite, son görülme) panel kapanıp açılınca ve sunucular arasında geçişte
+// anında dolsun diye bellekte tutulur. Aksi halde liste her açılışta herkesi "Çevrimdışı" gösterip sonra
+// profiller gelince tek tek yerine atlatıyordu.
+const PROFILE_CACHE = new Map(); // uid -> profil
 
 const RoleIcon = memo(({ roleId, roleName }) => {
   const lowerName = roleName?.toLowerCase() || "";
@@ -63,18 +70,44 @@ const HeaderRow = memo(({ item }) => (
 HeaderRow.displayName = "HeaderRow";
 
 export default function ServerMemberList({ onClose }) {
-  const { members, roles, currentServer } = useServerStore();
+  const { members, roles, currentServer, isLoading } = useServerStore();
   const { user: currentUser } = useAuthStore();
   // Kendi profileColor'ımızı da okuyoruz (local user için fallback)
   const localProfileColor = useSettingsStore((s) => s.profileColor);
 
   const [contextMenu, setContextMenu] = useState(null);
   const [profileModal, setProfileModal] = useState(null);
-  const [userProfiles, setUserProfiles] = useState({});
+  const [userProfiles, setUserProfiles] = useState(() => {
+    const initial = {};
+    (useServerStore.getState().members || []).forEach((m) => {
+      const id = m.id || m.userId;
+      if (id && PROFILE_CACHE.has(id)) initial[id] = PROFILE_CACHE.get(id);
+    });
+    return initial;
+  });
+  // İlk profil verisi gelene kadar listeyi göstermiyoruz (iskelet). { serverId, ready }: sunucu değişince
+  // yeniden beklenir; aynı sunucuda biri katılıp ayrılınca liste yeniden iskelete dönmez.
+  const [profilesReady, setProfilesReady] = useState(() => {
+    const state = useServerStore.getState();
+    const ms = state.members || [];
+    const covered = ms.length > 0 && ms.every((m) => PROFILE_CACHE.has(m.id || m.userId));
+    return { serverId: state.currentServer?.id || null, ready: covered };
+  });
+  // "Eskidi" (bayat presence) hesabı zamana bağlı: kimse bir şey yazmasa da periyodik yeniden hesapla.
+  // Aksi halde kullanıcılar ancak başka bir güncelleme gelince, hep birlikte toplu atlıyordu.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // ✅ FIX: Stable member ID key - listener sadece ÜYE SAYISI/ID'LERİ değişince yeniden bağlanır.
   // Daha önce: [members] dep → Firestore snapshot her members güncellemesinde listener'ı teardown/rebuild yapıyordu.
   // Şimdi: ID listesi değişmediği sürece (presence/profil güncelleme) listener sabit kalıyor.
+  // 🟢 Üyelerin anlık bağlantı durumu (kopanlar anında çevrimdışı görünür). Değişince liste yeniden hesaplanır.
+  const memberUidList = useMemo(() => (members || []).map((m) => m.id || m.userId).filter(Boolean), [members]);
+  const livePresenceVersion = useRtdbPresenceWatch(memberUidList);
+
   const memberIdsKey = useMemo(() => {
     if (!members || members.length === 0) return "";
     return members
@@ -96,11 +129,25 @@ export default function ServerMemberList({ onClose }) {
     const CHUNK_SIZE = 30;
     const chunkProfiles = [];
     const unsubscribes = [];
+    const totalChunks = Math.ceil(memberIds.length / CHUNK_SIZE);
+    const chunkLoaded = [];
+    let loadedChunks = 0;
+    const serverId = useServerStore.getState().currentServer?.id || null;
+
+    // Hazır mı? Aynı sunucuda zaten hazırsa öyle kalır; yeni sunucuda yalnızca tüm profiller önbellekteyse.
+    const covered = memberIds.every((id) => PROFILE_CACHE.has(id));
+    setProfilesReady((prev) => ({
+      serverId,
+      ready: (prev.serverId === serverId && prev.ready) || covered,
+    }));
 
     for (let i = 0; i < memberIds.length; i += CHUNK_SIZE) {
       const chunkIndex = i / CHUNK_SIZE;
       const chunkIds = memberIds.slice(i, i + CHUNK_SIZE);
-      chunkProfiles[chunkIndex] = {};
+      // Önbellekteki profillerle başla: ilk snapshot gelene kadar mevcut bilgiler kaybolmasın
+      chunkProfiles[chunkIndex] = Object.fromEntries(
+        chunkIds.filter((id) => PROFILE_CACHE.has(id)).map((id) => [id, PROFILE_CACHE.get(id)]),
+      );
 
       const q = query(
         collection(db, "users"),
@@ -124,11 +171,18 @@ export default function ServerMemberList({ onClose }) {
                 photoURL: data.photoURL ?? null,
               };
             });
+            Object.entries(profiles).forEach(([id, p]) => PROFILE_CACHE.set(id, p));
             chunkProfiles[chunkIndex] = profiles;
             setUserProfiles(Object.assign({}, ...chunkProfiles));
+            if (!chunkLoaded[chunkIndex]) {
+              chunkLoaded[chunkIndex] = true;
+              loadedChunks += 1;
+            }
+            if (loadedChunks >= totalChunks) setProfilesReady({ serverId, ready: true });
           },
           (error) => {
             console.error("User profiles listener error:", error);
+            setProfilesReady({ serverId, ready: true }); // hata olsa da liste sonsuza dek iskelette kalmasın
           },
         ),
       );
@@ -175,10 +229,13 @@ export default function ServerMemberList({ onClose }) {
       const isCurrentUser =
         currentUser &&
         (member.id === currentUser.uid || member.userId === currentUser.uid);
-      const effectivePresence = getEffectivePresence({
-        ...member,
-        ...userProfile,
-      });
+      const effectivePresence = getEffectivePresence(
+        {
+          ...member,
+          ...userProfile,
+        },
+        nowTick,
+      );
 
       // profileColor öncelik sırası:
       // 1. Firestore users dokümanı (en güncel)
@@ -211,7 +268,7 @@ export default function ServerMemberList({ onClose }) {
         customStatusColor: userProfile.customStatusColor,
       };
     });
-  }, [members, currentUser, userProfiles, localProfileColor]);
+  }, [members, currentUser, userProfiles, localProfileColor, nowTick, livePresenceVersion]);
 
   const groupedMembers = useMemo(() => {
     if (!enrichedMembers || !roles || !currentServer) return {};
@@ -335,6 +392,13 @@ export default function ServerMemberList({ onClose }) {
   );
 
   if (!currentServer) return null;
+
+  // İlk veri gelene kadar iskelet: herkesi önce "Çevrimdışı" gösterip sonra yerine atlatmak yerine
+  const waitingForProfiles =
+    members.length > 0 && !(profilesReady.serverId === currentServer.id && profilesReady.ready);
+  if ((members.length === 0 && isLoading) || waitingForProfiles) {
+    return <ServerMemberListSkeleton onClose={onClose} />;
+  }
 
   return (
     <div className="w-full h-full bg-[#111214] flex flex-col relative overflow-hidden border-l border-white/[0.06]">

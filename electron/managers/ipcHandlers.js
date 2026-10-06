@@ -258,6 +258,10 @@ function registerIpcHandlers(
     setPointerOverlayInteractive,
     sendPointerOverlayEvent,
     setPointerOverlayWidgetRect,
+    showTickerMessage,
+    hideTicker,
+    closeTicker,
+    setTickerButtonRect,
   } = pointerOverlayFns || {};
   const {
     createVoiceOverlayWindow,
@@ -270,6 +274,21 @@ function registerIpcHandlers(
     startAntiCheatCheck,
     stopAntiCheatCheck,
   } = voiceOverlayFns || {};
+
+  // 💬 Kayan mesaj (ticker): ana pencere gösterir, overlay sayfası kuyruk bitince/kapatılınca haber verir
+  ipcMain.handle("show-ticker-message", async (event, msg) => {
+    if (!showTickerMessage) return { shown: false, reason: "unsupported" };
+    return showTickerMessage(msg, { checkAntiCheat: msg?.antiCheatProtection !== false });
+  });
+  ipcMain.on("ticker-idle", () => {
+    if (hideTicker) hideTicker();
+  });
+  ipcMain.on("ticker-close", () => {
+    if (closeTicker) closeTicker();
+  });
+  ipcMain.on("ticker-button-rect", (event, rect) => {
+    if (setTickerButtonRect) setTickerButtonRect(rect);
+  });
 
   ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {
     if (updatePointerOverlay) updatePointerOverlay(pointers, forceShow);

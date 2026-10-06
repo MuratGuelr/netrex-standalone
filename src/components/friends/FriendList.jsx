@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { Users, UserX } from "lucide-react";
 import FriendItem from "./FriendItem";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import { useRtdbPresenceWatch } from "@/src/lib/rtdbPresence";
 
 export default function FriendList({
   friends,
@@ -20,6 +21,10 @@ export default function FriendList({
   unreadDMCounts = {},
   conversations = []
 }) {
+  // 🟢 Arkadaşların anlık bağlantı durumu: değişince filtre/sıralama/sayaç yeniden hesaplanır
+  const friendUids = useMemo(() => friends.map((f) => f.friendData?.uid || f.friendId).filter(Boolean), [friends]);
+  const livePresenceVersion = useRtdbPresenceWatch(friendUids);
+
   const filteredFriends = useMemo(() => {
     if (filter === "online") {
       return friends.filter(f => {
@@ -28,7 +33,7 @@ export default function FriendList({
       });
     }
     return friends;
-  }, [friends, filter]);
+  }, [friends, filter, livePresenceVersion]);
 
   // Sort: online first, then alphabetical
   const sortedFriends = useMemo(() => {
@@ -47,12 +52,12 @@ export default function FriendList({
       const nameB = (b.friendData?.displayName || "").toLowerCase();
       return nameA.localeCompare(nameB);
     });
-  }, [filteredFriends]);
+  }, [filteredFriends, livePresenceVersion]);
 
   // Count online
   const onlineCount = useMemo(() => {
     return friends.filter(f => getEffectivePresence(f.friendData) !== "offline").length;
-  }, [friends]);
+  }, [friends, livePresenceVersion]);
 
   if (sortedFriends.length === 0) {
     return (

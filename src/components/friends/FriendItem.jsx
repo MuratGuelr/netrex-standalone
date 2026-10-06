@@ -187,6 +187,7 @@ export default function FriendItem({
                 hidden sm:flex opacity-0 group-hover:opacity-100
               "
               title="Arkadaşlıktan Çıkart"
+              style={onRemove ? undefined : { display: "none" }}
             >
               <UserMinus size={16} />
             </button>
@@ -276,6 +277,11 @@ export default function FriendItem({
                 Gönderildi
               </span>
             )}
+            {relationshipStatus === "blocked" && (
+              <span className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20">
+                Engellendi
+              </span>
+            )}
             {relationshipStatus === "incoming" && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleAction(() => onAccept?.(user.uid)); }}
@@ -300,7 +306,10 @@ export default function FriendItem({
       {contextMenu && (
         <div 
           className="fixed z-[1000] w-48 bg-[#111214] border border-white/5 shadow-2xl rounded-xl py-1.5 animate-in fade-in zoom-in duration-150"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 180),
+            left: Math.min(contextMenu.x, window.innerWidth - 200),
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -320,6 +329,7 @@ export default function FriendItem({
           <div className="h-px bg-white/5 my-1 mx-2" />
           <button
             onClick={() => { handleAction(() => onRemove?.(friendshipId)); setContextMenu(null); }}
+            style={onRemove ? undefined : { display: "none" }}
             className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <UserMinus size={14} />

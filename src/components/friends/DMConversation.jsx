@@ -39,6 +39,10 @@ import { popularEmojis } from "@/src/components/ChatView/constants";
 import Modal from "@/src/components/ui/Modal";
 import Button from "@/src/components/ui/Button";
 
+// Durum noktası ve etiketi: "boşta" ve "rahatsız etme" da çevrimiçi sayılır (eskiden hepsi "çevrimdışı" görünüyordu)
+const PRESENCE_DOT = { online: "bg-green-500", idle: "bg-yellow-500", dnd: "bg-red-500" };
+const PRESENCE_LABEL = { online: "Çevrimiçi", idle: "Boşta", dnd: "Rahatsız Etme" };
+
 export default function DMConversation({ onBack, onStartCall }) {
   const { user } = useAuthStore();
   const {
@@ -59,7 +63,7 @@ export default function DMConversation({ onBack, onStartCall }) {
     clearActiveConversation
   } = useDMStore();
 
-  const { removeFriend, blockUser, friends } = useFriendStore();
+  const { removeFriend, blockUserById, unblockUser, friends, blockedUsers } = useFriendStore();
   const { members } = useServerStore();
   const room = useOptionalRoomContext();
 
@@ -99,6 +103,7 @@ export default function DMConversation({ onBack, onStartCall }) {
   const otherId = activeConversation?.participantIds?.find(id => id !== user?.uid);
   const otherUser = realTimeUsers[otherId] || activeConversation?.otherUser;
   const presence = getEffectivePresence(otherUser);
+  const blockState = otherId ? blockedUsers?.[otherId] : null; // "byMe" | "byThem" | undefined
   const avatarLetter = (otherUser?.displayName || "?")[0].toUpperCase();
 
   // Initial focus
@@ -182,8 +187,14 @@ export default function DMConversation({ onBack, onStartCall }) {
     const text = inputText.trim();
     if ((!text && !pendingImageFile) || isSending) return;
 
+    if (blockState) {
+      toast.error(blockState === "byMe" ? "Bu kullanıcıyı engelledin. Mesaj göndermek için önce engeli kaldır." : "Bu kullanıcıya mesaj gönderemezsin.");
+      return;
+    }
+
     const textToSend = text;
     const fileToSend = pendingImageFile;
+    const previewToRestore = pendingImage;
 
     setInputText(""); 
     setPendingImage(null); 
@@ -201,6 +212,7 @@ export default function DMConversation({ onBack, onStartCall }) {
           toast.error("Resim yüklenemedi.", { id: toastId });
           setIsSending(false);
           setInputText(textToSend);
+          setPendingImage(previewToRestore); // önizleme de geri gelsin (eskiden yalnızca dosya geri geliyordu)
           setPendingImageFile(fileToSend);
           return;
         }
@@ -220,7 +232,7 @@ export default function DMConversation({ onBack, onStartCall }) {
 
       if (!result.success) {
         setInputText(textToSend);
-        toast.error("Mesaj gönderilemedi.");
+        toast.error(result.error || "Mesaj gönderilemedi.");
       }
     } finally {
       setIsSending(false);
@@ -247,12 +259,16 @@ export default function DMConversation({ onBack, onStartCall }) {
 
   const handleSaveEdit = async () => {
     if (!editingMessageId) return;
+    if (!editingText.trim()) {
+      toast.error("Mesaj boş olamaz.");
+      return;
+    }
     const result = await editMessage(activeConversation.id, editingMessageId, editingText, user.uid);
     if (result.success) {
       setEditingMessageId(null);
       setEditingText("");
     } else {
-      toast.error(result.error);
+      toast.error(result.error || "Mesaj düzenlenemedi.");
     }
   };
 
@@ -346,7 +362,17 @@ export default function DMConversation({ onBack, onStartCall }) {
      const parts = text.split(urlRegex);
      return parts.map((part, index) => {
        if (part.match(urlRegex)) {
-         return <a key={index} href={part} target="_blank" className="text-indigo-400 hover:underline">{part}</a>;
+         return (
+           <a
+             key={index}
+             href={part}
+             rel="noopener noreferrer"
+             onClick={(e) => { e.preventDefault(); setLinkModal({ isOpen: true, url: part }); }}
+             className="text-indigo-400 hover:underline"
+           >
+             {part}
+           </a>
+         );
        }
        return <span key={index}>{part}</span>;
      });
@@ -411,13 +437,13 @@ export default function DMConversation({ onBack, onStartCall }) {
                  {avatarLetter}
                </div>
              )}
-             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#111214] ${presence === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#111214] ${PRESENCE_DOT[presence] || 'bg-gray-500'}`} />
           </div>
 
           <div>
              <h3 className="text-[15px] font-bold text-white leading-tight">{otherUser.displayName}</h3>
              <p className="text-[11px] text-[#949ba4] leading-tight">
-               {presence === 'online' ? 'Çevrimiçi' : 'Çevrimdışı'}
+               {PRESENCE_LABEL[presence] || 'Çevrimdışı'}
              </p>
           </div>
         </div>
@@ -427,7 +453,7 @@ export default function DMConversation({ onBack, onStartCall }) {
             onClick={handleStartCallExec}
             disabled={isCalling}
             className={`p-2 rounded-md transition-colors ${isCalling ? 'bg-white/5 text-indigo-400' : 'text-[#949ba4] hover:text-green-400 hover:bg-white/5'}`}
-            title="Sohbet Başlat"
+            title="Sesli Arama Başlat"
           >
             {isCalling ? <Loader2 size={18} className="animate-spin" /> : <Phone size={18} />}
           </button>
@@ -456,16 +482,29 @@ export default function DMConversation({ onBack, onStartCall }) {
                   <X size={14} className="text-[#949ba4]" />
                   Mesajlaşmayı Kapat
                 </button>
-                <button
-                  onClick={() => {
-                    setBlockConfirm(true);
-                    setShowHeaderMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <ShieldAlert size={14} />
-                  Kullanıcıyı Engelle
-                </button>
+                {blockState === "byMe" ? (
+                  <button
+                    onClick={async () => {
+                      setShowHeaderMenu(false);
+                      await unblockUser(user.uid, otherId);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                  >
+                    <ShieldAlert size={14} />
+                    Engeli Kaldır
+                  </button>
+                ) : blockState === "byThem" ? null : (
+                  <button
+                    onClick={() => {
+                      setBlockConfirm(true);
+                      setShowHeaderMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <ShieldAlert size={14} />
+                    Kullanıcıyı Engelle
+                  </button>
+                )}
                 
                 {(() => {
                   const activeFriendship = (friends || []).find(f => f.friendId === otherId);
@@ -535,7 +574,14 @@ export default function DMConversation({ onBack, onStartCall }) {
       </div>
 
       {/* ── Input ── */}
-      <ChatInput 
+      {blockState && (
+        <div className="px-4 py-3 border-t border-white/[0.06] bg-[#111214] text-center text-xs text-[#949ba4]">
+          {blockState === "byMe"
+            ? "Bu kullanıcıyı engelledin. Mesaj göndermek için menüden engeli kaldırabilirsin."
+            : "Bu kullanıcıya mesaj gönderemezsin."}
+        </div>
+      )}
+      {!blockState && <ChatInput 
         messageInput={inputText}
         setMessageInput={setInputText}
         handleSendMessage={handleSendMessage}
@@ -571,7 +617,7 @@ export default function DMConversation({ onBack, onStartCall }) {
              }
            }
         }}
-      />
+      />}
 
       {/* Overlays */}
       <ImageOverlay 
@@ -640,7 +686,10 @@ export default function DMConversation({ onBack, onStartCall }) {
         isOpen={linkModal.isOpen}
         url={linkModal.url}
         onClose={() => setLinkModal({ ...linkModal, isOpen: false })}
-        onConfirm={() => window.open(linkModal.url, "_blank")}
+        onConfirm={() => {
+          window.open(linkModal.url, "_blank", "noopener,noreferrer");
+          setLinkModal({ isOpen: false, url: "" });
+        }}
       />
 
       <Modal
@@ -665,10 +714,12 @@ export default function DMConversation({ onBack, onStartCall }) {
               variant="danger"
               size="md"
               onClick={async () => {
-                await blockUser(activeConversation.id);
-                clearActiveConversation();
+                const res = await blockUserById(user.uid, otherId);
                 setBlockConfirm(false);
-                toast.success("Kullanıcı engellendi.");
+                if (res.success) {
+                  clearActiveConversation();
+                  toast.success("Kullanıcı engellendi.");
+                }
               }}
             >
               Engelle

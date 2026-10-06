@@ -30,6 +30,10 @@ const {
     sendPointerOverlayEvent,
     setPointerOverlayWidgetRect,
     closePointerOverlay,
+    showTickerMessage,
+    hideTicker,
+    closeTicker,
+    setTickerButtonRect,
     // Voice Overlay
     createVoiceOverlayWindow,
     updateVoiceOverlay,
@@ -220,7 +224,7 @@ if (!gotTheLock) {
       showMainWindow, 
       inputManager, 
       setQuitting, 
-      { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive, sendPointerOverlayEvent, setPointerOverlayWidgetRect },
+      { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive, sendPointerOverlayEvent, setPointerOverlayWidgetRect, showTickerMessage, hideTicker, closeTicker, setTickerButtonRect },
       { createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, getVoiceOverlayPosition, startAntiCheatCheck, stopAntiCheatCheck }
     );
     

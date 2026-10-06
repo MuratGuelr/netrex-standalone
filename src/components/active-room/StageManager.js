@@ -61,6 +61,7 @@ import { CURSOR_TOPICS } from "@/src/hooks/useCursorShareController";
 import { getVideoContentRect } from "@/src/utils/pointerGeometry";
 import { addClick, addStrokePoints, clearStrokesOf } from "@/src/utils/pointerFx";
 import { toast } from "@/src/utils/toast";
+import TickerMessageButton from "./TickerMessageButton";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
@@ -1868,6 +1869,11 @@ const StageOverlay = React.memo(
                        : "İşaretle"}
                 </span>
               </button>
+            )}
+
+            {/* 💬 Yayıncıya kayan yazı gönder (mikrofon kapalıyken söyleyeceğini yaz) */}
+            {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && (
+              <TickerMessageButton targetParticipant={participant} />
             )}
 
             {/* 🖥️ Overlay Aç butonu (Sharer side) */}

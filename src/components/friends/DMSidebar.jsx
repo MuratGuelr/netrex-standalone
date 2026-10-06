@@ -12,6 +12,7 @@ import { useDMStore } from "@/src/store/dmStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useFriendStore } from "@/src/store/friendStore";
 import { getEffectivePresence } from "@/src/hooks/usePresence";
+import { useRtdbPresenceWatch } from "@/src/lib/rtdbPresence";
 
 const presenceColors = {
   online: "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.5)]",
@@ -32,6 +33,13 @@ export default function DMSidebar({
   const [searchQuery, setSearchQuery] = useState("");
 
   const pendingCount = incomingRequests.length;
+
+  // 🟢 Sohbet ettiğin kişilerin anlık bağlantı durumu (kopunca anında çevrimdışı görünür)
+  const partnerUids = useMemo(
+    () => conversations.map((c) => c.participantIds?.find((id) => id !== user?.uid)).filter(Boolean),
+    [conversations, user?.uid],
+  );
+  useRtdbPresenceWatch(partnerUids);
 
   const filteredConvos = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -136,7 +144,7 @@ export default function DMSidebar({
           const other = realTimeUsers[otherId] || convo.otherUser; // Fallback to initial static data
           const isActive = activeConversationId === convo.id;
           const unread = unreadDMCounts[convo.id] || 0;
-          const presence = getEffectivePresence(other);
+          const presence = getEffectivePresence(other && !other.uid ? { ...other, uid: otherId } : other);
           const avatarLetter = (other?.displayName || "?")[0].toUpperCase();
           const lastMsgPreview = convo.lastMessage?.text || "";
 
