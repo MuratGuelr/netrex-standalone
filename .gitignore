@@ -37,5 +37,3 @@ admin-panel
 
 # Electron Store
 config.json
-# next --experimental-https yerel sertifikaları
-/certificates

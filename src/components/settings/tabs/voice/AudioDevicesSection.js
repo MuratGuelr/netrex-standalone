@@ -2,13 +2,36 @@ import { Mic, Speaker } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { supportsOutputSelection } from "@/src/hooks/useAudioDeviceSync";
 
+// Android Chrome, ses yönlendirmesini giriş listesinde "Speakerphone" / "Headset earpiece" gibi
+// girişlerle sunar; birini seçmek gelen sesin de hoparlöre/ahizeye gitmesini sağlar.
+const SPEAKER_RE = /speakerphone/i;
+const EARPIECE_RE = /earpiece|handset/i;
+
+function friendlyInputLabel(d) {
+  const label = d.label || "";
+  if (SPEAKER_RE.test(label)) return "Hoparlör (Speakerphone)";
+  if (EARPIECE_RE.test(label)) return "Ahize / Kulaklık (Earpiece)";
+  return label || `Mikrofon ${d.deviceId.slice(0, 5)}`;
+}
+
 export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
-  const outputSelectable = supportsOutputSelection() && audioOutputs.length > 0;
 
   const audioInputId = useSettingsStore(s => s.audioInputId);
   const setAudioInput = useSettingsStore(s => s.setAudioInput);
   const audioOutputId = useSettingsStore(s => s.audioOutputId);
   const setAudioOutput = useSettingsStore(s => s.setAudioOutput);
+
+  // Tarayıcının kendi "default"/"communications" girişleri bizim "Varsayılan" ile aynı şey: tekrar göstermeyelim
+  const inputs = audioInputs.filter(
+    (d) => d.deviceId !== "default" && d.deviceId !== "communications",
+  );
+  const speakerInput = inputs.find((d) => SPEAKER_RE.test(d.label));
+  const earpieceInput = inputs.find((d) => EARPIECE_RE.test(d.label));
+  const hasPhoneRouting = !!(speakerInput || earpieceInput);
+  const outputsFiltered = audioOutputs.filter(
+    (d) => d.deviceId !== "default" && d.deviceId !== "communications",
+  );
+  const outputSelectable = supportsOutputSelection() && outputsFiltered.length > 0;
 
   return (
     <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
@@ -37,9 +60,9 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
               className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-cyan-500/50 focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 outline-none appearance-none cursor-pointer transition-all duration-300 pr-10"
             >
               <option value="default">Varsayılan</option>
-              {audioInputs.map((d) => (
+              {inputs.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Mikrofon ${d.deviceId.slice(0, 5)}`}
+                  {friendlyInputLabel(d)}
                 </option>
               ))}
             </select>
@@ -49,6 +72,41 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
           </div>
         </div>
         
+        {/* Telefon: sesi hoparlörden / ahizeden al (Android'de çıkışı bu girişler belirler) */}
+        {hasPhoneRouting && (
+          <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5">
+            <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2 flex items-center gap-2">
+              <Speaker size={12} className="text-emerald-400" />
+              Ses Nereden Gelsin?
+            </label>
+            <p className="text-xs text-[#949ba4] mb-3 -mt-1">
+              Telefonda gelen sesin hoparlörden mi yoksa ahizeden/kulaklıktan mı çalacağını belirler.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { dev: speakerInput, title: "Hoparlör", sub: "Sesi yüksek ver" },
+                { dev: earpieceInput, title: "Ahize / Kulaklık", sub: "Kulağa tutarak" },
+              ].map(({ dev, title, sub }) =>
+                dev ? (
+                  <button
+                    key={dev.deviceId}
+                    type="button"
+                    onClick={() => setAudioInput(dev.deviceId)}
+                    className={`p-3 rounded-xl border text-left transition-all active:scale-95 ${
+                      audioInputId === dev.deviceId
+                        ? "bg-emerald-500/20 border-emerald-500/60 text-white"
+                        : "bg-[#2b2d31] border-white/10 text-[#b5bac1] hover:border-emerald-500/40"
+                    }`}
+                  >
+                    <div className="text-sm font-bold">{title}</div>
+                    <div className="text-[11px] text-[#949ba4]">{sub}</div>
+                  </button>
+                ) : null,
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Hoparlör */}
         <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2 flex items-center gap-2">
@@ -58,7 +116,9 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
           <p className="text-xs text-[#949ba4] mb-2 -mt-1">
             {outputSelectable
               ? "Odadaki kişileri duyacağınız hoparlör veya kulaklık."
-              : "Bu cihazda tarayıcı çıkış seçmeye izin vermiyor (telefonlarda yaygın). Hoparlör/kulaklık geçişini telefonun kendi ses çıkışı menüsünden yapın."}
+              : hasPhoneRouting
+                ? "Bu cihazda tarayıcı çıkış listesi vermiyor. Hoparlör/ahize geçişi için yukarıdaki “Ses Nereden Gelsin?” kutusunu kullanın."
+                : "Bu cihazda tarayıcı çıkış seçmeye izin vermiyor. Geçişi telefonun kendi ses çıkışı menüsünden yapın."}
           </p>
           <div className="relative">
             <select
@@ -68,7 +128,7 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
               className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer transition-all duration-300 pr-10"
             >
               <option value="default">Varsayılan</option>
-              {audioOutputs.map((d) => (
+              {outputsFiltered.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Hoparlör ${d.deviceId.slice(0, 5)}`}
                 </option>

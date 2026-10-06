@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "next dev",
     "dev:web": "cross-env NEXT_PUBLIC_BUILD_TARGET=web next dev",
-    "dev:lan": "cross-env NEXT_PUBLIC_BUILD_TARGET=web next dev -H 0.0.0.0 -p 3001 --experimental-https",
     "build": "next build",
     "build:web": "cross-env NEXT_PUBLIC_BUILD_TARGET=web next build",
     "start:web": "next start",
