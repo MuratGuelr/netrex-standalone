@@ -1,6 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import { useCursorShareStore } from '@/src/store/cursorShareStore';
 import { shallow } from 'zustand/shallow';
+import { getVideoContentRect } from '@/src/utils/pointerGeometry';
+import { pruneAndGetFx, subscribeFx, RIPPLE_MS, STROKE_HOLD_MS, STROKE_FADE_MS } from '@/src/utils/pointerFx';
 
 /**
  * 🖱️ Remote Cursor Overlay
@@ -286,12 +288,116 @@ export const CursorSettingsPanel = memo(({ compact = false }) => {
 CursorSettingsPanel.displayName = 'CursorSettingsPanel';
 
 // ──────────────────────────────────────
+// EFEKT KATMANI: tıklama dalgaları + çizimler (canvas)
+// ──────────────────────────────────────
+// Koordinatlar 0..1 aralığında ve VİDEONUN görüntülendiği alana göre; siyah boşluklar hariç.
+export const PointerEffectsLayer = memo(({ containerRef, sharerId }) => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef?.current;
+    if (!canvas || !container) return;
+    const ctx = canvas.getContext('2d');
+    let raf = 0;
+    let running = false;
+    let dpr = 1;
+
+    const resize = () => {
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      const r = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.round(r.width * dpr));
+      canvas.height = Math.max(1, Math.round(r.height * dpr));
+    };
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    ro?.observe(canvas);
+    resize();
+
+    const frame = () => {
+      const now = Date.now();
+      const { clicks, strokes } = pruneAndGetFx(now);
+      const cssW = canvas.width / dpr;
+      const cssH = canvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const cr = getVideoContentRect(container, canvas);
+      const px = (x) => cr.left + x * cr.width;
+      const py = (y) => cr.top + y * cr.height;
+      let active = false;
+
+      for (const c of clicks) {
+        if (c.targetId !== sharerId) continue;
+        const k = (now - c.t) / RIPPLE_MS;
+        if (k >= 1) continue;
+        active = true;
+        ctx.globalAlpha = 1 - k;
+        ctx.strokeStyle = c.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(px(c.x), py(c.y), 8 + k * 34, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = c.color;
+        ctx.globalAlpha = (1 - k) * 0.45;
+        ctx.beginPath();
+        ctx.arc(px(c.x), py(c.y), 6 * (1 - k) + 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      strokes.forEach((s) => {
+        if (s.targetId !== sharerId || s.pts.length === 0) return;
+        active = true;
+        const age = now - s.t;
+        ctx.globalAlpha = age <= STROKE_HOLD_MS ? 1 : Math.max(0, 1 - (age - STROKE_HOLD_MS) / STROKE_FADE_MS);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        s.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(px(p[0]), py(p[1])) : ctx.lineTo(px(p[0]), py(p[1]))));
+        if (s.pts.length === 1) ctx.lineTo(px(s.pts[0][0]) + 0.1, py(s.pts[0][1]));
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      });
+      ctx.globalAlpha = 1;
+
+      if (active) {
+        raf = requestAnimationFrame(frame);
+      } else {
+        running = false;
+        ctx.clearRect(0, 0, cssW, cssH);
+      }
+    };
+
+    const kick = () => {
+      if (!running) {
+        running = true;
+        raf = requestAnimationFrame(frame);
+      }
+    };
+    const unsub = subscribeFx(kick);
+    kick();
+
+    return () => {
+      unsub();
+      ro?.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [containerRef, sharerId]);
+
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-30" />;
+});
+PointerEffectsLayer.displayName = 'PointerEffectsLayer';
+
+// ──────────────────────────────────────
 // MAIN OVERLAY COMPONENT
 // ──────────────────────────────────────
 export default function CursorOverlay({ containerRef, sharerId }) {
   const showRemoteCursors = useCursorShareStore(s => s.showRemoteCursors);
-  
-  // ⚡ SADECE ID listesini dinle. 
+
+  // ⚡ SADECE ID listesini dinle.
   // Sharer'ın kendi imlecini de listeden çıkarıyoruz (çünkü videonun içinde zaten v5.4)
   const cursorIds = useCursorShareStore(
     s => Object.keys(s.remoteCursors).filter(id => {
@@ -301,25 +407,31 @@ export default function CursorOverlay({ containerRef, sharerId }) {
     shallow
   );
 
-  if (!showRemoteCursors || cursorIds.length === 0) return null;
-
-  // Container boyutlarını al
-  const rect = containerRef?.current?.getBoundingClientRect();
-  const containerWidth = rect?.width || 0;
-  const containerHeight = rect?.height || 0;
-
-  if (containerWidth === 0 || containerHeight === 0) return null;
+  // Konumlar videonun GERÇEK görüntü alanına göre hesaplanır (object-contain boşlukları hariç)
+  const container = containerRef?.current;
+  const cr = container ? getVideoContentRect(container) : null;
+  const showCursors = showRemoteCursors && cursorIds.length > 0 && cr && cr.width > 0 && cr.height > 0;
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
-      {cursorIds.map((participantId) => (
-        <RemoteCursorWrapper
-          key={participantId}
-          participantId={participantId}
-          containerWidth={containerWidth}
-          containerHeight={containerHeight}
-        />
-      ))}
-    </div>
+    <>
+      <PointerEffectsLayer containerRef={containerRef} sharerId={sharerId} />
+      {showCursors && (
+        <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
+          <div
+            className="absolute"
+            style={{ left: cr.left, top: cr.top, width: cr.width, height: cr.height }}
+          >
+            {cursorIds.map((participantId) => (
+              <RemoteCursorWrapper
+                key={participantId}
+                participantId={participantId}
+                containerWidth={cr.width}
+                containerHeight={cr.height}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

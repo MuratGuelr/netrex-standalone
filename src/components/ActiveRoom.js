@@ -32,6 +32,7 @@ import { useApplyParticipantVolumes } from "@/src/hooks/useApplyParticipantVolum
 import { useSpatialAudio } from "@/src/hooks/useSpatialAudio";
 import { useMicGuard } from "@/src/hooks/useMicGuard";
 import { useAudioDeviceSync } from "@/src/hooks/useAudioDeviceSync";
+import { useCursorShareController } from "@/src/hooks/useCursorShareController";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import SpatialCanvas from "./active-room/SpatialCanvas";
 import { db, rtdb } from "@/src/lib/firebase";
@@ -119,6 +120,12 @@ function VoiceProcessorHandler() {
 function MicGuardHandler({ serverMuted, serverDeafened }) {
   useMicGuard({ serverMuted, serverDeafened });
   useAudioDeviceSync(); // giriş/çıkış cihazı seçimini odaya uygular
+  return null;
+}
+
+// 🖱️ İşaretçi paylaşımı — gelen mesajlar, izinler ve overlay (odada TEK kez bağlanır)
+function CursorShareHandler() {
+  useCursorShareController();
   return null;
 }
 
@@ -1495,6 +1502,7 @@ export default function ActiveRoom({
       <VoiceProcessorHandler />
       <SpatialAudioHandler />
       <MicGuardHandler serverMuted={serverMuted} serverDeafened={serverDeafened} />
+      <CursorShareHandler />
       <OverlayBridge
         channelName={roomDisplayName}
         serverName={currentServerName}

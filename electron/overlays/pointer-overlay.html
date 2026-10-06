@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<title>Netrex İşaretçi</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  body { font-family: 'Segoe UI', -apple-system, system-ui, sans-serif; user-select: none; }
+
+  /* ═══════════ EFEKT KATMANI (çizim + tıklama dalgası) ═══════════ */
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+
+  /* ═══════════ İMLEÇLER ═══════════ */
+  #cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .ptr { position: absolute; transition: left 60ms linear, top 60ms linear; transform: translate(-2px, -2px); }
+  .ptr svg { display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+  .ptr-name {
+    position: absolute; top: 22px; left: 12px; white-space: nowrap;
+    background: rgba(17,18,20,0.92); color: #fff; padding: 2px 7px; border-radius: 5px;
+    font-size: 11px; font-weight: 600; border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  /* ═══════════ WIDGET ═══════════ */
+  #widget {
+    position: fixed; right: 12px; top: 42%; z-index: 9999; width: 220px;
+    display: flex; flex-direction: column; align-items: flex-end;
+    opacity: 0.45; transition: opacity 0.2s ease;
+  }
+  #widget:hover, #widget.alert { opacity: 1; }
+  #widget.alert #pill, #widget.alert #panel { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.35), 0 4px 18px rgba(0,0,0,0.5); }
+
+  #pill {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    background: rgba(17,18,20,0.82); border: 1px solid rgba(99,102,241,0.3); border-radius: 16px;
+    padding: 5px 6px 5px 11px; cursor: pointer; backdrop-filter: blur(8px);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  }
+  #pill:hover { border-color: rgba(99,102,241,0.7); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 6px #6366f1; flex-shrink: 0; }
+  .dot.off { background: #666; box-shadow: none; }
+  #pill-text { color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+  #pill-count {
+    margin-left: auto; background: rgba(99,102,241,0.3); color: #c7d2fe; font-size: 10px; font-weight: 700;
+    padding: 1px 7px; border-radius: 8px; min-width: 18px; text-align: center;
+  }
+  #pill-count.hot { background: #f59e0b; color: #1a1305; }
+
+  .x-btn {
+    width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(248,113,113,0.35);
+    background: rgba(248,113,113,0.12); color: #f87171; font-size: 11px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .x-btn:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+
+  #panel {
+    display: none; flex-direction: column; width: 100%;
+    background: rgba(17,18,20,0.92); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+    backdrop-filter: blur(12px); box-shadow: 0 4px 22px rgba(0,0,0,0.5); overflow: hidden;
+  }
+  .ph { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); cursor: grab; }
+  .ph:active { cursor: grabbing; }
+  .ph-left { display: flex; align-items: center; gap: 7px; }
+  .ph-title { color: rgba(255,255,255,0.85); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .ph-btns { display: flex; gap: 5px; align-items: center; }
+  .min-btn {
+    width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: none;
+    color: rgba(255,255,255,0.6); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .min-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+  .pb { padding: 9px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .row-label { color: rgba(255,255,255,0.75); font-size: 11px; }
+  .sep { font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07); }
+  .hidden { display: none !important; }
+
+  .tgl { position: relative; display: inline-block; width: 32px; height: 18px; flex-shrink: 0; }
+  .tgl input { opacity: 0; width: 0; height: 0; }
+  .tgl-s { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.15); border-radius: 18px; transition: .2s; }
+  .tgl-s::before { content: ''; position: absolute; width: 14px; height: 14px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
+  .tgl input:checked + .tgl-s { background: #6366f1; }
+  .tgl input:checked + .tgl-s::before { transform: translateX(14px); }
+
+  .rng { display: flex; align-items: center; gap: 6px; }
+  .rng-val { font-size: 10px; color: rgba(255,255,255,0.55); width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; width: 80px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; background: rgba(255,255,255,0.15); border-radius: 4px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #a5b4fc; margin-top: -4px; }
+
+  .list { display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; }
+  .list::-webkit-scrollbar { width: 4px; }
+  .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+  .item { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: rgba(255,255,255,0.05); padding: 5px 8px; border-radius: 7px; font-size: 11px; color: rgba(255,255,255,0.9); }
+  .item.req { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); }
+  .item-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .item-left span.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .item-btns { display: flex; gap: 4px; flex-shrink: 0; }
+  .mini {
+    border-radius: 5px; padding: 3px 8px; font-size: 10px; font-weight: 700; cursor: pointer; border: 1px solid transparent;
+  }
+  .mini.ok { background: #16a34a; color: #fff; }
+  .mini.ok:hover { background: #22c55e; }
+  .mini.no { background: rgba(248,113,113,0.12); color: #f87171; border-color: rgba(248,113,113,0.3); }
+  .mini.no:hover { background: #ef4444; color: #fff; }
+  .empty { color: rgba(255,255,255,0.35); font-size: 10px; font-style: italic; padding: 2px 0; }
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div id="cursor-layer"></div>
+
+<div id="widget">
+  <div id="pill">
+    <div class="dot" id="dot-pill"></div>
+    <span id="pill-text">İşaretçi</span>
+    <span id="pill-count">0</span>
+    <button class="x-btn" id="pill-close" title="İşaretçi paylaşımını kapat">✕</button>
+  </div>
+
+  <div id="panel">
+    <div class="ph" id="drag-handle">
+      <div class="ph-left"><div class="dot" id="dot-panel"></div><span class="ph-title">İşaretçi Paylaşımı</span></div>
+      <div class="ph-btns">
+        <button class="min-btn" id="btn-min" title="Küçült">─</button>
+        <button class="x-btn" id="btn-close" title="Kapat">✕</button>
+      </div>
+    </div>
+    <div class="pb">
+      <div id="req-section" class="hidden">
+        <div class="sep" style="border-top:none;padding-top:0;margin-bottom:6px;color:#fbbf24">İzin İstekleri</div>
+        <div class="list" id="rlist"></div>
+      </div>
+      <div class="row">
+        <span class="row-label">İşaretçileri Göster</span>
+        <label class="tgl"><input type="checkbox" id="chk-vis" checked><span class="tgl-s"></span></label>
+      </div>
+      <div class="row">
+        <span class="row-label">Opaklık</span>
+        <div class="rng"><input type="range" id="rng-opacity" min="10" max="100" value="100"><span class="rng-val" id="val-opacity">100</span></div>
+      </div>
+      <div class="sep">İzinli Kullanıcılar</div>
+      <div class="list" id="ulist"><div class="empty">Henüz kimse yok</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var api = window.netrex || {};
+  var STORE_KEY = 'netrex-pointer-overlay';
+
+  // ───────── kalıcı ayarlar (konum, opaklık) ─────────
+  function loadPrefs() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } }
+  function savePrefs(p) { try { localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch (e) {} }
+  var prefs = loadPrefs();
+
+  // ───────── yardımcılar ─────────
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = String(text);
+    return n;
+  }
+  function safeColor(c) { return (typeof c === 'string' && /^#[0-9a-f]{3,8}$/i.test(c)) ? c : '#6366f1'; }
+  function num(v, min, max) { if (v == null || v === '') return null; v = Number(v); if (!isFinite(v)) return null; return Math.max(min, Math.min(max, v)); }
+
+  var widget = document.getElementById('widget');
+  var pill = document.getElementById('pill');
+  var panel = document.getElementById('panel');
+  var cursorLayer = document.getElementById('cursor-layer');
+  var pillCount = document.getElementById('pill-count');
+  var dots = [document.getElementById('dot-pill'), document.getElementById('dot-panel')];
+  var chkVis = document.getElementById('chk-vis');
+  var rngOpacity = document.getElementById('rng-opacity');
+  var valOpacity = document.getElementById('val-opacity');
+  var ulist = document.getElementById('ulist');
+  var rlist = document.getElementById('rlist');
+  var reqSection = document.getElementById('req-section');
+  var expanded = false;
+  var dragging = false;
+  var didDrag = false;
+
+  // ───────── widget konumu ─────────
+  function clampWidget() {
+    var r = widget.getBoundingClientRect();
+    var left = Math.max(0, Math.min(window.innerWidth - r.width, r.left));
+    var top = Math.max(0, Math.min(window.innerHeight - r.height, r.top));
+    widget.style.right = 'auto';
+    widget.style.left = left + 'px';
+    widget.style.top = top + 'px';
+  }
+  function applyPrefs() {
+    if (typeof prefs.left === 'number' && typeof prefs.top === 'number') {
+      widget.style.right = 'auto';
+      widget.style.left = prefs.left + 'px';
+      widget.style.top = prefs.top + 'px';
+    } else {
+      // Varsayılan: sağ kenar, ekranın ortasına yakın — pencere kapatma düğmelerinin olduğu sağ üst köşeden uzak
+      widget.style.top = Math.round(window.innerHeight * 0.42) + 'px';
+    }
+    if (typeof prefs.opacity === 'number') {
+      rngOpacity.value = String(Math.round(prefs.opacity * 100));
+      valOpacity.textContent = rngOpacity.value;
+      cursorLayer.style.opacity = String(prefs.opacity);
+    }
+    clampWidget();
+  }
+
+  // ───────── ana işleme etkileşim alanını bildir (hover algısını ana süreç yapar) ─────────
+  var rectQueued = false;
+  function reportRect() {
+    if (rectQueued) return;
+    rectQueued = true;
+    requestAnimationFrame(function () {
+      rectQueued = false;
+      var r = widget.getBoundingClientRect();
+      if (api.reportPointerOverlayWidgetRect) {
+        api.reportPointerOverlayWidgetRect({ x: r.left, y: r.top, width: r.width, height: r.height, dragging: dragging });
+      }
+    });
+  }
+  if (window.ResizeObserver) new ResizeObserver(reportRect).observe(widget);
+  window.addEventListener('resize', function () { clampWidget(); reportRect(); });
+
+  // ───────── aç / kapat ─────────
+  function setExpanded(v) {
+    expanded = v;
+    pill.style.display = v ? 'none' : 'flex';
+    panel.style.display = v ? 'flex' : 'none';
+    clampWidget();
+    reportRect();
+  }
+  pill.addEventListener('click', function () { if (!didDrag) setExpanded(true); });
+  document.getElementById('btn-min').addEventListener('click', function () { setExpanded(false); });
+
+  function closeAll() {
+    if (api.revokeAllPointers) api.revokeAllPointers();
+    if (api.closePointerOverlay) api.closePointerOverlay();
+  }
+  document.getElementById('btn-close').addEventListener('click', closeAll);
+  document.getElementById('pill-close').addEventListener('click', function (e) { e.stopPropagation(); closeAll(); });
+
+  // ───────── sürükleme ─────────
+  var dx = 0, dy = 0, sx = 0, sy = 0;
+  function startDrag(e) {
+    if (e.target.closest('button') || e.target.closest('.tgl') || e.target.tagName === 'INPUT') return;
+    dragging = true; didDrag = false;
+    var r = widget.getBoundingClientRect();
+    dx = e.clientX - r.left; dy = e.clientY - r.top; sx = e.clientX; sy = e.clientY;
+    widget.style.right = 'auto';
+    reportRect();
+    e.preventDefault();
+  }
+  document.getElementById('drag-handle').addEventListener('mousedown', startDrag);
+  pill.addEventListener('mousedown', startDrag);
+  document.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    if (Math.abs(e.clientX - sx) > 3 || Math.abs(e.clientY - sy) > 3) didDrag = true;
+    var mw = window.innerWidth - widget.offsetWidth;
+    var mh = window.innerHeight - widget.offsetHeight;
+    widget.style.left = Math.max(0, Math.min(mw, e.clientX - dx)) + 'px';
+    widget.style.top = Math.max(0, Math.min(mh, e.clientY - dy)) + 'px';
+    reportRect();
+  });
+  document.addEventListener('mouseup', function () {
+    if (!dragging) return;
+    dragging = false;
+    var r = widget.getBoundingClientRect();
+    prefs.left = r.left; prefs.top = r.top; savePrefs(prefs);
+    reportRect();
+    setTimeout(function () { didDrag = false; }, 0);
+  });
+
+  // ───────── ayarlar ─────────
+  chkVis.addEventListener('change', function (e) {
+    var on = e.target.checked;
+    cursorLayer.style.display = on ? 'block' : 'none';
+    dots.forEach(function (d) { d.className = on ? 'dot' : 'dot off'; });
+  });
+  rngOpacity.addEventListener('input', function (e) {
+    var o = e.target.value / 100;
+    valOpacity.textContent = e.target.value;
+    cursorLayer.style.opacity = String(o);
+    prefs.opacity = o; savePrefs(prefs);
+  });
+
+  // ───────── imleç çizimi ─────────
+  var cursorEls = new Map();
+  function mkSvg(color) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', '22'); svg.setAttribute('height', '22'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+    var path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', 'M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-5.07a.5.5 0 0 1 .36-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.36z');
+    path.setAttribute('fill', color); path.setAttribute('stroke', '#fff'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  var lastRequestCount = 0;
+  var alertTimer = null;
+
+  function render(payload) {
+    var data = Array.isArray(payload) ? { pointers: payload, requests: [] } : (payload || {});
+    var pointers = Array.isArray(data.pointers) ? data.pointers : [];
+    var requests = Array.isArray(data.requests) ? data.requests : [];
+
+    // Sayaç: bekleyen istek varsa onu vurgula
+    if (requests.length > 0) { pillCount.textContent = String(requests.length); pillCount.className = 'hot'; }
+    else { pillCount.textContent = String(pointers.length); pillCount.className = ''; }
+
+    // İzin istekleri
+    rlist.textContent = '';
+    reqSection.classList.toggle('hidden', requests.length === 0);
+    requests.forEach(function (r) {
+      var row = el('div', 'item req');
+      var left = el('div', 'item-left');
+      left.appendChild(el('span', 'nm', r.name || 'Kullanıcı'));
+      var btns = el('div', 'item-btns');
+      var ok = el('button', 'mini ok', 'İzin Ver');
+      var no = el('button', 'mini no', 'Reddet');
+      ok.addEventListener('click', function () { if (api.grantPointerRequest) api.grantPointerRequest(r.id); });
+      no.addEventListener('click', function () { if (api.denyPointerRequest) api.denyPointerRequest(r.id); });
+      btns.appendChild(ok); btns.appendChild(no);
+      row.appendChild(left); row.appendChild(btns);
+      rlist.appendChild(row);
+    });
+
+    // Yeni istek geldi: paneli aç ve dikkat çek
+    if (requests.length > lastRequestCount) {
+      setExpanded(true);
+      widget.classList.add('alert');
+      clearTimeout(alertTimer);
+      alertTimer = setTimeout(function () { widget.classList.remove('alert'); }, 10000);
+    }
+    if (requests.length === 0) widget.classList.remove('alert');
+    lastRequestCount = requests.length;
+
+    // İzinli kullanıcılar
+    ulist.textContent = '';
+    if (pointers.length === 0) {
+      ulist.appendChild(el('div', 'empty', 'Henüz kimse yok'));
+    } else {
+      pointers.forEach(function (p) {
+        var row = el('div', 'item');
+        var left = el('div', 'item-left');
+        var dot = el('div', 'ui-dot'); dot.style.background = safeColor(p.color);
+        left.appendChild(dot); left.appendChild(el('span', 'nm', p.name || 'Kullanıcı'));
+        var rm = el('button', 'mini no', 'Kaldır');
+        rm.addEventListener('click', function () { if (api.revokePointer) api.revokePointer(p.id); });
+        row.appendChild(left); row.appendChild(rm);
+        ulist.appendChild(row);
+      });
+    }
+
+    // İmleç elemanları
+    // Konumu olmayan (hareketsiz kalmış) kullanıcının imleci eski yerinde takılı kalmasın
+    var ids = new Set(pointers.filter(function (p) { return num(p.x, -0.1, 1.1) != null && num(p.y, -0.1, 1.1) != null; }).map(function (p) { return String(p.id); }));
+    cursorEls.forEach(function (node, id) { if (!ids.has(id)) { cursorLayer.removeChild(node); cursorEls.delete(id); } });
+    pointers.forEach(function (p) {
+      var id = String(p.id);
+      var x = num(p.x, -0.1, 1.1), y = num(p.y, -0.1, 1.1);
+      if (x == null || y == null) return;
+      var node = cursorEls.get(id);
+      if (!node) {
+        node = el('div', 'ptr');
+        node.appendChild(mkSvg(safeColor(p.color)));
+        node.appendChild(el('div', 'ptr-name', p.name || '?'));
+        cursorLayer.appendChild(node);
+        cursorEls.set(id, node);
+      }
+      node.style.left = (x * 100) + '%';
+      node.style.top = (y * 100) + '%';
+    });
+    reportRect();
+  }
+
+  // ───────── çizim / tıklama dalgası ─────────
+  var canvas = document.getElementById('fx');
+  var ctx = canvas.getContext('2d');
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+  function sizeCanvas() {
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(window.innerWidth * dpr);
+    canvas.height = Math.round(window.innerHeight * dpr);
+  }
+  sizeCanvas();
+  window.addEventListener('resize', sizeCanvas);
+
+  var ripples = [];            // { x, y, color, t }
+  var strokes = new Map();     // strokeId -> { pid, color, pts: [[x,y]...], t }
+  var running = false;
+  var RIPPLE_MS = 700, STROKE_HOLD_MS = 4000, STROKE_FADE_MS = 1000, MAX_STROKE_POINTS = 800, MAX_STROKES = 60;
+
+  function startLoop() { if (!running) { running = true; requestAnimationFrame(frame); } }
+
+  function frame(now) {
+    var W = window.innerWidth, H = window.innerHeight;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var t = Date.now();
+
+    ripples = ripples.filter(function (r) { return t - r.t < RIPPLE_MS; });
+    ripples.forEach(function (r) {
+      var k = (t - r.t) / RIPPLE_MS;
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = r.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(r.x * W, r.y * H, 8 + k * 34, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = r.color; ctx.globalAlpha = (1 - k) * 0.45;
+      ctx.beginPath(); ctx.arc(r.x * W, r.y * H, 6 * (1 - k) + 2, 0, Math.PI * 2); ctx.fill();
+    });
+
+    strokes.forEach(function (s, id) {
+      var age = t - s.t;
+      if (age > STROKE_HOLD_MS + STROKE_FADE_MS) { strokes.delete(id); return; }
+      ctx.globalAlpha = age <= STROKE_HOLD_MS ? 1 : 1 - (age - STROKE_HOLD_MS) / STROKE_FADE_MS;
+      ctx.strokeStyle = s.color; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = s.color; ctx.shadowBlur = 8;
+      ctx.beginPath();
+      s.pts.forEach(function (p, i) { if (i === 0) ctx.moveTo(p[0] * W, p[1] * H); else ctx.lineTo(p[0] * W, p[1] * H); });
+      if (s.pts.length === 1) ctx.lineTo(s.pts[0][0] * W + 0.1, s.pts[0][1] * H);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+
+    if (ripples.length || strokes.size) requestAnimationFrame(frame);
+    else { running = false; ctx.clearRect(0, 0, W, H); }
+  }
+
+  function handleEvent(evt) {
+    if (!evt || typeof evt !== 'object') return;
+    var color = safeColor(evt.color);
+    if (evt.type === 'click') {
+      var x = num(evt.x, 0, 1), y = num(evt.y, 0, 1);
+      if (x == null || y == null) return;
+      ripples.push({ x: x, y: y, color: color, t: Date.now() });
+      if (ripples.length > 30) ripples.shift();
+      startLoop();
+    } else if (evt.type === 'draw') {
+      var id = String(evt.strokeId || '').slice(0, 80);
+      if (!id || !Array.isArray(evt.points)) return;
+      var s = strokes.get(id);
+      if (!s) {
+        if (strokes.size >= MAX_STROKES) strokes.delete(strokes.keys().next().value);
+        s = { pid: String(evt.participantId || ''), color: color, pts: [], t: Date.now() };
+        strokes.set(id, s);
+      }
+      evt.points.slice(0, 60).forEach(function (p) {
+        var px = num(p && p[0], 0, 1), py = num(p && p[1], 0, 1);
+        if (px != null && py != null && s.pts.length < MAX_STROKE_POINTS) s.pts.push([px, py]);
+      });
+      s.t = Date.now();
+      startLoop();
+    } else if (evt.type === 'draw_clear') {
+      var pid = String(evt.participantId || '');
+      strokes.forEach(function (s, id) { if (s.pid === pid) strokes.delete(id); });
+      startLoop();
+    }
+  }
+
+  // ───────── IPC ─────────
+  if (api.onPointerOverlayUpdate) api.onPointerOverlayUpdate(render);
+  if (api.onPointerOverlayEvent) api.onPointerOverlayEvent(handleEvent);
+
+  applyPrefs();
+  setExpanded(false);
+})();
+</script>
+</body>
+</html>

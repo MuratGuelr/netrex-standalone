@@ -27,6 +27,8 @@ const {
     showMainWindow,
     updatePointerOverlay,
     setPointerOverlayInteractive,
+    sendPointerOverlayEvent,
+    setPointerOverlayWidgetRect,
     closePointerOverlay,
     // Voice Overlay
     createVoiceOverlayWindow,
@@ -218,7 +220,7 @@ if (!gotTheLock) {
       showMainWindow, 
       inputManager, 
       setQuitting, 
-      { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive },
+      { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive, sendPointerOverlayEvent, setPointerOverlayWidgetRect },
       { createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, getVoiceOverlayPosition, startAntiCheatCheck, stopAntiCheatCheck }
     );
     

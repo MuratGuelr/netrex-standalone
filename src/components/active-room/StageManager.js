@@ -35,6 +35,8 @@ import {
   Signal,
   Trash2,
   MousePointer2,
+  Pencil,
+  Eraser,
 } from "lucide-react";
 import {
   DndContext,
@@ -55,6 +57,9 @@ import { useSettingsStore } from "@/src/store/settingsStore";
 import { useWatchPartyStore } from "@/src/store/watchPartyStore";
 import CursorOverlay from "./CursorOverlay";
 import { useCursorBroadcast } from "@/src/hooks/useCursorBroadcast";
+import { CURSOR_TOPICS } from "@/src/hooks/useCursorShareController";
+import { getVideoContentRect } from "@/src/utils/pointerGeometry";
+import { addClick, addStrokePoints, clearStrokesOf } from "@/src/utils/pointerFx";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
@@ -1441,83 +1446,195 @@ function LocalHiddenPlaceholder({ onShow, onStopSharing }) {
 }
 
 // 🤝 POINTER CAPTURE COMPONENT
-// Viewer'ın mouse hareketlerini yakalayıp yayıncıya gönderir
+// İzleyicinin fare hareketlerini, tıklamalarını ve çizimlerini yayıncıya gönderir.
+//  - İşaretle modu: imleç gösterilir, tıklayınca herkesin ekranında dalga çıkar ("tam şurası")
+//  - Çiz modu: basılı tutup çizilir; çizgiler birkaç saniye sonra kendiliğinden silinir
+// Koordinatlar videonun GERÇEK görüntü alanına göre normalize edilir (siyah boşluklar hariç).
 function PointerCapture({ targetParticipant, containerRef }) {
   const { localParticipant } = useLocalParticipant();
+  const [mode, setMode] = useState("point"); // 'point' | 'draw'
+  const modeRef = useRef("point");
   const lastSentRef = useRef(0);
+
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+
+  const targetId = targetParticipant?.identity;
+
+  const getMeta = useCallback(() => {
+    try {
+      const md = localParticipant?.metadata ? JSON.parse(localParticipant.metadata) : {};
+      return {
+        displayName: md.displayName || localParticipant?.name || localParticipant?.identity,
+        color: md.profileColor || "#6366f1",
+      };
+    } catch (e) {
+      return { displayName: localParticipant?.identity, color: "#6366f1" };
+    }
+  }, [localParticipant]);
+
+  const publish = useCallback((topic, payload, reliable = true) => {
+    try {
+      localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify({ type: topic, participantId: localParticipant.identity, targetId, ...payload })),
+        { topic, reliable },
+      );
+    } catch (e) {}
+  }, [localParticipant, targetId]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !localParticipant) return;
+    if (!container || !localParticipant || !targetId) return;
 
-    const handleMouseMove = (e) => {
+    const myId = localParticipant.identity;
+    let stroke = null; // { id, pending: [], lastFlush }
+
+    // Fare → videonun görüntülendiği alana göre 0..1 (alan dışındaysa null)
+    const toNormalized = (e, clampToVideo = false) => {
+      const cRect = container.getBoundingClientRect();
+      const cr = getVideoContentRect(container);
+      if (!cr.width || !cr.height) return null;
+      let x = (e.clientX - cRect.left - cr.left) / cr.width;
+      let y = (e.clientY - cRect.top - cr.top) / cr.height;
+      if (clampToVideo) {
+        x = Math.max(0, Math.min(1, x));
+        y = Math.max(0, Math.min(1, y));
+      } else if (x < 0 || x > 1 || y < 0 || y > 1) {
+        return null;
+      }
+      return { x, y };
+    };
+
+    const isToolbar = (e) => !!e.target?.closest?.("[data-pointer-toolbar]");
+
+    const flushStroke = (force = false) => {
+      if (!stroke || stroke.pending.length === 0) return;
       const now = Date.now();
-      if (now - lastSentRef.current < 33) return; // 30fps throttle
+      if (!force && now - stroke.lastFlush < 40) return;
+      stroke.lastFlush = now;
+      const points = stroke.pending.splice(0, stroke.pending.length);
+      const { color } = getMeta();
+      publish(CURSOR_TOPICS.DRAW, { strokeId: stroke.id, color, points });
+    };
+
+    const handlePointerMove = (e) => {
+      if (isToolbar(e)) return;
+
+      // Çizim sırasında noktaları topla (kutu dışına taşsa da videoya sıkıştır)
+      if (stroke && (e.buttons & 1)) {
+        const p = toNormalized(e, true);
+        if (p) {
+          stroke.pending.push([p.x, p.y]);
+          const { color } = getMeta();
+          addStrokePoints({ strokeId: stroke.id, pid: myId, targetId, color, points: [[p.x, p.y]] });
+          flushStroke();
+        }
+      }
+
+      // İmleç konumu (30fps)
+      const now = Date.now();
+      if (now - lastSentRef.current < 33) return;
+      const p = toNormalized(e);
+      if (!p) return;
       lastSentRef.current = now;
-
-      const rect = container.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-
-      // Sınırlar dışındaysa gönderme
-      if (x < 0 || x > 1 || y < 0 || y > 1) return;
-
-      try {
-        const metadata = localParticipant.metadata ? JSON.parse(localParticipant.metadata) : {};
-        const data = new TextEncoder().encode(JSON.stringify({
-          type: 'cursor_position',
-          participantId: localParticipant.identity,
-          targetId: targetParticipant?.identity,
-          x,
-          y,
-          screenWidth: rect.width,
-          screenHeight: rect.height,
-          displayName: metadata.displayName || localParticipant.name || localParticipant.identity,
-          color: metadata.profileColor || '#6366f1'
-        }));
-
-        localParticipant.publishData(data, {
-          topic: 'cursor_position',
-          reliable: false
-        });
-      } catch (e) {}
+      const { displayName, color } = getMeta();
+      publish(CURSOR_TOPICS.POSITION, {
+        x: p.x, y: p.y,
+        screenWidth: container.clientWidth, screenHeight: container.clientHeight,
+        displayName, color,
+      }, false);
     };
 
-    const handleMouseLeave = () => {
-      try {
-        const data = new TextEncoder().encode(JSON.stringify({
-          type: 'cursor_hide',
-          participantId: localParticipant.identity
-        }));
-        localParticipant.publishData(data, {
-          topic: 'cursor_hide',
-          reliable: true
-        });
-      } catch (e) {}
+    const handlePointerDown = (e) => {
+      if (e.button !== 0 || isToolbar(e)) return;
+      const p = toNormalized(e, modeRef.current === "draw");
+      if (!p) return;
+      const { color } = getMeta();
+
+      if (modeRef.current === "draw") {
+        stroke = { id: `${myId}-${Date.now()}`, pending: [[p.x, p.y]], lastFlush: 0 };
+        addStrokePoints({ strokeId: stroke.id, pid: myId, targetId, color, points: [[p.x, p.y]] });
+        try { e.target.setPointerCapture?.(e.pointerId); } catch (err) {}
+        flushStroke(true);
+      } else {
+        // Tıklama geri bildirimi: hem kendi ekranında hem herkeste dalga
+        addClick({ targetId, x: p.x, y: p.y, color });
+        publish(CURSOR_TOPICS.CLICK, { x: p.x, y: p.y, color });
+      }
     };
 
-    container.addEventListener('mousemove', handleMouseMove, { passive: true });
-    container.addEventListener('mouseleave', handleMouseLeave);
-    
+    const endStroke = () => {
+      if (!stroke) return;
+      flushStroke(true);
+      stroke = null;
+    };
+
+    const handlePointerLeave = (e) => {
+      if (e.pointerType && e.pointerType !== "mouse") return;
+      if (stroke) return; // çizerken kutu dışına çıkmak imleci gizlemesin
+      publish(CURSOR_TOPICS.HIDE, {});
+    };
+
+    const handleKey = (e) => {
+      if (e.key === "Escape") setMode("point");
+    };
+
+    container.addEventListener("pointermove", handlePointerMove, { passive: true });
+    container.addEventListener("pointerdown", handlePointerDown);
+    container.addEventListener("pointerup", endStroke);
+    container.addEventListener("pointercancel", endStroke);
+    container.addEventListener("pointerleave", handlePointerLeave);
+    window.addEventListener("keydown", handleKey);
+
     return () => {
-      container.removeEventListener('mousemove', handleMouseMove);
-      container.removeEventListener('mouseleave', handleMouseLeave);
+      endStroke();
+      container.removeEventListener("pointermove", handlePointerMove);
+      container.removeEventListener("pointerdown", handlePointerDown);
+      container.removeEventListener("pointerup", endStroke);
+      container.removeEventListener("pointercancel", endStroke);
+      container.removeEventListener("pointerleave", handlePointerLeave);
+      window.removeEventListener("keydown", handleKey);
     };
-  }, [localParticipant, containerRef, targetParticipant]);
+  }, [localParticipant, containerRef, targetId, publish, getMeta]);
+
+  const clearMine = () => {
+    if (!localParticipant) return;
+    clearStrokesOf(localParticipant.identity, targetId);
+    publish(CURSOR_TOPICS.DRAW_CLEAR, {});
+  };
+
+  const btn = (active) =>
+    `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all active:scale-95 ${
+      active ? "bg-white text-emerald-700 shadow" : "text-white/90 hover:bg-white/15"
+    }`;
 
   return (
-    <>
-       <div className="absolute inset-0 z-40 cursor-crosshair group/pointer-capture">
-          {/* ✨ Görsel Geri Bildirim: Kullanıcı işaretleme yaparken kenarlarda hafif bir parıltı */}
-          <div className="absolute inset-0 border-2 border-emerald-500/30 pointer-events-none opacity-0 group-hover/pointer-capture:opacity-100 transition-opacity duration-300" />
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-emerald-500/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-lg pointer-events-none animate-in slide-in-from-top-4">
-             <div className="flex items-center gap-1.5">
-                <MousePointer2 size={10} className="animate-bounce" />
-                <span>İşaretçi Aktif</span>
-             </div>
-          </div>
-       </div>
-    </>
+    <div
+      className="absolute inset-0 z-40 group/pointer-capture cursor-crosshair"
+      style={{ touchAction: "none" }}
+    >
+      {/* ✨ Kenar parıltısı: işaretçi / çizim modunda olduğunu belli eder */}
+      <div className={`absolute inset-0 border-2 pointer-events-none transition-opacity duration-300 ${
+        mode === "draw" ? "border-amber-400/60 opacity-100" : "border-emerald-500/30 opacity-0 group-hover/pointer-capture:opacity-100"
+      }`} />
+
+      {/* Araç çubuğu: İşaretle / Çiz / Temizle */}
+      <div
+        data-pointer-toolbar
+        className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-emerald-600/90 backdrop-blur-md p-1 rounded-full shadow-lg animate-in slide-in-from-top-4"
+      >
+        <button type="button" className={btn(mode === "point")} onClick={() => setMode("point")} title="İşaretle: tıklayınca herkesin ekranında dalga çıkar">
+          <MousePointer2 size={12} />
+          <span>İşaretle</span>
+        </button>
+        <button type="button" className={btn(mode === "draw")} onClick={() => setMode("draw")} title="Çiz: basılı tutup çizin (Esc ile çıkın)">
+          <Pencil size={12} />
+          <span>Çiz</span>
+        </button>
+        <button type="button" className={btn(false)} onClick={clearMine} title="Çizimlerimi temizle">
+          <Eraser size={12} />
+        </button>
+      </div>
+    </div>
   );
 }
 

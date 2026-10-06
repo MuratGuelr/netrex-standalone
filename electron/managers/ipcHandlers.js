@@ -235,7 +235,7 @@ const startLocalAuthServer = (mainWindow) => {
 // IPC HANDLERS REGISTRATION
 // ============================================
 function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQuittingFn, pointerOverlayFns, voiceOverlayFns) {
-     const { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive } = pointerOverlayFns || {};
+     const { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive, sendPointerOverlayEvent, setPointerOverlayWidgetRect } = pointerOverlayFns || {};
      const { 
        createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, 
        closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, 
@@ -260,10 +260,24 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQu
         }
      });
 
-     ipcMain.on("revoke-all-pointers", () => {
-        if (mainWindowFn()) {
-           mainWindowFn().webContents.send("pointer-overlay-revoke-all");
-        }
+     $1
+
+     // Overlay'deki "İzin Ver / Reddet" düğmeleri → ana pencere (asıl izin mantığı orada)
+     ipcMain.on("pointer-overlay-grant", (event, id) => {
+        if (mainWindowFn() && typeof id === "string") mainWindowFn().webContents.send("pointer-overlay-granted", id);
+     });
+     ipcMain.on("pointer-overlay-deny", (event, id) => {
+        if (mainWindowFn() && typeof id === "string") mainWindowFn().webContents.send("pointer-overlay-denied", id);
+     });
+
+     // Ana pencere → overlay: tıklama dalgası / çizim olayları
+     ipcMain.on("pointer-overlay-event", (event, evt) => {
+        if (sendPointerOverlayEvent) sendPointerOverlayEvent(evt);
+     });
+
+     // Overlay widget'ının konumu (hover algısı ana süreçte yapılır)
+     ipcMain.on("pointer-overlay-widget-rect", (event, rect) => {
+        if (setPointerOverlayWidgetRect) setPointerOverlayWidgetRect(rect);
      });
 
      // ============================================
@@ -551,10 +565,12 @@ function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQu
         try {
             const point = screen.getCursorScreenPoint();
             const primaryDisplay = screen.getPrimaryDisplay();
-            const { width, height } = primaryDisplay.workAreaSize;
+            // TAM ekran sınırları (görev çubuğu dahil): paylaşılan görüntü ve overlay ile aynı alan.
+            // Eskiden workAreaSize kullanılıyordu; görev çubuğu kadar dikey kayma yapıyordu.
+            const { x: ox, y: oy, width, height } = primaryDisplay.bounds;
             return {
-                x: point.x,
-                y: point.y,
+                x: point.x - ox,
+                y: point.y - oy,
                 screenWidth: width,
                 screenHeight: height
             };

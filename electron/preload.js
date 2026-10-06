@@ -158,6 +158,14 @@ contextBridge.exposeInMainWorld("netrex", {
   revokeAllPointers: () => ipcRenderer.send("revoke-all-pointers"),
   onPointerOverlayRevoked: createEventHandler("pointer-overlay-revoked", (_, id) => [id]),
   onPointerOverlayRevokeAll: createEventHandler("pointer-overlay-revoke-all", () => []),
+  // Overlay'deki izin istekleri ve efektler
+  grantPointerRequest: (id) => ipcRenderer.send("pointer-overlay-grant", id),
+  denyPointerRequest: (id) => ipcRenderer.send("pointer-overlay-deny", id),
+  onPointerOverlayGranted: createEventHandler("pointer-overlay-granted", (_, id) => [id]),
+  onPointerOverlayDenied: createEventHandler("pointer-overlay-denied", (_, id) => [id]),
+  sendPointerOverlayEvent: (evt) => ipcRenderer.send("pointer-overlay-event", evt),
+  onPointerOverlayEvent: createEventHandler("pointer-overlay-event-data", (_, evt) => [evt]),
+  reportPointerOverlayWidgetRect: (rect) => ipcRenderer.send("pointer-overlay-widget-rect", rect),
   // ============================================
   // VOICE OVERLAY (Oyun İçi Overlay)
   // ============================================

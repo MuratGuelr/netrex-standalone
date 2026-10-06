@@ -297,20 +297,38 @@ function createExitSplashWindow() {
 // ============================================
 // 🖱️ CREATE POINTER OVERLAY WINDOW
 // ============================================
+// Overlay HTML'i ayrı dosyada: electron/overlays/pointer-overlay.html
+let pointerOverlayReady = false;
+let pointerOverlayLastPayload = null;
+let pointerOverlayWidgetRect = null;
+let pointerOverlayInteractive = false;
+let pointerOverlayHoverTimer = null;
+let pointerOverlayTopTimer = null;
+let pointerOverlayKnownRequests = new Set();
+
+function stopPointerOverlayTimers() {
+  if (pointerOverlayHoverTimer) { clearInterval(pointerOverlayHoverTimer); pointerOverlayHoverTimer = null; }
+  if (pointerOverlayTopTimer) { clearInterval(pointerOverlayTopTimer); pointerOverlayTopTimer = null; }
+}
+
 function createPointerOverlayWindow() {
   if (pointerOverlayWindow && !pointerOverlayWindow.isDestroyed()) {
     return pointerOverlayWindow;
   }
 
   const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.bounds;
+  // Fare konumu (get-mouse-position) da birincil ekranın TAM sınırlarını kullanır; ikisi aynı olmalı
+  const { x, y, width, height } = screen.getPrimaryDisplay().bounds;
+
+  pointerOverlayReady = false;
+  pointerOverlayWidgetRect = null;
+  pointerOverlayInteractive = false;
 
   pointerOverlayWindow = new BrowserWindow({
     width,
     height,
-    x: 0,
-    y: 0,
+    x,
+    y,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -328,372 +346,126 @@ function createPointerOverlayWindow() {
     icon: getIconPath(),
   });
 
+  const win = pointerOverlayWindow;
+
+  // Oyunların / tam ekran uygulamaların üstünde kalsın (ses overlay'i ile aynı seviye)
+  try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (e) {}
+  try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
+
   // Başlangıçta click-through
-  pointerOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  win.setIgnoreMouseEvents(true, { forward: true });
 
-  const overlayHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-          overflow: hidden; 
-          background: transparent; 
-          font-family: 'Segoe UI', -apple-system, system-ui, sans-serif;
-          user-select: none;
-        }
+  win.loadFile(path.join(__dirname, '../overlays/pointer-overlay.html'));
 
-        /* ═══════════ CURSOR RENDERING ═══════════ */
-        .ptr {
-          position: absolute;
-          pointer-events: none;
-          z-index: 10;
-          transition: left 60ms linear, top 60ms linear;
-          transform: translate(-2px, -2px);
-        }
-        .ptr svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
-        .ptr-name {
-          position: absolute;
-          top: 22px; left: 12px;
-          background: rgba(17,18,20,0.92);
-          color: #fff;
-          padding: 2px 7px;
-          border-radius: 5px;
-          font-size: 10px;
-          font-weight: 600;
-          white-space: nowrap;
-          border: 1px solid rgba(255,255,255,0.12);
-          letter-spacing: 0.01em;
-          pointer-events: none;
-        }
-
-        /* ═══════════ WIDGET (small floating panel) ═══════════ */
-        #widget {
-          position: absolute;
-          top: 12px; right: 12px;
-          pointer-events: auto;
-          z-index: 9999;
-          opacity: 0.35;
-          transition: opacity 0.2s ease;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-        }
-        #widget:hover { opacity: 1; }
-
-        /* --- Pill (collapsed) --- */
-        #pill {
-          display: flex;
-          align-items: center;
-          width: 170px;
-          box-sizing: border-box;
-          gap: 5px;
-          background: rgba(17,18,20,0.55);
-          border: 1px solid rgba(99,102,241,0.15);
-          border-radius: 14px;
-          padding: 3px 9px;
-          cursor: pointer;
-          backdrop-filter: blur(8px);
-          box-shadow: 0 1px 6px rgba(0,0,0,0.25);
-          transition: background 0.15s, border-color 0.15s;
-        }
-        #pill:hover { background: rgba(17,18,20,0.88); border-color: rgba(99,102,241,0.45); }
-        .dot { width: 4px; height: 4px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 4px #6366f1; }
-        .dot.off { background: #666; box-shadow: none; }
-        #pill-text { color: rgba(255,255,255,0.8); font-size: 9px; font-weight: 600; letter-spacing: 0.02em; }
-        #pill-count {
-          margin-left: auto;
-          background: rgba(99,102,241,0.25);
-          color: #a5b4fc;
-          font-size: 8px;
-          font-weight: 700;
-          padding: 0px 4px;
-          border-radius: 6px;
-          min-width: 12px;
-          text-align: center;
-          line-height: 14px;
-        }
-
-        /* --- Panel (expanded) --- */
-        #panel {
-          display: none;
-          flex-direction: column;
-          width: 170px;
-          background: rgba(17,18,20,0.78);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 8px;
-          backdrop-filter: blur(12px);
-          box-shadow: 0 2px 16px rgba(0,0,0,0.4);
-          overflow: hidden;
-        }
-
-        /* Panel Header */
-        .ph {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 5px 8px;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-          cursor: grab;
-        }
-        .ph:active { cursor: grabbing; }
-        .ph-left { display: flex; align-items: center; gap: 5px; }
-        .ph-left .dot { width: 5px; height: 5px; }
-        .ph-title { color: rgba(255,255,255,0.7); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-        .ph-btns { display: flex; gap: 3px; }
-        .ph-btn {
-          background: none; border: 1px solid rgba(255,255,255,0.08);
-          color: rgba(255,255,255,0.45); border-radius: 4px; padding: 2px 5px;
-          font-size: 9px; cursor: pointer; transition: all 0.12s; font-weight: 600;
-        }
-        .ph-btn:hover { color: #fff; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); }
-        .ph-btn.danger { color: #f87171; border-color: rgba(248,113,113,0.2); }
-        .ph-btn.danger:hover { background: #f87171; color: #fff; }
-
-        /* Panel Body */
-        .pb { padding: 6px 8px; display: flex; flex-direction: column; gap: 5px; }
-        .row { display: flex; align-items: center; justify-content: space-between; }
-        .row-label { color: rgba(255,255,255,0.65); font-size: 10px; }
-
-        /* Toggle */
-        .tgl { position: relative; display: inline-block; width: 26px; height: 14px; }
-        .tgl input { opacity: 0; width: 0; height: 0; }
-        .tgl-s { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.1); border-radius: 14px; transition: .2s; }
-        .tgl-s::before { content: ''; position: absolute; width: 10px; height: 10px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
-        .tgl input:checked + .tgl-s { background: #6366f1; }
-        .tgl input:checked + .tgl-s::before { transform: translateX(12px); }
-
-        /* Slider */
-        .rng { display: flex; align-items: center; gap: 5px; }
-        .rng-val { font-size: 9px; color: rgba(255,255,255,0.45); width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
-        input[type=range] { -webkit-appearance: none; width: 60px; background: transparent; cursor: pointer; }
-        input[type=range]::-webkit-slider-runnable-track { height: 3px; background: rgba(255,255,255,0.1); border-radius: 3px; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 9px; border-radius: 50%; background: #a5b4fc; margin-top: -3px; }
-
-        /* Users */
-        .sep { font-size: 8px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; padding-top: 3px; border-top: 1px solid rgba(255,255,255,0.05); }
-        .ulist { display: flex; flex-direction: column; gap: 3px; max-height: 120px; overflow-y: auto; }
-        .ulist::-webkit-scrollbar { width: 3px; }
-        .ulist::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-        .ui {
-          display: flex; align-items: center; justify-content: space-between;
-          background: rgba(255,255,255,0.03);
-          padding: 3px 6px;
-          border-radius: 4px;
-          font-size: 10px;
-          color: rgba(255,255,255,0.8);
-        }
-        .ui-left { display: flex; align-items: center; gap: 5px; }
-        .ui-dot { width: 5px; height: 5px; border-radius: 50%; }
-        .ui-rm {
-          background: rgba(248,113,113,0.08); color: #f87171; border: 1px solid rgba(248,113,113,0.15);
-          border-radius: 3px; padding: 1px 4px; font-size: 8px; cursor: pointer; font-weight: 600; transition: all 0.12s;
-        }
-        .ui-rm:hover { background: #f87171; color: #fff; }
-        .empty { color: rgba(255,255,255,0.25); font-size: 9px; font-style: italic; padding: 2px 0; }
-      </style>
-    </head>
-    <body>
-      <div id="cursor-layer"></div>
-
-      <div id="widget">
-        <div id="pill">
-          <div class="dot" id="status-dot"></div>
-          <span id="pill-text">İmleç</span>
-          <span id="pill-count">0</span>
-        </div>
-
-        <div id="panel">
-          <div class="ph" id="drag-handle">
-            <div class="ph-left">
-              <div class="dot"></div>
-              <span class="ph-title">İmleç Paylaşımı</span>
-            </div>
-            <div class="ph-btns">
-              <button class="ph-btn" id="btn-min">─</button>
-              <button class="ph-btn danger" id="btn-close">✕</button>
-            </div>
-          </div>
-          <div class="pb">
-            <div class="row">
-              <span class="row-label">İmleçleri Göster</span>
-              <label class="tgl">
-                <input type="checkbox" id="chk-vis" checked>
-                <span class="tgl-s"></span>
-              </label>
-            </div>
-            <div class="row">
-              <span class="row-label">İmleç Opaklık</span>
-              <div class="rng">
-                <input type="range" id="rng-opacity" min="10" max="100" value="100">
-                <span class="rng-val" id="val-opacity">100</span>
-              </div>
-            </div>
-            <div class="sep">Aktif Kullanıcılar</div>
-            <div class="ulist" id="ulist">
-              <div class="empty">Henüz kimse yok</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <script>
-        // ══════ STATE ══════
-        let cursorsVisible = true;
-        let cursorOpacity = 1.0;
-        let expanded = false;
-
-        // ══════ DOM ══════
-        const cursorLayer = document.getElementById('cursor-layer');
-        const widget = document.getElementById('widget');
-        const pill = document.getElementById('pill');
-        const panel = document.getElementById('panel');
-        const pillText = document.getElementById('pill-text');
-        const pillCount = document.getElementById('pill-count');
-        const statusDot = document.getElementById('status-dot');
-        const chkVis = document.getElementById('chk-vis');
-        const rngOpacity = document.getElementById('rng-opacity');
-        const valOpacity = document.getElementById('val-opacity');
-        const ulist = document.getElementById('ulist');
-
-        // ══════ EXPAND / COLLAPSE ══════
-        let didDrag = false;
-        pill.addEventListener('click', () => { 
-          if (!didDrag) { 
-            expanded = true; 
-            pill.style.display = 'none'; 
-            panel.style.display = 'flex'; 
-          } 
-        });
-        document.getElementById('btn-min').addEventListener('click', () => { expanded = false; panel.style.display = 'none'; pill.style.display = 'flex'; });
-        document.getElementById('btn-close').addEventListener('click', () => {
-          if (window.netrex?.revokeAllPointers) window.netrex.revokeAllPointers();
-          if (window.netrex?.closePointerOverlay) window.netrex.closePointerOverlay();
-        });
-
-        // ══════ CLICK-THROUGH ══════
-        widget.addEventListener('mouseenter', () => { if (window.netrex?.setOverlayInteractive) window.netrex.setOverlayInteractive(true); });
-        widget.addEventListener('mouseleave', () => { if (window.netrex?.setOverlayInteractive) window.netrex.setOverlayInteractive(false); });
-
-        // ══════ DRAG (both pill + panel header) ══════
-        let dragging = false, dx = 0, dy = 0, dragStartX = 0, dragStartY = 0;
-        function startDrag(e) {
-          if (e.target.closest('.ph-btn') || e.target.closest('.ui-rm') || e.target.closest('.tgl') || e.target.tagName === 'INPUT') return;
-          dragging = true; didDrag = false;
-          const r = widget.getBoundingClientRect();
-          dx = e.clientX - r.left; dy = e.clientY - r.top;
-          dragStartX = e.clientX; dragStartY = e.clientY;
-          widget.style.right = 'auto';
-          widget.style.left = r.left + 'px';
-          e.preventDefault();
-        }
-        document.getElementById('drag-handle').addEventListener('mousedown', startDrag);
-        pill.addEventListener('mousedown', startDrag);
-        document.addEventListener('mousemove', (e) => {
-          if (!dragging) return;
-          if (Math.abs(e.clientX - dragStartX) > 3 || Math.abs(e.clientY - dragStartY) > 3) didDrag = true;
-          const mw = window.innerWidth - widget.offsetWidth;
-          const mh = window.innerHeight - widget.offsetHeight;
-          widget.style.left = Math.max(0, Math.min(mw, e.clientX - dx)) + 'px';
-          widget.style.top = Math.max(0, Math.min(mh, e.clientY - dy)) + 'px';
-        });
-        document.addEventListener('mouseup', () => { dragging = false; });
-
-        // ══════ CONTROLS ══════
-        chkVis.addEventListener('change', (e) => {
-          cursorsVisible = e.target.checked;
-          cursorLayer.style.display = cursorsVisible ? 'block' : 'none';
-          statusDot.className = cursorsVisible ? 'dot' : 'dot off';
-        });
-        rngOpacity.addEventListener('input', (e) => {
-          cursorOpacity = e.target.value / 100;
-          valOpacity.textContent = e.target.value;
-          cursorLayer.style.opacity = cursorOpacity;
-        });
-
-        // ══════ SVG CURSOR ══════
-        const mkSvg = (c) => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-5.07a.5.5 0 0 1 .36-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.36z" fill="' + c + '" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-
-        // ══════ UPDATE ══════
-        function updatePointers(data) {
-          const n = data.length;
-          pillCount.textContent = n;
-          pillText.textContent = 'İMLEÇ PAYLAŞIMI';
-
-          // Users list
-          if (n === 0) {
-            ulist.innerHTML = '<div class="empty">Henüz kimse yok</div>';
-          } else {
-            ulist.innerHTML = data.map(p => {
-              const c = p.color || '#6366f1';
-              const nm = p.name || 'Kullanıcı';
-              const eid = p.id.replace(/'/g, "\\\\'");
-              return '<div class="ui"><div class="ui-left"><div class="ui-dot" style="background:' + c + '"></div>' + nm + '</div><button class="ui-rm" onclick="revoke(\\'' + eid + '\\')">Kaldır</button></div>';
-            }).join('');
-          }
-
-          // Cursor elements
-          const ids = new Set(data.map(p => p.id));
-          Array.from(cursorLayer.children).forEach(ch => { if (!ids.has(ch.id)) cursorLayer.removeChild(ch); });
-          data.forEach(p => {
-            let el = document.getElementById(p.id);
-            const c = p.color || '#6366f1';
-            if (!el) {
-              el = document.createElement('div');
-              el.id = p.id;
-              el.className = 'ptr';
-              el.innerHTML = mkSvg(c) + '<div class="ptr-name">' + (p.name || '?') + '</div>';
-              cursorLayer.appendChild(el);
-            }
-            el.style.left = (p.x * 100) + '%';
-            el.style.top = (p.y * 100) + '%';
-          });
-        }
-
-        // Revoke global
-        window.revoke = (id) => { if (window.netrex?.revokePointer) window.netrex.revokePointer(id); };
-
-        // IPC
-        if (window.netrex?.onPointerOverlayUpdate) {
-          window.netrex.onPointerOverlayUpdate((data) => updatePointers(data));
-        }
-      </script>
-    </body>
-    </html>
-  `;
-
-  pointerOverlayWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml)}`);
-  
-  pointerOverlayWindow.on('closed', () => {
-    pointerOverlayWindow = null;
+  win.webContents.on('did-finish-load', () => {
+    pointerOverlayReady = true;
+    // Pencere yüklenmeden gelen son veri kaybolmasın
+    if (pointerOverlayLastPayload && !win.isDestroyed()) {
+      win.webContents.send("update-pointer-overlay-data", pointerOverlayLastPayload);
+    }
   });
 
-  return pointerOverlayWindow;
+  // Hover algısı: Windows'ta `focusable:false` pencerede mouseenter/leave (forward) güvenilmez.
+  // Bu yüzden imleç widget'ın üstündeyken tıklamayı açıp dışındayken geçirgen yapıyoruz.
+  pointerOverlayHoverTimer = setInterval(() => {
+    try {
+      if (!win || win.isDestroyed() || !win.isVisible() || !pointerOverlayWidgetRect) return;
+      const pt = screen.getCursorScreenPoint();
+      const b = win.getBounds();
+      const lx = pt.x - b.x;
+      const ly = pt.y - b.y;
+      const r = pointerOverlayWidgetRect;
+      const pad = 6;
+      const inside =
+        r.dragging ||
+        (lx >= r.x - pad && lx <= r.x + r.width + pad && ly >= r.y - pad && ly <= r.y + r.height + pad);
+      if (inside !== pointerOverlayInteractive) {
+        pointerOverlayInteractive = inside;
+        win.setIgnoreMouseEvents(!inside, { forward: true });
+      }
+    } catch (e) {}
+  }, 50);
+
+  // Başka pencereler/oyunlar öne geçerse overlay'i tekrar en üste al
+  pointerOverlayTopTimer = setInterval(() => {
+    try {
+      if (!win || win.isDestroyed() || !win.isVisible()) return;
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.moveTop();
+    } catch (e) {}
+  }, 2500);
+
+  win.on('closed', () => {
+    stopPointerOverlayTimers();
+    pointerOverlayWindow = null;
+    pointerOverlayReady = false;
+    pointerOverlayWidgetRect = null;
+    pointerOverlayInteractive = false;
+    pointerOverlayLastPayload = null;
+    pointerOverlayKnownRequests = new Set();
+  });
+
+  return win;
 }
 
-function updatePointerOverlay(pointerData, forceShow = false) {
-  const hasPointers = Array.isArray(pointerData) && pointerData.length > 0;
-  
-  if (!hasPointers && !forceShow) {
-    if (!pointerOverlayWindow || pointerOverlayWindow.isDestroyed()) {
-      return;
-    }
-  }
+// Yeni gelen izin istekleri için işletim sistemi bildirimi.
+// Tarayıcı Notification iznine / uygulamadaki bildirim ayarına bağlı DEĞİLDİR (kullanıcıdan bir karar bekleyen istektir).
+function notifyNewPointerRequests(requests) {
+  try {
+    const { Notification } = require('electron');
+    const ids = new Set(requests.map((r) => String(r.id)));
+    const fresh = requests.filter((r) => !pointerOverlayKnownRequests.has(String(r.id)));
+    pointerOverlayKnownRequests = ids;
+    if (fresh.length === 0 || !Notification.isSupported()) return;
+    const names = fresh.map((r) => r.name || 'Bir kullanıcı').join(', ');
+    new Notification({
+      title: 'Netrex - İşaretçi İsteği',
+      body: `${names} ekranınızda bir şey göstermek istiyor`,
+      silent: true,
+    }).show();
+  } catch (e) {}
+}
 
-  if (!pointerOverlayWindow || pointerOverlayWindow.isDestroyed()) {
-    createPointerOverlayWindow().show();
-  }
-  
-  if (!pointerOverlayWindow.isVisible()) {
-    pointerOverlayWindow.showInactive();
-  }
+function updatePointerOverlay(payload, forceShow = false) {
+  // Eski biçim: sadece dizi. Yeni biçim: { pointers, requests }
+  const data = Array.isArray(payload)
+    ? { pointers: payload, requests: [] }
+    : { pointers: payload?.pointers || [], requests: payload?.requests || [] };
+  const hasContent = data.pointers.length > 0 || data.requests.length > 0;
 
-  // ✅ IPC send instead of heavy executeJavaScript parsing
-  pointerOverlayWindow.webContents.send("update-pointer-overlay-data", pointerData);
+  const exists = pointerOverlayWindow && !pointerOverlayWindow.isDestroyed();
+  if (!hasContent && !forceShow && !exists) return;
+
+  notifyNewPointerRequests(data.requests);
+  pointerOverlayLastPayload = data;
+
+  const win = exists ? pointerOverlayWindow : createPointerOverlayWindow();
+  if (!win.isVisible()) win.showInactive();
+
+  // Yükleme bitmediyse did-finish-load son veriyi gönderir
+  if (pointerOverlayReady) {
+    win.webContents.send("update-pointer-overlay-data", data);
+  }
+}
+
+// Yayıncının uygulamasından overlay'e tıklama dalgası / çizim olayı iletir
+function sendPointerOverlayEvent(evt) {
+  if (!pointerOverlayWindow || pointerOverlayWindow.isDestroyed() || !pointerOverlayReady) return;
+  pointerOverlayWindow.webContents.send("pointer-overlay-event-data", evt);
+}
+
+// Overlay widget'ının ekrandaki konumu (hover algısı için)
+function setPointerOverlayWidgetRect(rect) {
+  if (!rect || typeof rect !== 'object') return;
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  pointerOverlayWidgetRect = {
+    x: n(rect.x), y: n(rect.y), width: n(rect.width), height: n(rect.height), dragging: !!rect.dragging,
+  };
 }
 
 function setPointerOverlayInteractive(interactive) {
   if (pointerOverlayWindow && !pointerOverlayWindow.isDestroyed()) {
-    // Dinamik olarak click-through veya etkileşimli yap
+    pointerOverlayInteractive = !!interactive;
     pointerOverlayWindow.setIgnoreMouseEvents(!interactive, { forward: true });
   }
 }
@@ -1374,6 +1146,8 @@ module.exports = {
     setUpdateCheckCompleted,
     updatePointerOverlay,
     setPointerOverlayInteractive,
+    sendPointerOverlayEvent,
+    setPointerOverlayWidgetRect,
     closePointerOverlay,
     // Voice Overlay
     createVoiceOverlayWindow,

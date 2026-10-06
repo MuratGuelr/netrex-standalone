@@ -2,15 +2,21 @@ import { Mic, Speaker } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { supportsOutputSelection } from "@/src/hooks/useAudioDeviceSync";
 
-// Android Chrome, ses yönlendirmesini giriş listesinde "Speakerphone" / "Headset earpiece" gibi
-// girişlerle sunar; birini seçmek gelen sesin de hoparlöre/ahizeye gitmesini sağlar.
+// Android Chrome, ses yönlendirmesini giriş listesinde Android'in cihaz türü adlarıyla sunar:
+//   "Speakerphone"       → telefonun hoparlörü
+//   "Headset earpiece"   → KABLOLU KULAKLIK (telefonun ahizesi değil! takılı değilse ses gelmez)
+//   "Earpiece"/"Handset" → telefonun kendi ahizesi (çoğu telefonda listelenmez; "Varsayılan" ahizedir)
+// Birini seçmek gelen sesin de o cihaza gitmesini sağlar.
 const SPEAKER_RE = /speakerphone/i;
+const WIRED_RE = /headset|headphone/i;
 const EARPIECE_RE = /earpiece|handset/i;
+const isBuiltInEarpiece = (label) => EARPIECE_RE.test(label) && !WIRED_RE.test(label);
 
 function friendlyInputLabel(d) {
   const label = d.label || "";
   if (SPEAKER_RE.test(label)) return "Hoparlör (Speakerphone)";
-  if (EARPIECE_RE.test(label)) return "Ahize / Kulaklık (Earpiece)";
+  if (WIRED_RE.test(label)) return "Kablolu kulaklık (Headset)";
+  if (isBuiltInEarpiece(label)) return "Ahize (Earpiece)";
   return label || `Mikrofon ${d.deviceId.slice(0, 5)}`;
 }
 
@@ -26,8 +32,10 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
     (d) => d.deviceId !== "default" && d.deviceId !== "communications",
   );
   const speakerInput = inputs.find((d) => SPEAKER_RE.test(d.label));
-  const earpieceInput = inputs.find((d) => EARPIECE_RE.test(d.label));
-  const hasPhoneRouting = !!(speakerInput || earpieceInput);
+  // Telefonun kendi ahizesi listelenmiyorsa "Varsayılan" ahizeyi temsil eder
+  const earpieceInput = inputs.find((d) => isBuiltInEarpiece(d.label));
+  const earpieceId = earpieceInput ? earpieceInput.deviceId : "default";
+  const hasPhoneRouting = !!speakerInput;
   const outputsFiltered = audioOutputs.filter(
     (d) => d.deviceId !== "default" && d.deviceId !== "communications",
   );
@@ -84,26 +92,28 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
             </p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { dev: speakerInput, title: "Hoparlör", sub: "Sesi yüksek ver" },
-                { dev: earpieceInput, title: "Ahize / Kulaklık", sub: "Kulağa tutarak" },
-              ].map(({ dev, title, sub }) =>
-                dev ? (
-                  <button
-                    key={dev.deviceId}
-                    type="button"
-                    onClick={() => setAudioInput(dev.deviceId)}
-                    className={`p-3 rounded-xl border text-left transition-all active:scale-95 ${
-                      audioInputId === dev.deviceId
-                        ? "bg-emerald-500/20 border-emerald-500/60 text-white"
-                        : "bg-[#2b2d31] border-white/10 text-[#b5bac1] hover:border-emerald-500/40"
-                    }`}
-                  >
-                    <div className="text-sm font-bold">{title}</div>
-                    <div className="text-[11px] text-[#949ba4]">{sub}</div>
-                  </button>
-                ) : null,
-              )}
+                { id: speakerInput?.deviceId, title: "Hoparlör", sub: "Sesi yüksek ver" },
+                { id: earpieceId, title: "Ahize", sub: "Kulağa tutarak" },
+              ].map(({ id, title, sub }) => (
+                <button
+                  key={title}
+                  type="button"
+                  onClick={() => setAudioInput(id)}
+                  className={`p-3 rounded-xl border text-left transition-all active:scale-95 ${
+                    audioInputId === id
+                      ? "bg-emerald-500/20 border-emerald-500/60 text-white"
+                      : "bg-[#2b2d31] border-white/10 text-[#b5bac1] hover:border-emerald-500/40"
+                  }`}
+                >
+                  <div className="text-sm font-bold">{title}</div>
+                  <div className="text-[11px] text-[#949ba4]">{sub}</div>
+                </button>
+              ))}
             </div>
+            {/* Tanı: tarayıcının bildirdiği gerçek cihaz adları (sorun bildirirken işe yarar) */}
+            <p className="text-[10px] text-[#5c5e66] mt-2 break-words">
+              Algılanan girişler: {audioInputs.map((d) => d.label || "?").join(" · ") || "yok"}
+            </p>
           </div>
         )}
 
