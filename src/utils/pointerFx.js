@@ -28,11 +28,17 @@ const clamp01 = (v) => {
 };
 const safeColor = (c) => (typeof c === "string" && /^#[0-9a-f]{3,8}$/i.test(c) ? c : "#6366f1");
 
-export function addClick({ targetId, x, y, color }) {
+// Tıklama dalgası rengi fare tuşuna göre belirlenir (kim tıkladığından bağımsız, hemen ayırt edilsin diye).
+// İndeks = MouseEvent.button: 0 sol, 1 orta, 2 sağ
+export const CLICK_BUTTON_COLORS = ["#3b82f6", "#22c55e", "#ef4444"]; // mavi, yeşil, kırmızı
+
+export function addClick({ targetId, x, y, color, button }) {
   const nx = clamp01(x);
   const ny = clamp01(y);
   if (nx == null || ny == null) return;
-  clicks.push({ targetId, x: nx, y: ny, color: safeColor(color), t: Date.now() });
+  const b = Number(button);
+  const rippleColor = b === 0 || b === 1 || b === 2 ? CLICK_BUTTON_COLORS[b] : safeColor(color);
+  clicks.push({ targetId, x: nx, y: ny, color: rippleColor, t: Date.now() });
   if (clicks.length > MAX_CLICKS) clicks.shift();
   notify();
 }

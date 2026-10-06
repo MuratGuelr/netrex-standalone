@@ -462,8 +462,8 @@ function ActiveSpeakerColor({ onColorChange }) {
   return null;
 }
 
-// 🔁 Yayın kapanıp (ekran değişimi, kısa ara, yeniden başlatma) aynı kişiden tekrar açılırsa,
-// onu izleyenler otomatik olarak eski düzenle devam eder. Bu süre içinde geri gelmesi yeterli.
+// 🔁 Ekran paylaşımı veya kamera kapanıp (ekran değişimi, kısa ara, yeniden başlatma) aynı kişiden
+// tekrar açılırsa, onu izleyenler otomatik olarak eski düzenle devam eder. Bu süre içinde geri gelmesi yeterli.
 const RESUME_GRACE_MS = 10 * 60_000; // 10 dakika
 
 // Geri gelen yayını (daha önce tam ekransa) tekrar tam ekrana almayı dener.
@@ -698,7 +698,11 @@ function StageManager({
       resume.forEach((entry, id) => {
         if (nowTs - entry.lostAt > RESUME_GRACE_MS || current.includes(id)) {
           resume.delete(id); // süresi doldu ya da kullanıcı kendisi yeniden açtı
-        } else if (screenTracks.some((t) => t.participant.identity === entry.identity)) {
+        } else if (
+          (entry.source === "camera" ? cameraTracks : screenTracks).some(
+            (t) => t.participant.identity === entry.identity,
+          )
+        ) {
           restorable.push([id, entry]);
         }
       });
@@ -767,11 +771,13 @@ function StageManager({
       pinnedStreamIds.forEach((id, index) => {
         if (stillActiveIds.includes(id)) return;
         const [identity, source] = id.includes(":") ? id.split(":") : [id, "any"];
-        if (identity === localIdentity || source !== "screen") return;
+        // Uzak ekran paylaşımı VE kamera: kapanıp geri gelirse otomatik devam edilir
+        if (identity === localIdentity || (source !== "screen" && source !== "camera")) return;
         if (resumeRef.current.has(id)) return;
         const fsExit = fsExitRef.current;
         resumeRef.current.set(id, {
           identity,
+          source,
           index,
           lostAt,
           layoutMode: layoutModeRef.current,
@@ -1646,20 +1652,24 @@ function PointerCapture({ targetParticipant, containerRef }) {
     };
 
     const handlePointerDown = (e) => {
-      if (e.button !== 0 || isToolbar(e)) return;
-      const p = toNormalized(e, modeRef.current === "draw");
+      if (isToolbar(e)) return;
+      // Çizim yalnızca sol tuşla; işaretlemede sol / orta / sağ tık ayrı renkte dalga üretir
+      const isDraw = modeRef.current === "draw" && e.button === 0;
+      if (!isDraw && e.button > 2) return;
+      const p = toNormalized(e, isDraw);
       if (!p) return;
       const { color } = getMeta();
+      if (e.button === 1) e.preventDefault(); // orta tık otomatik kaydırmayı başlatmasın
 
-      if (modeRef.current === "draw") {
+      if (isDraw) {
         stroke = { id: `${myId}-${Date.now()}`, pending: [[p.x, p.y]], lastFlush: 0 };
         addStrokePoints({ strokeId: stroke.id, pid: myId, targetId, color, points: [[p.x, p.y]] });
         try { e.target.setPointerCapture?.(e.pointerId); } catch (err) {}
         flushStroke(true);
       } else {
         // Tıklama geri bildirimi: hem kendi ekranında hem herkeste dalga
-        addClick({ targetId, x: p.x, y: p.y, color });
-        publish(CURSOR_TOPICS.CLICK, { x: p.x, y: p.y, color });
+        addClick({ targetId, x: p.x, y: p.y, color, button: e.button });
+        publish(CURSOR_TOPICS.CLICK, { x: p.x, y: p.y, color, button: e.button });
       }
     };
 
@@ -1712,6 +1722,8 @@ function PointerCapture({ targetParticipant, containerRef }) {
     <div
       className="absolute inset-0 z-40 group/pointer-capture cursor-crosshair"
       style={{ touchAction: "none" }}
+      // Sağ tık işaret olarak kullanılıyor: yayın kutusunun bağlam menüsü açılmasın
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
     >
       {/* ✨ Kenar parıltısı: işaretçi / çizim modunda olduğunu belli eder */}
       <div className={`absolute inset-0 border-2 pointer-events-none transition-opacity duration-300 ${
@@ -1731,6 +1743,14 @@ function PointerCapture({ targetParticipant, containerRef }) {
           <Pencil size={12} />
           <span>Çiz</span>
         </button>
+        <span
+          className="flex items-center gap-1 px-1.5"
+          title="Tıklama renkleri: sol = mavi, orta = yeşil, sağ = kırmızı"
+        >
+          <span className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+          <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <span className="w-2 h-2 rounded-full bg-[#ef4444]" />
+        </span>
         <button type="button" className={btn(false)} onClick={clearMine} title="Çizimlerimi temizle">
           <Eraser size={12} />
         </button>

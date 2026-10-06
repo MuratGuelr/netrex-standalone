@@ -252,9 +252,9 @@ export function useCursorShareController() {
         case CURSOR_TOPICS.CLICK: {
           const targetId = msg.targetId;
           if (!targetId) return;
-          addClick({ targetId, x: msg.x, y: msg.y, color: msg.color });
+          addClick({ targetId, x: msg.x, y: msg.y, color: msg.color, button: msg.button });
           if (targetId === identity) {
-            forwardToOverlay(senderId, { type: "click", x: msg.x, y: msg.y, color: msg.color });
+            forwardToOverlay(senderId, { type: "click", x: msg.x, y: msg.y, color: msg.color, button: msg.button });
           }
           break;
         }

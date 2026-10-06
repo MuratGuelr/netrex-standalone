@@ -392,6 +392,7 @@
   var ripples = [];            // { x, y, color, t }
   var strokes = new Map();     // strokeId -> { pid, color, pts: [[x,y]...], t }
   var running = false;
+  var BUTTON_COLORS = ['#3b82f6', '#22c55e', '#ef4444'];
   var RIPPLE_MS = 700, STROKE_HOLD_MS = 4000, STROKE_FADE_MS = 1000, MAX_STROKE_POINTS = 800, MAX_STROKES = 60;
 
   function startLoop() { if (!running) { running = true; requestAnimationFrame(frame); } }
@@ -436,6 +437,9 @@
     if (evt.type === 'click') {
       var x = num(evt.x, 0, 1), y = num(evt.y, 0, 1);
       if (x == null || y == null) return;
+      // Renk fare tuşuna göre: 0 sol (mavi), 1 orta (yeşil), 2 sağ (kırmızı)
+      var btn = (evt.button == null || evt.button === '') ? NaN : Number(evt.button);
+      if (btn === 0 || btn === 1 || btn === 2) color = BUTTON_COLORS[btn];
       ripples.push({ x: x, y: y, color: color, t: Date.now() });
       if (ripples.length > 30) ripples.shift();
       startLoop();
