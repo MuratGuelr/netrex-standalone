@@ -162,7 +162,8 @@ export const useServerStore = create((set, get) => ({
                          currentVoiceStates[id] = data ? Object.values(data) : [];
                          set({ voiceStates: { ...get().voiceStates, ...currentVoiceStates } });
                      });
-                     unsubs.push(() => off(roomRef, 'value', unsub));
+                     // onValue zaten unsubscribe fonksiyonu döndürür; off() callback ile eşleşmediği için listener'ı kapatmıyordu
+                     unsubs.push(unsub);
                  });
                  
                  const combinedUnsub = () => {

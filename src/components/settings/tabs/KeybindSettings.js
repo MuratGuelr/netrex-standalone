@@ -213,15 +213,15 @@ export default function KeybindSettings() {
   }, [recording, inRoom]);
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-2xl font-bold text-white mb-6 relative">
+      <h3 className="text-xl font-bold text-white mb-3 relative">
         <span className="relative z-10">Tuş Atamaları</span>
       </h3>
 
       {/* Header Banner */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-4 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
         
-        <div className="h-20 w-full bg-gradient-to-r from-orange-600 via-red-600 to-orange-600 relative overflow-hidden">
+        <div className="h-16 w-full bg-gradient-to-r from-orange-600 via-red-600 to-orange-600 relative overflow-hidden">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
@@ -267,7 +267,7 @@ export default function KeybindSettings() {
         
         <KeybindRow
           label="Mikrofonu Sustur (Mute)"
-          description="Kendi sesini kapatır/açar."
+          description="Mikrofonunuzu kapatır veya açar. Odadakiler sizi duymaz, siz onları duymaya devam edersiniz."
           shortcut={formatKeybinding(muteKeybinding)}
           isRecording={recording === "mute"}
           recordedKeybinding={recording === "mute" ? recordedKeybinding : null}
@@ -295,7 +295,7 @@ export default function KeybindSettings() {
         />
         <KeybindRow
           label="Sağırlaştır (Deafen)"
-          description="Hem mikrofonu hem hoparlörü kapatır."
+          description="Hem mikrofonunuzu hem de odadaki sesleri kapatır. Tekrar basınca ikisi de açılır."
           shortcut={formatKeybinding(deafenKeybinding)}
           isRecording={recording === "deafen"}
           recordedKeybinding={recording === "deafen" ? recordedKeybinding : null}
@@ -323,7 +323,7 @@ export default function KeybindSettings() {
         />
         <KeybindRow
           label="Kamerayı Aç/Kapat"
-          description="Kamerayı açıp kapatır."
+          description="Kameranızı açar veya kapatır (sesli odadayken çalışır)."
           shortcut={formatKeybinding(cameraKeybinding)}
           isRecording={recording === "camera"}
           recordedKeybinding={recording === "camera" ? recordedKeybinding : null}
@@ -351,7 +351,7 @@ export default function KeybindSettings() {
         />
         <KeybindRow
           label="Hızlı Durumu Aç/Kapat"
-          description="Son kaydedilen veya seçilen mesajı ekranda gösterir/gizler."
+          description="En son seçtiğiniz hızlı durum mesajını tek tuşla ekranda gösterir veya gizler."
           shortcut={formatKeybinding(quickStatusKeybinding)}
           isRecording={recording === "quick-status"}
           recordedKeybinding={recording === "quick-status" ? recordedKeybinding : null}
@@ -380,7 +380,7 @@ export default function KeybindSettings() {
 
         <KeybindRow
           label="Metin Seslendirmeyi Durdur"
-          description="Sıradaki ve o an okunan tüm metinleri atlar/durdurur."
+          description="Sesli okunan mesajı hemen susturur ve sıradakileri atlar."
           shortcut={formatKeybinding(ttsStopKeybinding)}
           isRecording={recording === "tts-stop"}
           recordedKeybinding={recording === "tts-stop" ? recordedKeybinding : null}
@@ -406,7 +406,7 @@ export default function KeybindSettings() {
         
         <KeybindRow
           label="Metin Seslendirmeyi Aç/Kapat"
-          description="Metin Seslendirmeyi (TTS) tamamen etkinleştirir veya devre dışı bırakır."
+          description="Gelen mesajları sesli okumayı açar veya kapatır (Sesler sekmesindeki ayarla aynıdır)."
           shortcut={formatKeybinding(ttsToggleKeybinding)}
           isRecording={recording === "tts-toggle"}
           recordedKeybinding={recording === "tts-toggle" ? recordedKeybinding : null}
@@ -439,7 +439,8 @@ export default function KeybindSettings() {
           <div className="flex bg-gradient-to-r from-[#1a1b1e] via-[#25272a] to-[#1a1b1e] p-4 border-b border-white/10">
             <div className="flex-1 text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
               <div className="w-1 h-1 bg-amber-400 rounded-full"></div>
-              Hızlı Durum Slotları
+              Hızlı Durum Kısayolları
+              <span className="normal-case font-normal text-[#5c5e66] ml-1">(durumları Görünüm sekmesinde düzenlersiniz)</span>
             </div>
             <div className="w-44 text-center text-xs font-bold text-[#949ba4] uppercase flex items-center justify-center gap-2">
               <div className="w-1 h-1 bg-orange-400 rounded-full"></div>

@@ -490,6 +490,11 @@ export function useSpatialAudio() {
   useEffect(() => {
     return () => {
       destroyAllPipelines();
+      // Odadan çıkınca singleton context'i kapat (getSpatialAudioContext gerektiğinde yenisini oluşturur)
+      if (_spatialAudioContext && _spatialAudioContext.state !== 'closed') {
+        _spatialAudioContext.close().catch(() => {});
+      }
+      _spatialAudioContext = null;
     };
   }, [destroyAllPipelines]);
 

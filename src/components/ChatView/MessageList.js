@@ -30,6 +30,8 @@ export default function MessageList({
   formatTime,
   formatDateHeader,
   isMessageInSequence,
+  // Görsel birleştirme için (yalnızca geriye bakar). Verilmezse (DM) isMessageInSequence zaten geriye bakar.
+  isMessageContinuation,
   setSelectedImage,
   // ✅ CPU OPT: memberMap'i burada oluştur - her mesaj render'ında find() yerine Map.get() kullanılacak
   memberMap: memberMapProp,
@@ -180,6 +182,7 @@ export default function MessageList({
                 formatTime={formatTime}
                 formatDateHeader={formatDateHeader}
                 isInSequence={isMessageInSequence(message, index)}
+                isContinuation={(isMessageContinuation || isMessageInSequence)(message, index)}
                 onImageClick={setSelectedImage}
               />
             </div>

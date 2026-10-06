@@ -81,7 +81,6 @@ export default function ServerMemberList({ onClose }) {
       .map((m) => m.id || m.userId)
       .filter(Boolean)
       .sort()
-      .slice(0, 30)
       .join(",");
   }, [members]);
 
@@ -91,35 +90,51 @@ export default function ServerMemberList({ onClose }) {
     const memberIds = memberIdsKey.split(",");
     if (memberIds.length === 0) return;
 
-    const q = query(
-      collection(db, "users"),
-      where(documentId(), "in", memberIds),
-    );
+    // Firestore `in` sorgusu en fazla 30 değer alır. Daha önce yalnızca ilk 30 üye
+    // (ID'ye göre sıralı) dinleniyordu; büyük sunucularda diğerlerinin durumu hiç güncellenmiyordu.
+    // Üyeleri 30'luk parçalara böl, her parça için bir listener aç ve sonuçları birleştir.
+    const CHUNK_SIZE = 30;
+    const chunkProfiles = [];
+    const unsubscribes = [];
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const profiles = {};
-        snapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          profiles[doc.id] = {
-            gameActivity: data.gameActivity || null,
-            customStatus: data.customStatus || null,
-            customStatusColor: data.customStatusColor || null,
-            presence: data.presence || null,
-            lastSeen: data.lastSeen || null,
-            profileColor: data.profileColor || null,
-            photoURL: data.photoURL ?? null,
-          };
-        });
-        setUserProfiles(profiles);
-      },
-      (error) => {
-        console.error("User profiles listener error:", error);
-      },
-    );
+    for (let i = 0; i < memberIds.length; i += CHUNK_SIZE) {
+      const chunkIndex = i / CHUNK_SIZE;
+      const chunkIds = memberIds.slice(i, i + CHUNK_SIZE);
+      chunkProfiles[chunkIndex] = {};
 
-    return () => unsubscribe();
+      const q = query(
+        collection(db, "users"),
+        where(documentId(), "in", chunkIds),
+      );
+
+      unsubscribes.push(
+        onSnapshot(
+          q,
+          (snapshot) => {
+            const profiles = {};
+            snapshot.docs.forEach((doc) => {
+              const data = doc.data();
+              profiles[doc.id] = {
+                gameActivity: data.gameActivity || null,
+                customStatus: data.customStatus || null,
+                customStatusColor: data.customStatusColor || null,
+                presence: data.presence || null,
+                lastSeen: data.lastSeen || null,
+                profileColor: data.profileColor || null,
+                photoURL: data.photoURL ?? null,
+              };
+            });
+            chunkProfiles[chunkIndex] = profiles;
+            setUserProfiles(Object.assign({}, ...chunkProfiles));
+          },
+          (error) => {
+            console.error("User profiles listener error:", error);
+          },
+        ),
+      );
+    }
+
+    return () => unsubscribes.forEach((unsub) => unsub());
   }, [memberIdsKey]); // ✅ Sadece üye ID'leri değişince yeniden bağlan
 
   const profileModalTimeoutRef = useRef(null);

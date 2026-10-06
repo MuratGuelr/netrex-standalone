@@ -70,6 +70,9 @@ export const useSettingsStore = create(
       ttsVolume: 80, // TTS Volume (0-100)
       ttsVoiceURI: "auto", // Specific Voice Engine URI or 'auto' for dynamic distribution
       ttsOnlyUnfocused: true, // Sadece arka plandayken çalışsın (varsayılan: evet)
+      micGuardEnabled: true, // "Sesiniz karşıya gitmiyor" uyarı sistemi (görsel bildirim)
+      micGuardVoice: true, // Uyarıyı ayrıca sesli (TTS) söyle
+      micGuardDelaySec: 15, // Mikrofon kapatıldıktan kaç saniye sonra (konuşursa) uyarılsın
       mutedTtsChannels: [], // Sesi kapatılan kanalların ID'leri
       mutedTtsUsers: [], // Sesi kapatılan kullanıcıların ID'leri
 
@@ -290,6 +293,9 @@ export const useSettingsStore = create(
       setTtsVolume: (volume) => set({ ttsVolume: Math.max(0, Math.min(100, volume)) }),
       setTtsVoiceURI: (uri) => set({ ttsVoiceURI: uri }),
       setTtsOnlyUnfocused: (enabled) => set({ ttsOnlyUnfocused: enabled }),
+      setMicGuardEnabled: (enabled) => set({ micGuardEnabled: enabled }),
+      setMicGuardVoice: (enabled) => set({ micGuardVoice: enabled }),
+      setMicGuardDelaySec: (sec) => set({ micGuardDelaySec: Math.max(0, Math.min(300, Math.round(Number(sec) || 0))) }),
       toggleMutedTtsChannel: (channelId) => set((state) => ({
         mutedTtsChannels: state.mutedTtsChannels.includes(channelId) 
           ? state.mutedTtsChannels.filter(id => id !== channelId) 

@@ -71,6 +71,13 @@ export default function ChatView({ channelId, username, userId }) {
   const [isUploading, setIsUploading] = useState(false);
   const [pendingImage, setPendingImage] = useState(null);
   const [pendingImageFile, setPendingImageFile] = useState(null);
+
+  // Gönderim hatasında geri yüklenen blob: URL'leri hiç revoke edilmiyordu
+  useEffect(() => {
+    if (typeof pendingImage === "string" && pendingImage.startsWith("blob:")) {
+      return () => URL.revokeObjectURL(pendingImage);
+    }
+  }, [pendingImage]);
   const [selectedImage, setSelectedImage] = useState(null);
   
   const virtuosoRef = useRef(null);
@@ -458,15 +465,25 @@ export default function ChatView({ channelId, username, userId }) {
     await toggleReaction(channelId, messageId, emoji, userId);
   }, [channelId, toggleReaction, userId]);
  
-  const isMessageInSequence = useCallback((message, index) => {
+  const getMessageTs = (ts) => ts?.toMillis?.() ?? (typeof ts === "number" ? ts : (ts ? new Date(ts).getTime() : NaN));
+
+  // Görsel birleştirme: bu mesaj, öncekinin devamı mı? (SADECE geriye bakar)
+  // Önceden sonraki mesaj da kontrol edildiği için, bir grubun ilk mesajı da "devam" sayılıp
+  // avatar/isim başlığı gizleniyor ve önceki kullanıcının mesajı gibi görünüyordu.
+  const isMessageContinuation = useCallback((message, index) => {
     if (index === 0) return false;
     const prevMessage = messages[index - 1];
-    if (!prevMessage) return false;
-    const isSequence = prevMessage.userId === message.userId && message.timestamp - prevMessage.timestamp < MESSAGE_SEQUENCE_THRESHOLD;
-    const nextMessage = messages[index + 1];
-    const hasNextInSequence = nextMessage && nextMessage.userId === message.userId && nextMessage.timestamp - message.timestamp < MESSAGE_SEQUENCE_THRESHOLD;
-    return isSequence || hasNextInSequence;
+    if (!prevMessage || prevMessage.userId !== message.userId) return false;
+    const diff = getMessageTs(message.timestamp) - getMessageTs(prevMessage.timestamp);
+    return diff >= 0 && diff < MESSAGE_SEQUENCE_THRESHOLD;
   }, [messages]);
+
+  // Sağ tık menüsündeki "diziyi sil" için: mesaj bir grubun parçası mı? (önceki VEYA sonraki)
+  const isMessageInSequence = useCallback((message, index) => {
+    if (isMessageContinuation(message, index)) return true;
+    const nextMessage = messages[index + 1];
+    return !!nextMessage && isMessageContinuation(nextMessage, index + 1);
+  }, [messages, isMessageContinuation]);
 
   const openLinkModal = useCallback((e, url) => { e.preventDefault(); setLinkModal({ isOpen: true, url }); }, []);
   const confirmOpenLink = useCallback(() => {
@@ -613,6 +630,7 @@ export default function ChatView({ channelId, username, userId }) {
               formatTime={formatTime}
               formatDateHeader={formatDateHeader}
               isMessageInSequence={isMessageInSequence}
+              isMessageContinuation={isMessageContinuation}
               setSelectedImage={setSelectedImage}
             />
           </div>

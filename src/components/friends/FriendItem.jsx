@@ -125,13 +125,11 @@ export default function FriendItem({
         <p className="text-xs text-[#949ba4] truncate">
           {user.username 
             ? `@${user.username}`
-            : variant === "search" && user.email
-              ? user.email
-              : variant === "incoming"
-                ? "Arkadaşlık isteği gönderdi"
-                : variant === "outgoing"
-                  ? "İstek gönderildi"
-                  : presenceLabels[presence] || "Çevrimdışı"
+            : variant === "incoming"
+              ? "Arkadaşlık isteği gönderdi"
+              : variant === "outgoing"
+                ? "İstek gönderildi"
+                : presenceLabels[presence] || "Çevrimdışı"
           }
         </p>
       </div>

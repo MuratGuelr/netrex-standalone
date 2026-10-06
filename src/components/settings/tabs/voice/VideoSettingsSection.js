@@ -95,7 +95,7 @@ export default function VideoSettingsSection({ videoInputs }) {
         </span>
       </div>
 
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
@@ -227,6 +227,7 @@ export default function VideoSettingsSection({ videoInputs }) {
                 <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
                   Çözünürlük
                 </label>
+                <p className="text-xs text-[#949ba4] mb-2 -mt-1">Görüntünün netliği. Yüksek çözünürlük daha net görünür ama daha fazla internet ve işlemci kullanır.</p>
                 <div className="grid grid-cols-3 gap-2">
                   {[ 
                     { value: "360p", label: "360p", desc: "Düşük" },
@@ -255,6 +256,7 @@ export default function VideoSettingsSection({ videoInputs }) {
                 <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
                   Kare Hızı (FPS)
                 </label>
+                <p className="text-xs text-[#949ba4] mb-2 -mt-1">Saniyedeki görüntü sayısı. Yüksek FPS daha akıcı görünür; bağlantınız zayıfsa düşük tutun.</p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { value: 15, label: "15 FPS", desc: "Düşük" },

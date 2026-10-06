@@ -65,16 +65,17 @@ export default function AppearanceSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-20">
-      <h3 className="text-2xl font-bold text-white mb-6 relative px-1">
+      <h3 className="text-xl font-bold text-white mb-3 relative px-1">
         <span className="relative z-10">Görünüm Ayarları</span>
       </h3>
 
       {/* 🚀 Hızlı Durum Mesajları Yönetimi */}
-      <div className="glass-strong rounded-2xl border border-white/10 overflow-visible p-6 mb-8 relative z-[60]">
+      <div className="glass-strong rounded-2xl border border-white/10 overflow-visible p-4 mb-5 relative z-[60]">
         <div className="flex items-center justify-between mb-6">
             <h4 className="text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
                 <Clock size={14} className="text-indigo-400" />
                 Hızlı Durum Slotları
+                <span className="normal-case font-normal text-[#5c5e66] ml-1">· hazır durumlarınızı burada düzenlersiniz, kısayol tuşlarını Kısayollar sekmesinde atarsınız</span>
             </h4>
             <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#5c5e66] font-medium">{presets.length}/6 Slot</span>
@@ -163,7 +164,7 @@ export default function AppearanceSettings() {
       </div>
 
       {/* Ölçeklendirme ve Font */}
-      <div className="glass-strong rounded-2xl border border-white/10 overflow-hidden p-6 mb-8">
+      <div className="glass-strong rounded-2xl border border-white/10 overflow-hidden p-4 mb-5">
         <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-5 flex items-center gap-2">
           <div className="w-1 h-3 bg-indigo-500 rounded-full" />
           Ölçeklendirme ve Font
@@ -174,6 +175,7 @@ export default function AppearanceSettings() {
             <label className="block text-sm font-medium text-[#dbdee1] mb-2">
                 UI Ölçeklendirme
             </label>
+            <p className="text-xs text-[#949ba4] mb-2 -mt-1">Tüm arayüzü (yazılar, düğmeler, boşluklar) birlikte büyütür ya da küçültür. Yazılar küçük geliyorsa artırın.</p>
             <select
                 value={uiScale}
                 onChange={(e) => setUIScale(Number(e.target.value))}
@@ -191,6 +193,7 @@ export default function AppearanceSettings() {
             <label className="block text-sm font-medium text-[#dbdee1] mb-2">
                 Font Boyutu
             </label>
+            <p className="text-xs text-[#949ba4] mb-2 -mt-1">Genel yazı boyutunu ayarlar. Her şeyi büyütmek yerine yalnızca yazıları büyütmek istiyorsanız bunu kullanın.</p>
             <select
                 value={fontSize}
                 onChange={(e) => setFontSize(e.target.value)}
@@ -208,6 +211,7 @@ export default function AppearanceSettings() {
             <label className="block text-sm font-medium text-[#dbdee1] mb-2">
                 Font Ailesi
             </label>
+            <p className="text-xs text-[#949ba4] mb-2 -mt-1">Uygulamanın yazı tipi. “Sistem” seçeneği bilgisayarınızın varsayılan yazı tipini kullanır.</p>
             <select
                 value={fontFamily}
                 onChange={(e) => setFontFamily(e.target.value)}

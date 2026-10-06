@@ -15,10 +15,10 @@ export default function AppSoundsSection() {
   }, [sfxVolume]);
 
   return (
-    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
       
-      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
         <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
           <Volume2 size={14} className="text-indigo-400" />
         </div>
@@ -28,7 +28,7 @@ export default function AppSoundsSection() {
         </span>
       </h4>
       
-      <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5">
+      <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5">
         <div className="relative w-full h-10 flex items-center select-none">
           <div className="absolute w-full h-3 bg-[#2b2d31] rounded-full overflow-hidden">
             <div

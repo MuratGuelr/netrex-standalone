@@ -6,7 +6,7 @@ export default function NoiseSuppressionSection() {
   const setNoiseSuppressionMode = useSettingsStore(s => s.setNoiseSuppressionMode);
 
   return (
-    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
       
       <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2 relative z-10">
@@ -16,7 +16,7 @@ export default function NoiseSuppressionSection() {
         Gürültü Azaltma
       </h4>
       <p className="text-xs text-[#949ba4] mb-4 ml-8 relative z-10">
-        Mikrofonunun algıladığı arka plan seslerini bastır.
+        Klavye, fan ve arka plan konuşmalarını bastırır. Krisp en etkilisidir (yapay zekâ kullanır, biraz daha fazla işlemci harcar), Standart hafiftir, Yok seçilirse mikrofon sesi olduğu gibi gider.
       </p>
 
       <div className="relative z-10 grid grid-cols-3 gap-2">
@@ -44,7 +44,7 @@ export default function NoiseSuppressionSection() {
             )}
           </div>
           <span className="text-sm text-white font-medium">Yok</span>
-          <span className="text-[10px] text-[#949ba4] mt-1">Kapalı</span>
+          <span className="text-[10px] text-[#949ba4] mt-1">Filtre yok</span>
         </label>
 
         {/* Standart */}
@@ -71,7 +71,7 @@ export default function NoiseSuppressionSection() {
             )}
           </div>
           <span className="text-sm text-white font-medium">Standart</span>
-          <span className="text-[10px] text-[#949ba4] mt-1">Temel</span>
+          <span className="text-[10px] text-[#949ba4] mt-1">Hafif filtre</span>
         </label>
 
         {/* Krisp (RNNoise) */}
@@ -101,7 +101,7 @@ export default function NoiseSuppressionSection() {
             )}
           </div>
           <span className="text-sm text-white font-medium">Krisp</span>
-          <span className="text-[10px] text-[#949ba4] mt-1">Gelişmiş</span>
+          <span className="text-[10px] text-[#949ba4] mt-1">Yapay zekâ</span>
         </label>
       </div>
     </div>

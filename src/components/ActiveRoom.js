@@ -30,6 +30,8 @@ import { useDMStore } from "@/src/store/dmStore";
 import { getLiveKitToken, getLiveKitServerInfo } from "@/src/lib/platformBridge";
 import { useApplyParticipantVolumes } from "@/src/hooks/useApplyParticipantVolumes";
 import { useSpatialAudio } from "@/src/hooks/useSpatialAudio";
+import { useMicGuard } from "@/src/hooks/useMicGuard";
+import { useAudioDeviceSync } from "@/src/hooks/useAudioDeviceSync";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import SpatialCanvas from "./active-room/SpatialCanvas";
 import { db, rtdb } from "@/src/lib/firebase";
@@ -111,6 +113,13 @@ function VoiceProcessorHandler() {
   // ✅ rawAudioMode=true ise voice processor'ı devre dışı bırak (koşulsuz hook ihlali olmadan)
   if (rawAudioMode) return null;
   return <VoiceProcessorInner />;
+}
+
+// 🛡️ Mic Guard — "sesiniz karşıya gitmiyor" uyarısı (LiveKitRoom içinde çalışmalı)
+function MicGuardHandler({ serverMuted, serverDeafened }) {
+  useMicGuard({ serverMuted, serverDeafened });
+  useAudioDeviceSync(); // giriş/çıkış cihazı seçimini odaya uygular
+  return null;
 }
 
 // 🎧 Spatial Audio Handler — LiveKitRoom içinde çalışmalı
@@ -1485,6 +1494,7 @@ export default function ActiveRoom({
       />
       <VoiceProcessorHandler />
       <SpatialAudioHandler />
+      <MicGuardHandler serverMuted={serverMuted} serverDeafened={serverDeafened} />
       <OverlayBridge
         channelName={roomDisplayName}
         serverName={currentServerName}

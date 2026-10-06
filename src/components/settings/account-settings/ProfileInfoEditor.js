@@ -76,10 +76,10 @@ export default function ProfileInfoEditor({ user, initialBio = "", initialStatus
   };
 
   return (
-    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
       
-      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
         <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
           <User size={14} className="text-indigo-400" />
         </div>
@@ -88,7 +88,7 @@ export default function ProfileInfoEditor({ user, initialBio = "", initialStatus
       
       <div className="relative z-10 space-y-4">
         {/* Custom Status */}
-        <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
+        <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
           <div className="flex items-center justify-between mb-2">
             <label className="text-[11px] font-bold text-[#949ba4] uppercase block">
               DURUM
@@ -152,7 +152,7 @@ export default function ProfileInfoEditor({ user, initialBio = "", initialStatus
         </div>
 
         {/* Bio */}
-        <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
+        <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
           <label className="text-[11px] font-bold text-[#949ba4] uppercase mb-2 block">
             Hakkımda
           </label>

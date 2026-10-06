@@ -5,9 +5,52 @@ import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
+import { useToastStore } from "@/src/store/toastStore";
+import { notifyMicFailure } from "@/src/hooks/useMicGuard";
 import { doc, updateDoc, deleteDoc, arrayRemove, runTransaction } from "firebase/firestore";
 import { ref, remove } from "firebase/database";
 import { db, rtdb } from "@/src/lib/firebase";
+
+// Mikrofonu kullanıcının seçtiği cihazla yayınlar. Seçili cihaz açılamazsa varsayılana düşer
+// (sesin hiç gitmemesinden iyidir) ve seçimi sıfırlar. Varsayılan da açılamazsa hatayı fırlatır.
+async function publishMic(room) {
+  const options = {
+    echoCancellation: true,
+    noiseSuppression: false,
+    autoGainControl: true,
+    sampleRate: 48000,
+    channelCount: 1,
+  };
+  const publishOptions = { audioBitrate: 96000 };
+  const { audioInputId, setAudioInput } = useSettingsStore.getState();
+
+  if (audioInputId && audioInputId !== "default") {
+    try {
+      await room.localParticipant.setMicrophoneEnabled(
+        true,
+        { ...options, deviceId: { exact: audioInputId } },
+        publishOptions,
+      );
+      return;
+    } catch (err) {
+      console.warn("Seçili mikrofon açılamadı, varsayılana düşülüyor:", err);
+      // İzin reddi gibi hatalarda seçimi bozma; sadece cihaz yoksa sıfırla
+      if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError") {
+        setAudioInput("default");
+      }
+      try {
+        const store = useToastStore.getState();
+        store.addToast({
+          type: "warning",
+          title: "Seçili mikrofon kullanılamadı",
+          message: "Varsayılan mikrofona geçildi.",
+          duration: 5000,
+        });
+      } catch (e) {}
+    }
+  }
+  await room.localParticipant.setMicrophoneEnabled(true, options, publishOptions);
+}
 
 const stopAllLocalScreenShares = (room) => {
   try {
@@ -210,20 +253,14 @@ export default function RoomEventsHandler({
         micPublishedRef.current = true;
         try {
           if (room?.localParticipant) {
-            await room.localParticipant.setMicrophoneEnabled(true, {
-              echoCancellation: true,
-              noiseSuppression: false,
-              autoGainControl: true,
-              sampleRate: 48000,
-              channelCount: 1,
-            }, {
-              audioBitrate: 96000,
-            });
+            await publishMic(room);
             console.log("🎤 Mikrofon publish edildi (onRoomConnected)");
           }
         } catch (micError) {
           micPublishedRef.current = false; // hata olursa tekrar denenebilsin
           console.warn("⚠️ Mikrofon publish hatası:", micError);
+          // Kullanıcı sesinin gitmediğini bilmeli (sadece konsola yazmak yetmez)
+          notifyMicFailure(micError);
         }
       }
 
@@ -243,54 +280,50 @@ export default function RoomEventsHandler({
 
     // 🚀 v5.2: LiveKit SDK'da generic "error" eventi yoktur
     // Hatalar genellikle MediaDevicesError veya disconnect olarak gelir
-    const onMediaDevicesError = async (error) => {
-      console.error("Room MediaDevicesError (EAC Bypass Auto-Recovery tetikleniyor):", error);
-      
-      if (room && room.localParticipant && micPublishedRef.current) {
-        try {
-          console.log("🔄 EAC Auto-Recovery: Mikrofon yeniden başlatılıyor...");
-          await room.localParticipant.setMicrophoneEnabled(false);
-          
-          setTimeout(async () => {
-             try {
-                await room.localParticipant.setMicrophoneEnabled(true, {
-                  echoCancellation: true,
-                  noiseSuppression: false,
-                  autoGainControl: true,
-                  sampleRate: 48000,
-                  channelCount: 1,
-                }, { audioBitrate: 96000 });
-                console.log("✅ EAC Auto-Recovery: Mikrofon başarıyla kurtarıldı!");
-             } catch(e) {
-                console.warn("⚠️ EAC Auto-Recovery: Mikrofon tekrar açılamadı:", e);
-             }
-          }, 1000);
-        } catch(e) {
-           console.warn("⚠️ EAC Auto-Recovery hatası:", e);
-        }
+    // Mikrofon kurtarma: yalnızca kullanıcı mikrofonu AÇIK istiyorsa çalışır ve
+    // seçili cihazı kullanır (eskiden varsayılana dönüp seçimi eziyordu).
+    let recovering = false;
+    const recoverMic = async (label) => {
+      if (recovering || !room?.localParticipant || !micPublishedRef.current) return;
+      const { isMuted, isDeafened } = useSettingsStore.getState();
+      if (isMuted || isDeafened) return; // susturulmuşken mikrofonu yeniden açma
+      recovering = true;
+      try {
+        console.log(`🔄 ${label}: Mikrofon yeniden başlatılıyor...`);
+        await room.localParticipant.setMicrophoneEnabled(false);
+        await new Promise((r) => setTimeout(r, 1000));
+        if (room.state !== ConnectionState.Connected) return;
+        await publishMic(room);
+        console.log(`✅ ${label}: Mikrofon kurtarıldı`);
+      } catch (e) {
+        console.warn(`⚠️ ${label}: Mikrofon tekrar açılamadı:`, e);
+        notifyMicFailure(e);
+      } finally {
+        recovering = false;
       }
     };
-    
-    // ✅ EAC DeviceChange Auto-Recovery (Windows aygıt listesi değiştiğinde veya oyun mikrofonu çaldığında)
-    const onDeviceChange = async () => {
-      console.log("🔄 Donanım değişikliği tespit edildi (EAC DeviceChange), mikrofon kontrol ediliyor...");
-      if (room && room.localParticipant && micPublishedRef.current) {
-        try {
-          await room.localParticipant.setMicrophoneEnabled(false);
-          setTimeout(async () => {
-            try {
-              await room.localParticipant.setMicrophoneEnabled(true, {
-                 echoCancellation: true,
-                 noiseSuppression: false,
-                 autoGainControl: true,
-                 sampleRate: 48000,
-                 channelCount: 1,
-              }, { audioBitrate: 96000 });
-              console.log("✅ EAC Donanım Kurtarma başarılı!");
-            } catch(e) {}
-          }, 1000);
-        } catch (e) {}
-      }
+
+    const onMediaDevicesError = (error, kind) => {
+      console.error("Room MediaDevicesError (EAC Bypass Auto-Recovery tetikleniyor):", error);
+      // Video hatası mikrofonla ilgili değildir
+      if (kind && kind !== "audioinput") return;
+      recoverMic("EAC Auto-Recovery");
+    };
+
+    // ✅ DeviceChange: Windows aygıt listesi değiştiğinde veya oyun mikrofonu çaldığında.
+    // Eskiden HER donanım değişiminde mikrofon kapatılıp açılıyordu (seçimi eziyor, kesinti yapıyordu).
+    // Artık yalnızca mikrofon gerçekten bozulduysa (track bitti / veri akmıyor) kurtarma yapılır.
+    // Cihaz seçimi/çıkarma yönetimi: useAudioDeviceSync.
+    let deviceChangeTimer = null;
+    const onDeviceChange = () => {
+      clearTimeout(deviceChangeTimer);
+      deviceChangeTimer = setTimeout(() => {
+        const pub = room?.localParticipant?.getTrackPublication(Track.Source.Microphone);
+        const mst = pub?.track?.mediaStreamTrack;
+        if (!mst || mst.readyState === "ended" || mst.muted) {
+          recoverMic("EAC DeviceChange");
+        }
+      }, 1500);
     };
     
     if (typeof navigator !== "undefined" && navigator.mediaDevices) {
@@ -403,6 +436,7 @@ export default function RoomEventsHandler({
       room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
       room.off(RoomEvent.SignalReconnecting, onSignalReconnecting);
       
+      clearTimeout(deviceChangeTimer);
       if (typeof navigator !== "undefined" && navigator.mediaDevices) {
         navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
       }

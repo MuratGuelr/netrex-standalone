@@ -29,7 +29,7 @@ export default function MacSetupSettings() {
               Uygulama arka plandayken tuş kombinasyonlarınızın (Push-to-Talk vb.) çalışabilmesi için macOS'te özel izin verilmesi gerekir.
             </p>
             
-            <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 space-y-2">
+            <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 space-y-2">
               <div className="flex items-center gap-3 text-xs text-[#b5bac1]">
                 <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center font-bold text-[10px]">1</div>
                 <span>Sistem Ayarları &gt; Gizlilik ve Güvenlik</span>
@@ -90,7 +90,7 @@ export default function MacSetupSettings() {
               Sesli sohbetin çalışması için mikrofon izninin etkin olması gerekir.
             </p>
             
-            <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 space-y-2">
+            <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 space-y-2">
               <p className="text-xs text-[#b5bac1]">
                 Sistem Ayarları &gt; Gizlilik ve Güvenlik &gt; <strong>Mikrofon</strong> altından Netrex'in aktif olduğundan emin olun.
               </p>

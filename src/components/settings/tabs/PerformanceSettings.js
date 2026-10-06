@@ -1,4 +1,4 @@
-import { Cpu, Palette, Zap, Sparkles, Layers, BarChart2, Trash2, Cpu as CpuIcon } from "lucide-react";
+import { Palette, Zap, Sparkles, Layers, BarChart2, Trash2, Cpu as CpuIcon } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
@@ -11,14 +11,20 @@ export default function PerformanceSettings() {
   const toggleDisableAnimations = useSettingsStore(state => state.toggleDisableAnimations);
   const disableBackgroundEffects = useSettingsStore(state => state.disableBackgroundEffects);
   const toggleDisableBackgroundEffects = useSettingsStore(state => state.toggleDisableBackgroundEffects);
-  const videoCodec = useSettingsStore(state => state.videoCodec);
-  const setVideoCodec = useSettingsStore(state => state.setVideoCodec);
+
+  const QUALITY_EFFECTS = {
+    ultra: "Animasyonlar, arka plan ışıkları ve GPU hızlandırma açık. En zengin görünüm.",
+    high: "Animasyonlar, arka plan ışıkları ve GPU hızlandırma açık.",
+    medium: "Arka plan ışıkları kapalı. Animasyonlar ve GPU hızlandırma açık.",
+    low: "Arka plan ışıkları kapalı, katılımcı listesindeki animasyonlar sadeleşir. GPU hızlandırma açık.",
+    potato: "Animasyonlar, arka plan ışıkları ve GPU hızlandırma kapalı. En düşük kaynak kullanımı.",
+  };
 
   const QUALITY_MODES = [
     { 
       id: "ultra", 
       label: "Ultra", 
-      desc: "Maksimum", 
+      desc: "En zengin", 
       icon: Sparkles,
       color: "purple",
       activeBorder: "border-purple-500",
@@ -30,7 +36,7 @@ export default function PerformanceSettings() {
     { 
       id: "high", 
       label: "Yüksek", 
-      desc: "Tam", 
+      desc: "Tüm efektler", 
       icon: Zap,
       color: "green",
       activeBorder: "border-green-500",
@@ -42,7 +48,7 @@ export default function PerformanceSettings() {
     { 
       id: "medium", 
       label: "Orta", 
-      desc: "Dengeli", 
+      desc: "Sade arka plan", 
       icon: Layers,
       color: "blue",
       activeBorder: "border-blue-500",
@@ -54,7 +60,7 @@ export default function PerformanceSettings() {
     { 
       id: "low", 
       label: "Düşük", 
-      desc: "Performans", 
+      desc: "Sade (varsayılan)", 
       icon: BarChart2,
       color: "yellow",
       activeBorder: "border-yellow-500",
@@ -66,7 +72,7 @@ export default function PerformanceSettings() {
     { 
       id: "potato", 
       label: "Patates", 
-      desc: "Statik", 
+      desc: "En hafif", 
       icon: Trash2,
       color: "red",
       activeBorder: "border-red-500",
@@ -79,16 +85,16 @@ export default function PerformanceSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-2xl font-bold text-white mb-6 relative">
+      <h3 className="text-xl font-bold text-white mb-3 relative">
         <span className="relative z-10">Performans Ayarları</span>
         <div className="absolute inset-0 bg-gradient-to-r from-green-500/20 to-emerald-500/20 opacity-0 hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
       </h3>
 
       {/* Header Banner */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-4 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
 
-        <div className="h-20 w-full bg-gradient-to-r from-green-600 via-emerald-600 to-green-600 relative overflow-hidden">
+        <div className="h-16 w-full bg-gradient-to-r from-green-600 via-emerald-600 to-green-600 relative overflow-hidden">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
@@ -111,10 +117,10 @@ export default function PerformanceSettings() {
       </div>
 
       {/* Görsel Kalite Presetleri */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
             <Palette size={14} className="text-emerald-400" />
           </div>
@@ -123,8 +129,9 @@ export default function PerformanceSettings() {
         
         <div className="relative z-10">
           <p className="text-xs text-[#949ba4] mb-4">
-            Bilgisayarınızın performansına göre bir mod seçin.
+            Bilgisayarınız yavaşlıyorsa daha düşük bir mod seçin. Mod seçmek, aşağıdaki Manuel Optimizasyon ayarlarını da o moda göre sıfırlar.
           </p>
+          <p className="text-xs text-white/80 mb-4 px-3 py-2 rounded-lg bg-white/5 border border-white/5">Seçili mod: {QUALITY_EFFECTS[graphicsQuality] || QUALITY_EFFECTS.low}</p>
           
           <div className="grid grid-cols-5 gap-2">
             {QUALITY_MODES.map((mode) => {
@@ -167,16 +174,16 @@ export default function PerformanceSettings() {
       </div>
 
       {/* Detaylı Performans Ayarları */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-green-500/20 flex items-center justify-center">
             <Zap size={14} className="text-green-400" />
           </div>
           Manuel Optimizasyon
         </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-green-500/20 transition-colors duration-300 space-y-4">
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-green-500/20 transition-colors duration-300 space-y-4">
           <ToggleSwitch
             label="Donanım Hızlandırma"
             description="Mümkün olan yerlerde GPU kullanır. Kapatırsanız tüm yük işlemciye (CPU) biner."
@@ -201,36 +208,6 @@ export default function PerformanceSettings() {
           />
         </div>
       </div>
-
-       {/* Video Codec Ayarları */}
-       <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-cyan-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
-
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
-          <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center">
-            <Cpu size={14} className="text-blue-400" />
-          </div>
-          Video Kodlama (Codec)
-        </h4>
-
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-blue-500/20 transition-colors duration-300">
-           <div className="mb-3">
-              <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">
-                Tercih Edilen Codec
-              </label>
-              <select
-                value={videoCodec}
-                onChange={(e) => setVideoCodec(e.target.value)}
-                className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-blue-500/50 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none appearance-none cursor-pointer transition-all duration-300"
-              >
-                <option value="vp8">VP8 (Varsayılan - En Uyumlu)</option>
-                <option value="h264">H.264 (Donanım Hızlandırma)</option>
-                <option value="av1">AV1 (Yeni Nesil - Yüksek Sıkıştırma)</option>
-              </select>
-           </div>
-        </div>
-      </div>
-
     </div>
   );
 }

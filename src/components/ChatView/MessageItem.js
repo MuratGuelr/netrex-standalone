@@ -23,14 +23,16 @@ const MessageItem = memo(({
   renderText, 
   formatTime, 
   formatDateHeader, 
-  isInSequence, 
-  onImageClick 
+  isInSequence,
+  isContinuation,
+  onImageClick
 }) => {
   const msgDate = message.timestamp?.toDate ? message.timestamp.toDate() : new Date(message.timestamp);
   const prevMsgDate = prevMessage?.timestamp?.toDate ? prevMessage.timestamp.toDate() : (prevMessage ? new Date(prevMessage.timestamp) : null);
 
+  // isInSequence yalnızca sağ tık menüsü içindir (önceki VEYA sonraki mesaj); başlık gizleme isContinuation ile yapılır
   const isSequence =
-    isInSequence !== undefined ? isInSequence : (
+    isContinuation !== undefined ? isContinuation : (
       prevMessage &&
       prevMessage.userId === message.userId &&
       msgDate.getTime() >= prevMsgDate.getTime() &&

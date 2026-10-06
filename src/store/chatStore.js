@@ -36,6 +36,25 @@ let spamCooldownUntil = 0; // Spam koruması aktifse bu zamana kadar mesaj gönd
 let lastChannelCreationAt = 0;
 const messagePaginationCursors = new Map();
 
+// randomUUID yalnızca secure context'te var; yoksa eski yönteme düş
+const generateMessageId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Date.now().toString() + Math.random().toString(36).substr(2, 9);
+
+// Typing göstergesi zaman aşımı: `${channelId}:${userId}` -> timeout id
+const TYPING_TTL_MS = 6000;
+const typingTimers = new Map();
+const clearTypingTimers = (channelId) => {
+  const prefix = `${channelId}:`;
+  for (const [key, timer] of typingTimers) {
+    if (key.startsWith(prefix)) {
+      clearTimeout(timer);
+      typingTimers.delete(key);
+    }
+  }
+};
+
 export const useChatStore = create((set, get) => ({
   textChannels: [],
   currentChannel: null,
@@ -361,7 +380,7 @@ export const useChatStore = create((set, get) => ({
     }
 
     const message = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      id: generateMessageId(),
       text: cleanedText,
       userId,
       username,
@@ -674,6 +693,11 @@ export const useChatStore = create((set, get) => ({
   },
 
   clearCurrentChannel: () => {
+    const channelId = get().currentChannel?.id;
+    if (channelId) {
+      messagePaginationCursors.delete(channelId);
+      clearTypingTimers(channelId);
+    }
     set({
       currentChannel: null,
       messages: [],
@@ -683,14 +707,32 @@ export const useChatStore = create((set, get) => ({
 
   // --- TYPING INDICATORS (LiveKit Data Channel - Zero Cost) ---
   setTypingStatus: (channelId, userId, username, isTyping) => {
-    set((state) => {
-      const newTypingUsers = { ...state.typingUsers };
-      if (!newTypingUsers[channelId]) newTypingUsers[channelId] = {};
+    const timerKey = `${channelId}:${userId}`;
+    clearTimeout(typingTimers.get(timerKey));
 
+    if (isTyping) {
+      // "Durdu" paketi (reliable:false) kaybolursa gösterge takılı kalmasın
+      typingTimers.set(
+        timerKey,
+        setTimeout(() => get().setTypingStatus(channelId, userId, username, false), TYPING_TTL_MS)
+      );
+    } else {
+      typingTimers.delete(timerKey);
+    }
+
+    set((state) => {
+      const channelTyping = { ...(state.typingUsers[channelId] || {}) };
       if (isTyping) {
-        newTypingUsers[channelId][userId] = username;
+        channelTyping[userId] = username;
       } else {
-        delete newTypingUsers[channelId][userId];
+        delete channelTyping[userId];
+      }
+
+      const newTypingUsers = { ...state.typingUsers };
+      if (Object.keys(channelTyping).length > 0) {
+        newTypingUsers[channelId] = channelTyping;
+      } else {
+        delete newTypingUsers[channelId];
       }
 
       return { typingUsers: newTypingUsers };

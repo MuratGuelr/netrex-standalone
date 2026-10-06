@@ -91,7 +91,7 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
   }, [audioInputId, rmsToPercentage, isSettingsModalOpen]);
 
   return (
-    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
       
       <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-2 flex items-center gap-2 relative z-10">
@@ -104,7 +104,7 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
         </span>
       </h4>
       <p className="text-xs text-[#949ba4] mb-4 ml-8 relative z-10">
-        Mikrofonunuz ne kadar ses algıladığında devreye girsin?
+        Beyaz çizgi eşiğinizdir: konuşurken yeşil çubuk çizgiyi geçerse sesiniz karşıya gider, geçemezse (kırmızı) kesilir. Klavye ve fan gibi sesler karşıya gidiyorsa çizgiyi sağa, sesiniz kesiliyorsa sola çekin.
       </p>
       
       <div className="relative z-10 bg-[#1e1f22] rounded-xl p-5 border border-white/5">

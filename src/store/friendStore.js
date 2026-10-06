@@ -233,12 +233,10 @@ export const useFriendStore = create((set, get) => ({
 
       const usersRef = collection(db, "users");
       const qUsername = query(usersRef, orderBy("username"), startAt(normalizedTerm), endAt(normalizedTerm + "\uf8ff"), limit(20));
-      const qEmail = query(usersRef, orderBy("email"), startAt(normalizedTerm), endAt(normalizedTerm + "\uf8ff"), limit(20));
       const qDisplayName = query(usersRef, orderBy("displayName"), startAt(originalTerm), endAt(originalTerm + "\uf8ff"), limit(20));
 
-      const [snapUsername, snapEmail, snapDisplayName] = await Promise.all([
+      const [snapUsername, snapDisplayName] = await Promise.all([
         getDocs(qUsername).catch(() => ({ docs: [] })),
-        getDocs(qEmail).catch(() => ({ docs: [] })),
         getDocs(qDisplayName).catch(() => ({ docs: [] }))
       ]);
 
@@ -254,7 +252,6 @@ export const useFriendStore = create((set, get) => ({
       };
 
       addDocsToMap(snapUsername);
-      addDocsToMap(snapEmail);
       addDocsToMap(snapDisplayName);
 
       const results = [];
@@ -278,7 +275,6 @@ export const useFriendStore = create((set, get) => ({
           displayName: data.displayName || "User",
           username: data.username || null,
           photoURL: data.photoURL || null,
-          email: data.email || null,
           presence: data.presence || "offline",
           relationshipStatus,
         });

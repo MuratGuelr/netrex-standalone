@@ -1,23 +1,29 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { X, User, AppWindow, Cpu, Mic, Keyboard, Bell, Info, Palette, Monitor, Layers } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { X } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import SidebarItem from "./settings/SidebarItem";
 import AccountSettings from "./settings/tabs/AccountSettings";
 import ApplicationSettings from "./settings/tabs/ApplicationSettings";
 import PerformanceSettings from "./settings/tabs/PerformanceSettings";
-import VoiceSettings from "./settings/tabs/VoiceSettings";
+import MicrophoneSettings from "./settings/tabs/MicrophoneSettings";
+import CameraSettings from "./settings/tabs/CameraSettings";
+import SoundsSettings from "./settings/tabs/SoundsSettings";
 import KeybindSettings from "./settings/tabs/KeybindSettings";
 import NotificationSettings from "./settings/tabs/NotificationSettings";
 import AppearanceSettings from "./settings/tabs/AppearanceSettings";
 import AboutSettings from "./settings/tabs/AboutSettings";
 import MacSetupSettings from "./settings/tabs/MacSetupSettings";
 import OverlaySettings from "./settings/tabs/OverlaySettings";
+import { getVisibleNav, findNavItem } from "./settings/nav";
+import { searchSettings } from "./settings/searchIndex";
+import { SettingsSearchInput, SettingsSearchResults } from "./settings/SettingsSearch";
 import { toast } from "@/src/utils/toast";
 
 // --- ANA BİLEŞEN ---
 export default function SettingsModal({ isOpen, onClose }) {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("account");
+  const [query, setQuery] = useState("");
   const contentRef = useRef(null);
   const accountSettingsRef = useRef(null);
   const settingsScrollToSection = useSettingsStore(state => state.settingsScrollToSection);
@@ -46,29 +52,44 @@ export default function SettingsModal({ isOpen, onClose }) {
   useEffect(() => {
     if (settingsScrollToSection && isOpen) {
       setActiveTab("account");
+      setQuery("");
     }
   }, [settingsScrollToSection, isOpen]);
+
+  // Gezinme: tek kaynaktan (settings/nav.js), ortama göre filtrelenmiş
+  const nav = useMemo(() => getVisibleNav({ isElectronApp, isMac }), [isElectronApp, isMac]);
+  const flatNav = useMemo(() => nav.flatMap((group) => group.items), [nav]);
+  const searchResults = useMemo(
+    () => (query.trim() ? searchSettings(query, { isElectronApp }) : []),
+    [query, isElectronApp],
+  );
+  const isSearching = query.trim().length > 0;
+
+  const pickTab = useCallback((tabId) => {
+    setActiveTab(tabId);
+    setQuery("");
+  }, []);
 
   // Custom smooth scroll with easing
   const smoothScrollToTop = useCallback((element, duration = 600) => {
     const start = element.scrollTop;
     const startTime = performance.now();
-    
+
     // easeOutQuart - very smooth deceleration
     const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
-    
+
     const animateScroll = (currentTime) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeProgress = easeOutQuart(progress);
-      
+
       element.scrollTop = start * (1 - easeProgress);
-      
+
       if (progress < 1) {
         requestAnimationFrame(animateScroll);
       }
     };
-    
+
     requestAnimationFrame(animateScroll);
   }, []);
 
@@ -87,6 +108,38 @@ export default function SettingsModal({ isOpen, onClose }) {
   }, [isOpen, onClose]);
 
   if (!mounted || !isOpen) return null;
+
+  // Aktif sekmenin içeriği (mobil ve masaüstü aynı yerden)
+  const renderTab = () => {
+    switch (activeTab) {
+      case "account":
+        return <AccountSettings ref={accountSettingsRef} onClose={onClose} scrollToSection={settingsScrollToSection} setScrollToSection={setSettingsScrollToSection} contentRef={contentRef} />;
+      case "mic":
+        return <MicrophoneSettings isSettingsModalOpen={isOpen} />;
+      case "camera":
+        return <CameraSettings />;
+      case "sounds":
+        return <SoundsSettings />;
+      case "appearance":
+        return <AppearanceSettings />;
+      case "notifications":
+        return <NotificationSettings />;
+      case "keybinds":
+        return isElectronApp ? <KeybindSettings /> : null;
+      case "overlay":
+        return isElectronApp ? <OverlaySettings /> : null;
+      case "performance":
+        return <PerformanceSettings />;
+      case "application":
+        return <ApplicationSettings />;
+      case "about":
+        return <AboutSettings />;
+      case "mac-setup":
+        return <MacSetupSettings />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center backdrop-blur-md animate-nds-fade-in">
@@ -113,7 +166,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             </span>
           </div>
         )}
-        
+
         {/* Top glow effect */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"></div>
 
@@ -125,7 +178,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white">Ayarlar</h2>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold uppercase">
-                  {activeTab === 'account' ? 'Hesap' : activeTab === 'voice' ? 'Ses' : activeTab === 'appearance' ? 'Görünüm' : activeTab === 'application' ? 'Genel' : activeTab === 'notifications' ? 'Bildirim' : 'Hakkında'}
+                  {findNavItem(activeTab)?.short || "Ayarlar"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -151,46 +204,41 @@ export default function SettingsModal({ isOpen, onClose }) {
               </div>
             </div>
 
+            {/* Mobile Search */}
+            <div className="px-4 pt-3 flex-shrink-0">
+              <SettingsSearchInput query={query} setQuery={setQuery} />
+            </div>
+
             {/* Mobile Content */}
             <div ref={contentRef} className="flex-1 overflow-y-auto p-4 pb-20 relative mobile-scroll custom-scrollbar">
-              <div className="relative z-10" key={activeTab}>
+              <div className="relative z-10" key={isSearching ? "search" : activeTab}>
                 <div className="animate-page-enter">
-                  {activeTab === "account" && <AccountSettings ref={accountSettingsRef} onClose={onClose} scrollToSection={settingsScrollToSection} setScrollToSection={setSettingsScrollToSection} contentRef={contentRef} />}
-                  {activeTab === "application" && <ApplicationSettings />}
-                  {activeTab === "appearance" && <AppearanceSettings />}
-                  {activeTab === "performance" && <PerformanceSettings />}
-                  {activeTab === "voice" && <VoiceSettings isSettingsModalOpen={isOpen} />}
-                  {activeTab === "notifications" && <NotificationSettings />}
-                  {activeTab === "about" && <AboutSettings />}
+                  {isSearching ? <SettingsSearchResults results={searchResults} onPick={pickTab} /> : renderTab()}
                 </div>
               </div>
             </div>
 
-            {/* Mobile Tab Bar — BOTTOM */}
+            {/* Mobile Tab Bar — BOTTOM (masaüstüyle aynı sekmeler) */}
             <div className="flex items-center justify-around gap-1 px-2 py-2 overflow-x-auto no-scrollbar border-t border-white/10 bg-[#0a0a0c] flex-shrink-0" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
-              {[
-                { id: 'account', label: 'Hesap', icon: <User size={18} /> },
-                { id: 'application', label: 'Genel', icon: <AppWindow size={18} /> },
-                { id: 'appearance', label: 'Görünüm', icon: <Palette size={18} /> },
-                { id: 'voice', label: 'Ses', icon: <Mic size={18} /> },
-                { id: 'notifications', label: 'Bildirim', icon: <Bell size={18} /> },
-                { id: 'about', label: 'Hakkında', icon: <Info size={18} /> },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl text-[10px] font-medium whitespace-nowrap flex-shrink-0 transition-all min-w-[50px]
-                    ${activeTab === tab.id 
-                      ? 'bg-indigo-500/20 text-white font-semibold' 
-                      : 'text-[#949ba4]'
-                    }
-                  `}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
+              {flatNav.map(tab => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => pickTab(tab.id)}
+                    className={`
+                      flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl text-[10px] font-medium whitespace-nowrap flex-shrink-0 transition-all min-w-[50px]
+                      ${!isSearching && activeTab === tab.id
+                        ? 'bg-indigo-500/20 text-white font-semibold'
+                        : 'text-[#949ba4]'
+                      }
+                    `}
+                  >
+                    <Icon size={18} />
+                    {tab.short}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -204,7 +252,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           </div>
 
           {/* Logo/Header */}
-          <div className="relative z-10 px-3 py-4 mb-2">
+          <div className="relative z-10 px-3 py-3 mb-1 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
                 <img src="logo.png" alt="Netrex" className="w-10 h-10" />
@@ -216,114 +264,44 @@ export default function SettingsModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 mb-3 relative z-10"></div>
-
-          {/* Kullanıcı Ayarları */}
-          <div className="px-3 pt-2 pb-2 relative z-10">
-            <h2 className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-gradient-to-r from-indigo-500 to-transparent rounded-full"></div>
-              Kullanıcı Ayarları
-            </h2>
+          {/* Arama */}
+          <div className="relative z-10 px-1 pb-3 flex-shrink-0">
+            <SettingsSearchInput query={query} setQuery={setQuery} />
           </div>
-          <SidebarItem
-            label="Hesabım"
-            icon={<User size={18} />}
-            active={activeTab === "account"}
-            onClick={() => setActiveTab("account")}
-            color="indigo"
-          />
-          
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 my-3 relative z-10"></div>
-          
-          {/* Uygulama Ayarları */}
-          <div className="px-3 pt-2 pb-2 relative z-10">
-            <h2 className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-gradient-to-r from-purple-500 to-transparent rounded-full"></div>
-              Uygulama Ayarları
-            </h2>
-          </div>
-          <SidebarItem
-            label="Genel"
-            icon={<AppWindow size={18} />}
-            active={activeTab === "application"}
-            onClick={() => setActiveTab("application")}
-            color="purple"
-          />
-           <SidebarItem
-            label="Görünüm"
-            icon={<Palette size={18} />}
-            active={activeTab === "appearance"}
-            onClick={() => setActiveTab("appearance")}
-            color="pink"
-          />
-          <SidebarItem
-            label="Performans"
-            icon={<Cpu size={18} />}
-            active={activeTab === "performance"}
-            onClick={() => setActiveTab("performance")}
-            color="green"
-          />
-          <SidebarItem
-            label="Ses ve Görüntü"
-            icon={<Mic size={18} />}
-            active={activeTab === "voice"}
-            onClick={() => setActiveTab("voice")}
-            color="cyan"
-          />
-          {isElectronApp && (
-            <SidebarItem
-              label="Tuş Atamaları"
-              icon={<Keyboard size={18} />}
-              active={activeTab === "keybinds"}
-              onClick={() => setActiveTab("keybinds")}
-              color="orange"
-            />
-          )}
-          <SidebarItem
-            label="Bildirimler"
-            icon={<Bell size={18} />}
-            active={activeTab === "notifications"}
-            onClick={() => setActiveTab("notifications")}
-            color="yellow"
-          />
-          {isElectronApp && (
-            <SidebarItem
-              label="Oyun İçi Overlay"
-              icon={<Layers size={18} />}
-              active={activeTab === "overlay"}
-              onClick={() => setActiveTab("overlay")}
-              color="amber"
-            />
-          )}
-          
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 my-3 relative z-10"></div>
-          
-          <SidebarItem
-            label="Uygulama Hakkında"
-            icon={<Info size={18} />}
-            active={activeTab === "about"}
-            onClick={() => setActiveTab("about")}
-            color="indigo"
-          />
 
-          {isMac && (
-            <>
-              <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 my-3 relative z-10"></div>
-              <SidebarItem
-                label="macOS Kurulumu"
-                icon={<Monitor size={18} />}
-                active={activeTab === "mac-setup"}
-                onClick={() => setActiveTab("mac-setup")}
-                color="orange"
-              />
-            </>
-          )}
-          
+          {/* Gezinme veya arama sonuçları (kaydırılabilir; alt bilgi her zaman görünür kalır) */}
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin relative z-10 -mr-1 pr-1">
+            {isSearching ? (
+              <SettingsSearchResults results={searchResults} onPick={pickTab} />
+            ) : (
+              nav.map((group) => (
+                <div key={group.title} className="mb-2">
+                  <div className="px-3 pt-2 pb-2">
+                    <h2 className="text-[10px] font-bold text-[#5c5e66] uppercase tracking-wider flex items-center gap-2">
+                      <div className={`w-4 h-0.5 bg-gradient-to-r ${group.accent} to-transparent rounded-full`}></div>
+                      {group.title}
+                    </h2>
+                  </div>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <SidebarItem
+                        key={item.id}
+                        label={item.label}
+                        icon={<Icon size={18} />}
+                        active={activeTab === item.id}
+                        onClick={() => pickTab(item.id)}
+                        color={item.color}
+                      />
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+
           {/* Footer */}
-          <div className="mt-auto px-2 pt-3 relative z-10">
+          <div className="px-2 pt-3 relative z-10 flex-shrink-0">
             <div className="glass-strong rounded-xl p-3 border border-white/10 flex items-center gap-2.5">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
               <div className="flex-1">
@@ -338,7 +316,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           <div className="relative z-10 p-6 pb-4 border-b border-nds-border-light bg-gradient-to-r from-nds-bg-secondary/50 to-transparent">
           </div>
 
-          <div ref={contentRef} className="flex-1 overflow-y-auto scrollbar-thin p-8 pr-12 pb-24 relative">
+          <div ref={contentRef} className="flex-1 overflow-y-auto scrollbar-thin p-6 pr-10 pb-20 relative">
             {/* Animated background particles */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
@@ -351,16 +329,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             <div className="relative z-10" key={activeTab}>
               {/* Page transition wrapper with staggered animations */}
               <div className="animate-page-enter">
-                {activeTab === "account" && <AccountSettings ref={accountSettingsRef} onClose={onClose} scrollToSection={settingsScrollToSection} setScrollToSection={setSettingsScrollToSection} contentRef={contentRef} />}
-                {activeTab === "application" && <ApplicationSettings />}
-                {activeTab === "appearance" && <AppearanceSettings />}
-                {activeTab === "performance" && <PerformanceSettings />}
-                {activeTab === "voice" && <VoiceSettings isSettingsModalOpen={isOpen} />}
-                {activeTab === "keybinds" && <KeybindSettings />}
-                {activeTab === "notifications" && <NotificationSettings />}
-                {activeTab === "overlay" && <OverlaySettings />}
-                {activeTab === "about" && <AboutSettings />}
-                {activeTab === "mac-setup" && <MacSetupSettings />}
+                {renderTab()}
               </div>
             </div>
           </div>
@@ -377,8 +346,8 @@ export default function SettingsModal({ isOpen, onClose }) {
                 } else {
                   toast.success("Ayarlar kaydedildi!");
                 }
-                
-                // Profil kaydediliyorsa (zaten kendi içinde loading/toast var) 
+
+                // Profil kaydediliyorsa (zaten kendi içinde loading/toast var)
                 // Biraz bekleyip kapatalım
                 setTimeout(() => {
                   onClose();

@@ -18,7 +18,7 @@ import {
   writeBatch,
   increment,
 } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { db, auth } from "@/src/lib/firebase";
 import { toast } from "@/src/utils/toast";
 import { MESSAGE_SEQUENCE_THRESHOLD } from "@/src/constants/appConfig";
 
@@ -293,9 +293,8 @@ export const useDMStore = create((set, get) => ({
     });
 
     if (conversation?.id) {
-      const { user } = require("@/src/store/authStore").useAuthStore.getState();
       get().startMessageListener(conversation.id);
-      get().markDMAsRead(conversation.id, user?.uid);
+      get().markDMAsRead(conversation.id, auth.currentUser?.uid);
     }
   },
 

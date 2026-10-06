@@ -83,7 +83,7 @@ export default function AddFriendView() {
       <div className="px-6 py-5 border-b border-white/5">
         <h3 className="text-lg font-bold text-white mb-1">Arkadaş Ekle</h3>
         <p className="text-sm text-[#949ba4]">
-          Netrex kullanıcı adı veya e-posta ile arayabilirsin.
+          Netrex kullanıcı adı ile arayabilirsin.
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export default function AddFriendView() {
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Kullanıcı adı veya e-posta ara..."
+            placeholder="Kullanıcı adı ara..."
             className="
               w-full h-12 pl-12 pr-4
               bg-black/30 
@@ -171,7 +171,7 @@ export default function AddFriendView() {
               Yeni arkadaşlar bul
             </h3>
             <p className="text-sm text-[#949ba4] text-center max-w-sm">
-              Kullanıcı adı veya e-posta adresi yazarak arkadaş ekleyebilirsin.
+              Kullanıcı adı yazarak arkadaş ekleyebilirsin.
               En az 2 karakter girmen gerekiyor.
             </p>
           </div>

@@ -27,15 +27,15 @@ export default function ApplicationSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-2xl font-bold text-white mb-6 relative">
+      <h3 className="text-xl font-bold text-white mb-3 relative">
         <span className="relative z-10">Uygulama Ayarları</span>
       </h3>
 
       {/* Header Banner */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-4 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
 
-        <div className="h-20 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 relative overflow-hidden">
+        <div className="h-16 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 relative overflow-hidden">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
@@ -56,16 +56,16 @@ export default function ApplicationSettings() {
       </div>
 
       {/* Pencere Davranışı */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
             <Monitor size={14} className="text-indigo-400" />
           </div>
           Pencere Davranışı
         </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
           <ToggleSwitch
             label="Sistem Tepsisine Küçült"
             description="Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt köşedeki (saat yanı) simge durumuna küçülür."
@@ -76,17 +76,17 @@ export default function ApplicationSettings() {
       </div>
 
       {/* İzleme Partisi (Watch Party) */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
             <Film size={14} className="text-emerald-400" />
           </div>
           İzleme Partisi (Watch Party)
         </h4>
 
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300 space-y-4">
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300 space-y-4">
           <ToggleSwitch
             label="Watch Party Özelliğini Etkinleştir"
             description="Bu ayar açıkken ses odalarında Watch Party simgesini görebilir ve diğer katılımcılarla birlikte senkronize olarak YouTube videoları izleyebilirsiniz."
@@ -162,14 +162,14 @@ export default function ApplicationSettings() {
 
               <ToggleSwitch
                 label="Otomatik Katıl"
-                description="Biri odada Watch Party başlattığında otomatik olarak player ekranına geçiş yap."
+                description="Odadaki biri Watch Party başlattığında otomatik olarak video ekranına geçersiniz. Kapalıysa kendiniz katılırsınız."
                 checked={wpAutoJoin}
                 onChange={() => setWpAutoJoin(!wpAutoJoin)}
               />
 
               <ToggleSwitch
                 label="Katılınca Mikrofonu Sustur"
-                description="Watch Party başlattığında veya başladığında mikrafonunu otomatik kapatır."
+                description="Bir Watch Party başladığında (siz başlatsanız da başkası başlatsa da) mikrofonunuz otomatik kapanır."
                 checked={wpAutoMute}
                 onChange={() => setWpAutoMute(!wpAutoMute)}
               />
@@ -179,16 +179,16 @@ export default function ApplicationSettings() {
       </div>
 
       {/* Güncellemeler */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-purple-500/20 flex items-center justify-center">
             <Zap size={14} className="text-purple-400" />
           </div>
           Güncellemeler
         </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-purple-500/20 transition-colors duration-300">
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-purple-500/20 transition-colors duration-300">
           <ToggleSwitch
             label="Açılışta Güncelleme Kontrolü"
             description="Uygulama açıldığında otomatik olarak güncellemeleri kontrol eder."
@@ -213,10 +213,10 @@ export default function ApplicationSettings() {
 
       {/* Test Simulation Button (Development Only) */}
       {process.env.NODE_ENV === "development" && (
-        <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card mt-4">
+        <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card mt-4">
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-          <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+          <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
             <div className="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center">
               <Zap size={14} className="text-cyan-400" />
             </div>

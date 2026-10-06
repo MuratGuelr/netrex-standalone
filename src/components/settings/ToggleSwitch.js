@@ -1,6 +1,6 @@
 export default function ToggleSwitch({ label, description, checked, onChange }) {
   return (
-    <div className="flex items-center justify-between py-2 group/toggle">
+    <div className="flex items-center justify-between py-1 group/toggle">
       <div className="pr-4 flex-1">
         <div className="font-medium text-nds-text-primary mb-0.5 group-hover/toggle:text-nds-text-secondary transition-colors">
           {label}

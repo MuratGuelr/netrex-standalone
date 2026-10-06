@@ -18,12 +18,12 @@ export default function AboutSettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-2xl font-bold text-white mb-6 relative">
+      <h3 className="text-xl font-bold text-white mb-3 relative">
         <span className="relative z-10">Uygulama Hakkında</span>
       </h3>
 
       {/* Logo ve Uygulama Bilgileri */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-4 relative group/card">
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
 
@@ -79,11 +79,11 @@ export default function AboutSettings() {
       </div>
 
       {/* Versiyon Bilgileri */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
           Versiyon Bilgileri
         </h4>
@@ -108,11 +108,11 @@ export default function AboutSettings() {
       </div>
 
       {/* Geliştirici Bilgileri */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-1 h-1 bg-green-400 rounded-full"></div>
           Geliştirici
         </h4>
@@ -135,11 +135,11 @@ export default function AboutSettings() {
       </div>
 
       {/* Linkler */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         {/* Hover glow */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
           Linkler
         </h4>

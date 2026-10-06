@@ -35,6 +35,7 @@ export default function AppShell({
   serverRail,
   showRightSidebar = true,
   onToggleRightSidebar,
+  onOpenRightSidebar,
   hasRightSidebarContent = false,
   className = "",
   // 📱 Mobile props
@@ -139,6 +140,15 @@ export default function AppShell({
   // 📱 Mobil layout kullanılacak mı? (Electron'da asla, web'de sadece dar ekranda)
   const useMobileLayout = !isElectron && isMobile;
 
+  // 🖥️ Üye listesi düğmeleri (sunucu başlığı, menü, kanal başlığı) yalnızca mobileMemberDrawerOpen'ı açıyor
+  // ve bu bayrağı sadece mobil çekmece okuyor. Masaüstünde bu "aç isteği"ni sağ paneli açarak karşıla.
+  useEffect(() => {
+    if (!useMobileLayout && mobileMemberDrawerOpen) {
+      setMobileMemberDrawerOpen(false);
+      onOpenRightSidebar?.();
+    }
+  }, [useMobileLayout, mobileMemberDrawerOpen, setMobileMemberDrawerOpen, onOpenRightSidebar]);
+
   return (
     <div className={`
       app-shell
@@ -214,7 +224,7 @@ export default function AppShell({
               <button
                 onClick={onToggleRightSidebar}
                 className={`
-                  absolute top-1/2 -translate-y-1/2 -left-6 z-50
+                  absolute top-1/2 -translate-y-1/2 -left-6 z-[70]
                   w-6 h-20
                   bg-gradient-to-l from-[#1a1b1e]/95 to-[#111214]/95
                   hover:from-indigo-600/20 hover:to-indigo-500/10

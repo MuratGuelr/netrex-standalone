@@ -97,7 +97,19 @@ if (livekitUrl) {
   const insecureUrl = livekitUrl.replace('wss://', 'http://').replace('ws://', 'http://');
   app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', `${httpUrl},${insecureUrl}`);
 }
-app.commandLine.appendSwitch('ignore-certificate-errors');
+// Global 'ignore-certificate-errors' kaldırıldı (Firebase/Cloudinary dahil tüm TLS doğrulamasını kapatıyordu).
+// Sertifika hatası yalnızca yapılandırılmış LiveKit host'u için tolere edilir.
+let livekitHost = null;
+try { livekitHost = livekitUrl ? new URL(livekitUrl).host : null; } catch (e) {}
+app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+  try {
+    if (livekitHost && new URL(url).host === livekitHost) {
+      event.preventDefault();
+      return callback(true);
+    }
+  } catch (e) {}
+  callback(false);
+});
 
 // ============================================
 // ✅ PERFORMANCE FLAGS - Array-based

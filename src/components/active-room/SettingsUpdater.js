@@ -52,8 +52,9 @@ export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serv
     }
 
     // Ayarlar değişmediyse hiçbir şey yapma
+    // NOT: audioInputId burada YOK. Cihaz değişimi useAudioDeviceSync'te switchActiveDevice ile yapılır;
+    // ikisi birden çalışınca yarışıp mikrofonu koparıyordu.
     const audioSettingsChanged =
-      prevSettingsRef.current.audioInputId !== audioInputId ||
       prevSettingsRef.current.noiseSuppression !== noiseSuppression ||
       prevSettingsRef.current.echoCancellation !== echoCancellation ||
       prevSettingsRef.current.autoGainControl !== autoGainControl ||
@@ -138,9 +139,14 @@ export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serv
               }
 
               // Yeni track'i publish et
-              await localParticipant.publishTrack(newTrack, {
+              const newMicPub = await localParticipant.publishTrack(newTrack, {
                 source: Track.Source.Microphone,
               });
+
+              // Susturulmuş kullanıcının mikrofonu ayar değişince kendiliğinden açılmasın
+              if (isMuted || serverMuted || isDeafened || serverDeafened) {
+                await newMicPub.setMuted(true);
+              }
 
               // Stream'deki diğer track'leri durdur
               newStream.getTracks().forEach((track) => {

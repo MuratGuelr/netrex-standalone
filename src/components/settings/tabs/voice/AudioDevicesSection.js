@@ -1,14 +1,9 @@
 import { Mic, Speaker } from "lucide-react";
-import { useRoomContext } from "@livekit/components-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { supportsOutputSelection } from "@/src/hooks/useAudioDeviceSync";
 
 export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
-  let room;
-  try {
-    room = useRoomContext();
-  } catch (e) {
-    // room context optional
-  }
+  const outputSelectable = supportsOutputSelection() && audioOutputs.length > 0;
 
   const audioInputId = useSettingsStore(s => s.audioInputId);
   const setAudioInput = useSettingsStore(s => s.setAudioInput);
@@ -16,10 +11,10 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
   const setAudioOutput = useSettingsStore(s => s.setAudioOutput);
 
   return (
-    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-6 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+    <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
       
-      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+      <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
         <div className="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center">
           <Mic size={14} className="text-cyan-400" />
         </div>
@@ -28,19 +23,17 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
       
       <div className="relative z-10 space-y-4">
         {/* Mikrofon */}
-        <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-cyan-500/20 transition-colors duration-300">
+        <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-cyan-500/20 transition-colors duration-300">
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2 flex items-center gap-2">
             <Mic size={12} className="text-cyan-400" />
             Giriş Cihazı (Mikrofon)
           </label>
+          <p className="text-xs text-[#949ba4] mb-2 -mt-1">Sesinizi alacak mikrofon. “Varsayılan”, bilgisayarınızda seçili olanı kullanır.</p>
           <div className="relative">
             <select
               value={audioInputId}
-              onChange={(e) => {
-                setAudioInput(e.target.value);
-                if (room?.localParticipant)
-                  room.switchActiveDevice("audioinput", e.target.value);
-              }}
+              // Odaya uygulama useAudioDeviceSync'te (tek yetkili); burada yalnızca seçim kaydedilir
+              onChange={(e) => setAudioInput(e.target.value)}
               className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-cyan-500/50 focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 outline-none appearance-none cursor-pointer transition-all duration-300 pr-10"
             >
               <option value="default">Varsayılan</option>
@@ -57,19 +50,21 @@ export default function AudioDevicesSection({ audioInputs, audioOutputs }) {
         </div>
         
         {/* Hoparlör */}
-        <div className="bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
+        <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-indigo-500/20 transition-colors duration-300">
           <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2 flex items-center gap-2">
             <Speaker size={12} className="text-indigo-400" />
             Çıkış Cihazı (Hoparlör)
           </label>
+          <p className="text-xs text-[#949ba4] mb-2 -mt-1">
+            {outputSelectable
+              ? "Odadaki kişileri duyacağınız hoparlör veya kulaklık."
+              : "Bu cihazda tarayıcı çıkış seçmeye izin vermiyor (telefonlarda yaygın). Hoparlör/kulaklık geçişini telefonun kendi ses çıkışı menüsünden yapın."}
+          </p>
           <div className="relative">
             <select
               value={audioOutputId}
-              onChange={(e) => {
-                setAudioOutput(e.target.value);
-                if (room)
-                  room.switchActiveDevice("audiooutput", e.target.value);
-              }}
+              onChange={(e) => setAudioOutput(e.target.value)}
+              disabled={!outputSelectable}
               className="w-full bg-[#2b2d31] border border-white/10 text-white p-3 rounded-xl hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none cursor-pointer transition-all duration-300 pr-10"
             >
               <option value="default">Varsayılan</option>

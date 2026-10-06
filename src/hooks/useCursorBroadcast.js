@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRoomContext, useLocalParticipant } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
 import { useCursorShareStore } from '@/src/store/cursorShareStore';
+import { useSettingsStore } from '@/src/store/settingsStore';
+import { useSoundManagerStore } from '@/src/store/soundManagerStore';
 import { toast } from "@/src/utils/toast";
 
 /**
@@ -319,9 +321,9 @@ export function useCursorBroadcast({ isScreenSharing = false }) {
 
           // 🔔 Ses çal
           try {
-            const ping = new Audio('/sounds/discord-ping.mp3');
-            ping.volume = 0.5;
-            ping.play().catch(() => {});
+            // Önceden decode edilmiş buffer'ı kullan (her ping'de yeni Audio elementi oluşturma)
+            const sfxVolume = useSettingsStore.getState().sfxVolume ?? 100;
+            useSoundManagerStore.getState().play('discord-ping', Math.min(1, (sfxVolume / 100) * 0.5));
           } catch(e) {}
 
           // 🖥️ Masaüstü bildirimi — tıklarsa otomatik izin ver

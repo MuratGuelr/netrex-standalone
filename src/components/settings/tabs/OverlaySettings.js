@@ -98,15 +98,15 @@ export default function OverlaySettings() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      <h3 className="text-2xl font-bold text-white mb-6 relative">
+      <h3 className="text-xl font-bold text-white mb-3 relative">
         <span className="relative z-10">Oyun İçi Overlay</span>
       </h3>
 
       {/* Header Banner */}
-      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-6 relative group/card">
+      <div className="glass-strong rounded-2xl overflow-hidden border border-white/20 shadow-soft-lg hover:shadow-xl transition-all duration-300 mb-4 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"></div>
 
-        <div className="h-20 w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 relative overflow-hidden">
+        <div className="h-16 w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 relative overflow-hidden">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.1)_0%,transparent_50%)]"></div>
@@ -163,16 +163,16 @@ export default function OverlaySettings() {
       )}
 
       {/* Ana Toggle */}
-      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
         <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
           <div className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center">
             <Monitor size={14} className="text-amber-400" />
           </div>
           Genel
         </h4>
-        <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-amber-500/20 transition-colors duration-300 space-y-4">
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-amber-500/20 transition-colors duration-300 space-y-4">
           <ToggleSwitch
             label="Overlay Aktif"
             description="Oyun oynarken sesli kanalın durumunu gösteren şeffaf pencereyi etkinleştirir."
@@ -210,16 +210,16 @@ export default function OverlaySettings() {
       {/* Görünüm Ayarları */}
       {overlayEnabled && (
         <>
-          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-purple-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
               <div className="w-6 h-6 rounded-lg bg-violet-500/20 flex items-center justify-center">
                 <Eye size={14} className="text-violet-400" />
               </div>
               Görünüm
             </h4>
-            <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-violet-500/20 transition-colors duration-300 space-y-5">
+            <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-violet-500/20 transition-colors duration-300 space-y-5">
               {/* Pozisyon */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-col flex-1 pl-1">
@@ -308,16 +308,16 @@ export default function OverlaySettings() {
           </div>
 
           {/* İçerik Ayarları */}
-          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "50ms" }}>
+          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "50ms" }}>
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-teal-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
               <div className="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                 <Sliders size={14} className="text-cyan-400" />
               </div>
               İçerik
             </h4>
-            <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-cyan-500/20 transition-colors duration-300 space-y-3">
+            <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-cyan-500/20 transition-colors duration-300 space-y-3">
               <ToggleSwitch
                 label="Kanal Adı"
                 description="Bağlı olduğunuz kanalın adını gösterir."
@@ -352,16 +352,16 @@ export default function OverlaySettings() {
           </div>
 
           {/* Kontrol Ayarları */}
-          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 mb-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "100ms" }}>
+          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "100ms" }}>
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-green-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
               <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                 <MousePointer size={14} className="text-emerald-400" />
               </div>
               Kontroller
             </h4>
-            <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300 space-y-3">
+            <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-emerald-500/20 transition-colors duration-300 space-y-3">
               <p className="text-xs text-[#949ba4] mb-3 pl-1 leading-snug">
                 Overlay üzerinden hangi kontrollerin yapılabileceğini belirleyin. Sadece görmek isteyip kontrol etmek istemeyebilirsiniz.
               </p>
@@ -387,16 +387,16 @@ export default function OverlaySettings() {
           </div>
 
           {/* Güvenlik Ayarları */}
-          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-5 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "150ms" }}>
+          <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: "150ms" }}>
             <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-rose-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
 
-            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-4 flex items-center gap-2 relative z-10">
+            <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
               <div className="w-6 h-6 rounded-lg bg-red-500/20 flex items-center justify-center">
                 <Shield size={14} className="text-red-400" />
               </div>
               Güvenlik
             </h4>
-            <div className="relative z-10 bg-[#1e1f22] rounded-xl p-4 border border-white/5 hover:border-red-500/20 transition-colors duration-300 space-y-3">
+            <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-red-500/20 transition-colors duration-300 space-y-3">
               <ToggleSwitch
                 label="Anti-Cheat Koruması"
                 description="Vanguard, BattlEye, EAC gibi anti-cheat sistemleri tespit edildiğinde overlay otomatik gizlenir."

@@ -793,6 +793,7 @@ export default function Home() {
       }
       showRightSidebar={showMemberList}
       onToggleRightSidebar={() => setShowMemberList(!showMemberList)}
+      onOpenRightSidebar={() => setShowMemberList(true)}
       hasRightSidebarContent={!!currentServer}
       // 📱 Mobile props
       friendsMode={friendsMode}
