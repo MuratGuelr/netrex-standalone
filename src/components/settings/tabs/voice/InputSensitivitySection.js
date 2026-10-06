@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Zap } from "lucide-react";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { rmsToSlider } from "@/src/utils/voiceThreshold";
+import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 
 export default function InputSensitivitySection({ isSettingsModalOpen }) {
   const audioInputId = useSettingsStore(s => s.audioInputId);
@@ -16,21 +18,8 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
     setLocalThreshold(voiceThreshold);
   }, [voiceThreshold]);
 
-  // RMS değerini 0-100 arası yüzdeye dönüştür (useVoiceProcessor ile uyumlu)
-  const rmsToPercentage = useCallback((rms) => {
-    // useVoiceProcessor'daki CONFIG değerleri ile aynı
-    const MIN_RMS = 0.002;
-    const MAX_RMS = 0.12;
-
-    // RMS değerini normalize et (0-1 arası)
-    let normalized = Math.max(
-      0,
-      Math.min(1, (rms - MIN_RMS) / (MAX_RMS - MIN_RMS))
-    );
-    
-    // Yüzdeye çevir (0-100)
-    return normalized * 100;
-  }, []);
+  // RMS → yüzde: gate ile AYNI sabitler (src/utils/voiceThreshold.js), çizgi gerçek eşiği göstersin
+  const rmsToPercentage = useCallback((rms) => rmsToSlider(rms), []);
 
   useEffect(() => {
     if (!isSettingsModalOpen) return;
@@ -41,12 +30,19 @@ export default function InputSensitivitySection({ isSettingsModalOpen }) {
       if (!audioInputId || animationRef.current) return;
       
       try {
+        // Gate'in gerçekte ölçtüğü sinyalle aynı kısıtlar: aksi halde tarayıcı varsayılanı (AGC açık)
+        // göstergeyi olduğundan yüksek gösterir ve çizgi gerçek eşikle uyuşmaz.
+        const s = useSettingsStore.getState();
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId:
               audioInputId !== "default"
                 ? { exact: audioInputId }
                 : undefined,
+            echoCancellation: s.echoCancellation,
+            noiseSuppression:
+              s.noiseSuppression && (s.noiseSuppressionMode === "none" || !s.noiseSuppressionMode),
+            autoGainControl: effectiveAutoGainControl(s.autoGainControl, s.noiseSuppressionMode),
           },
         });
         audioContext = new (window.AudioContext || window.webkitAudioContext)();

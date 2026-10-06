@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import { ConnectionState, Track } from "livekit-client";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 
 // Mikrofon ve kamera ayarları değiştiğinde track'leri yeniden oluştur
 export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serverDeafened }) {
@@ -114,7 +115,7 @@ export default function SettingsUpdater({ isMuted, serverMuted, isDeafened, serv
                     : undefined,
                 echoCancellation,
                 noiseSuppression: shouldUseNativeNoiseSuppression,
-                autoGainControl,
+                autoGainControl: effectiveAutoGainControl(autoGainControl, noiseSuppressionMode),
               },
             };
 

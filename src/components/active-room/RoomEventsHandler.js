@@ -6,7 +6,10 @@ import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useToastStore } from "@/src/store/toastStore";
+import { useMicStatusStore, waitForMicReady } from "@/src/store/micStatusStore";
+import { setLocalMicConnecting } from "@/src/utils/micConnectingAttr";
 import { notifyMicFailure } from "@/src/hooks/useMicGuard";
+import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 import { doc, updateDoc, deleteDoc, arrayRemove, runTransaction } from "firebase/firestore";
 import { ref, remove } from "firebase/database";
 import { db, rtdb } from "@/src/lib/firebase";
@@ -14,10 +17,11 @@ import { db, rtdb } from "@/src/lib/firebase";
 // Mikrofonu kullanıcının seçtiği cihazla yayınlar. Seçili cihaz açılamazsa varsayılana düşer
 // (sesin hiç gitmemesinden iyidir) ve seçimi sıfırlar. Varsayılan da açılamazsa hatayı fırlatır.
 async function publishMic(room) {
+  const { autoGainControl, noiseSuppressionMode } = useSettingsStore.getState();
   const options = {
     echoCancellation: true,
     noiseSuppression: false,
-    autoGainControl: true,
+    autoGainControl: effectiveAutoGainControl(autoGainControl, noiseSuppressionMode),
     sampleRate: 48000,
     channelCount: 1,
   };
@@ -180,6 +184,10 @@ export default function RoomEventsHandler({
     micPublishedRef.current = false;
     console.log("✅ Registering room event listeners");
 
+    // Mikrofon hazırlanırken kendi kartında "Bağlanıyor" göstergesi (bkz. micStatusStore)
+    useMicStatusStore.getState().begin();
+    const micStatusTimeout = setTimeout(() => useMicStatusStore.getState().forceReady(), 10000);
+
     // ✅ FIX: Define callbacks INSIDE useEffect, using refs for fresh values
     const handleJoin = (participant) => {
       const { playSound, showNotification } = callbacksRef.current;
@@ -243,7 +251,10 @@ export default function RoomEventsHandler({
       const { setInVoiceRoom, onConnected } = callbacksRef.current;
       
       setInVoiceRoom(true);
-      
+
+      // Diğer katılımcılar, mikrofonumuz hazır olana kadar bizi "bağlanıyor" olarak görsün (sesimiz henüz gitmiyor)
+      let flaggedConnecting = false;
+
       // ✅ CRITICAL: Guard ile sadece 1 kez mikrofon publish et
       // Önceki kod: hem Connected event hem ConnectionStateChanged tetikleyince
       // setMicrophoneEnabled 2-3 kez çağrılıyordu = WebRTC renegotiation = CPU spike
@@ -251,17 +262,30 @@ export default function RoomEventsHandler({
         console.log("🎤 Mikrofon zaten publish edildi, atlanıyor");
       } else {
         micPublishedRef.current = true;
+        flaggedConnecting = true;
+        setLocalMicConnecting(room?.localParticipant, true);
         try {
           if (room?.localParticipant) {
             await publishMic(room);
+            useMicStatusStore.getState().setPublished();
             console.log("🎤 Mikrofon publish edildi (onRoomConnected)");
           }
         } catch (micError) {
           micPublishedRef.current = false; // hata olursa tekrar denenebilsin
+          useMicStatusStore.getState().setFailed(); // spinner yerine hata durumunu MicGuard bildirir
           console.warn("⚠️ Mikrofon publish hatası:", micError);
           // Kullanıcı sesinin gitmediğini bilmeli (sadece konsola yazmak yetmez)
           notifyMicFailure(micError);
         }
+      }
+
+      // Odayı (yükleme ekranını kaldırma + sunucu listesinde görünme) mikrofon yayını VE ses işlemcisi
+      // hazır olana kadar tut; kullanıcı odada görününce sesi de gerçekten gidiyor olsun.
+      try {
+        await waitForMicReady(5000);
+      } finally {
+        // Hata/zaman aşımı olsa da bayrak takılı kalmasın
+        if (flaggedConnecting) setLocalMicConnecting(room?.localParticipant, false);
       }
 
       if (onConnected) onConnected();
@@ -423,6 +447,8 @@ export default function RoomEventsHandler({
 
     return () => {
       console.log("🧹 Cleaning up room event listeners");
+      clearTimeout(micStatusTimeout);
+      useMicStatusStore.getState().end();
 
       room.off(RoomEvent.Connected, onRoomConnected);
       room.off(RoomEvent.Disconnected, onRoomDisconnected);

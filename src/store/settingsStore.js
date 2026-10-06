@@ -407,7 +407,7 @@ export const useSettingsStore = create(
     }),
     {
       name: "netrex-user-settings",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => Object.fromEntries(
         Object.entries(state).filter(
@@ -415,6 +415,10 @@ export const useSettingsStore = create(
         )
       ),
       migrate: (persistedState, version) => {
+        // v3: ses işlemcisi yeniden yazıldı; herkes noise gate'i %5 ile başlasın (sonra istediği değere çekebilir)
+        if (version < 3) {
+          persistedState = { ...persistedState, voiceThreshold: 5 };
+        }
         if (version === 0 || version === 1) {
           // Reset Quick Status to healthy defaults
           return {

@@ -41,7 +41,7 @@ export default function AdvancedAudioSection() {
         <div className="bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-purple-500/20 transition-colors duration-300">
           <ToggleSwitch
             label="Otomatik Kazanç Kontrolü"
-            description="Ses seviyeni otomatik olarak dengeler (Bağırdığında kısar, fısıldadığında açar)."
+            description="Ses seviyeni otomatik olarak dengeler (Bağırdığında kısar, fısıldadığında açar). Kapatırsan mikrofon seviyesi düşer; Giriş Hassasiyeti çizgisini buna göre sola çekmen gerekir."
             checked={autoGainControl}
             onChange={toggleAutoGainControl}
           />

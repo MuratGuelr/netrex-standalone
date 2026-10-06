@@ -21,7 +21,9 @@ import UserContextMenu from "./UserContextMenu";
 import { toast } from "sonner";
 
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useMicStatusStore } from "@/src/store/micStatusStore";
 import { useVoiceProcessor } from "@/src/hooks/useVoiceProcessor";
+import { effectiveAutoGainControl } from "@/src/utils/micConstraints";
 import { useSoundEffects } from "@/src/hooks/useSoundEffects";
 import { useAuthStore } from "@/src/store/authStore";
 import { useChatStore } from "@/src/store/chatStore";
@@ -634,9 +636,17 @@ export default function ActiveRoom({
     initializePoolDoc();
   }, [serverPoolMode, serverCount]);
 
-  const noiseSuppression = useSettingsStore((state) => state.noiseSuppression);
+  // Yükleme ekranı metni: bağlantı kuruldu, mikrofon/ses işlemcisi hazırlanıyor mu
+  const micPublished = useMicStatusStore((s) => s.published);
+  const noiseSuppressionSetting = useSettingsStore((state) => state.noiseSuppression);
+  const noiseSuppressionMode = useSettingsStore((state) => state.noiseSuppressionMode);
+  // RNNoise / standart mod açıkken tarayıcının kendi gürültü bastırması kapalı olmalı: ikisi üst üste
+  // binince ses "suyun altında" gibi olur ve CPU boşa gider (SettingsUpdater ile aynı kural).
+  const noiseSuppression =
+    noiseSuppressionSetting && (noiseSuppressionMode === "none" || !noiseSuppressionMode);
   const echoCancellation = useSettingsStore((state) => state.echoCancellation);
-  const autoGainControl = useSettingsStore((state) => state.autoGainControl);
+  const autoGainControlSetting = useSettingsStore((state) => state.autoGainControl);
+  const autoGainControl = effectiveAutoGainControl(autoGainControlSetting, noiseSuppressionMode);
   const disableAnimations = useSettingsStore(
     (state) => state.disableAnimations,
   );
@@ -1551,7 +1561,7 @@ export default function ActiveRoom({
         <div className="absolute inset-0 z-50 bg-[#0a0a0c]/95">
           <LoadingSplash
             title="Bağlantı Kuruluyor"
-            loadingText="Lütfen bekleyin..."
+            loadingText={micPublished ? "Mikrofon hazırlanıyor..." : "Lütfen bekleyin..."}
             disableBackgroundEffects={disableBackgroundEffects}
           />
         </div>

@@ -222,6 +222,9 @@ class VoiceProcessor extends AudioWorkletProcessor {
     this.port.postMessage({
       type: 'metrics',
       rms,
+      // Yumuşatılmamış anlık seviye: smoothed rms ilk ölçümde gerçek seviyenin ~%35'ine ulaşır,
+      // gate'in kelime başını kaçırmaması için açılış kararında bu kullanılır
+      rawRms,
       zcr,
       crestFactor,
       voicePower,

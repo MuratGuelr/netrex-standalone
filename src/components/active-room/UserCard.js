@@ -8,11 +8,13 @@ import React, {
 } from "react";
 import {
   useParticipantInfo,
+  useParticipantAttributes,
   useIsSpeaking,
   VideoTrack,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { Tv, Maximize, VolumeX, MicOff, Clock, ShieldAlert } from "lucide-react";
+import { Tv, Maximize, VolumeX, MicOff, Clock, ShieldAlert, Loader2 } from "lucide-react";
+import { isMicConnectingAttr } from "@/src/utils/micConnectingAttr";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSpeakingStore } from "@/src/store/speakingStore";
 import { useAuthStore } from "@/src/store/authStore";
@@ -126,6 +128,11 @@ const UserCard = ({
   const useProfileColorForSpeaking = useSettingsStore((s) => s.useProfileColorForSpeaking ?? true);
   const localVolume = useSettingsStore((s) => s.userVolumes[participant.identity] ?? 100);
   const isLocallyMuted = !participant.isLocal && localVolume === 0;
+
+  // Odaya yeni katılan kişinin mikrofonu hazır olana kadar (LiveKit özniteliği) "bağlanıyor" göster.
+  // Kendi kartımızda gösterme: biz zaten odaya hazır olunca giriyoruz.
+  const { attributes: participantAttributes } = useParticipantAttributes({ participant });
+  const remoteMicConnecting = !participant.isLocal && isMicConnectingAttr(participantAttributes);
 
   // ✅ OPTIMIZATION: useTracks parent'tan Map olarak geliyor (O(1) lookup)
   const screenShareTrack = screenShareTrackMap?.get(participant.sid) || null;
@@ -680,6 +687,52 @@ const UserCard = ({
                       </span>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 🎤 Karşı tarafın mikrofonu hazırlanıyor: sesi henüz gitmiyor (susturma katmanıyla aynı stil).
+            Zaten susturulmuş/sağırlaştırılmışsa o katman görünür, ikisi üst üste binmesin. */}
+        {remoteMicConnecting && !(isMuted || isDeafened) && (
+          <div
+            role="status"
+            className={`absolute z-30 pointer-events-none rounded-xl overflow-hidden transition-opacity duration-300 ${
+              shouldShowVideo && videoTrack
+                ? "top-2 right-2 flex flex-col items-end group-hover:opacity-0"
+                : `inset-0 flex items-center justify-center ${hasScreenShare ? "group-hover:opacity-0" : ""}`
+            }`}
+          >
+            {!(shouldShowVideo && videoTrack) && (
+              <div className="absolute inset-0 bg-black/50 transition-all duration-300" />
+            )}
+
+            <div
+              className={`relative flex flex-col items-center ${shouldShowVideo && videoTrack ? "gap-1" : compact ? "gap-1.5" : "gap-3"}`}
+            >
+              <div
+                className={`bg-zinc-900 border border-white/10 flex items-center justify-center rounded-full ${shouldShowVideo && videoTrack ? "p-1.5" : compact ? "p-2" : "p-4"}`}
+              >
+                <Loader2
+                  size={shouldShowVideo && videoTrack ? 16 : compact ? 18 : 32}
+                  className="text-amber-400 animate-spin"
+                  strokeWidth={2.5}
+                />
+              </div>
+
+              {!(shouldShowVideo && videoTrack) && (
+                <div
+                  className={`bg-black/80 rounded-2xl border border-amber-500/30 flex flex-col items-center justify-center shadow-2xl ${compact ? "px-2 py-1" : "px-4 py-2"}`}
+                  style={{
+                    background: "linear-gradient(180deg, rgba(20,20,22,0.9) 0%, rgba(120,80,0,0.6) 100%)",
+                  }}
+                >
+                  <span
+                    className={`font-black text-white tracking-[0.15em] uppercase block ${compact ? "text-[8px]" : "text-[11px]"}`}
+                  >
+                    BAĞLANIYOR
+                  </span>
                 </div>
               )}
             </div>

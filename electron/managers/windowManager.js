@@ -188,8 +188,10 @@ const CSP_HEADER_DEV = [
 ].join('; ');
 
 const CSP_HEADER_PROD = [
-    "default-src 'self' 'unsafe-inline' file: data: blob: https: wss: http: ws:",
-    "script-src 'self' 'unsafe-inline' file: data: blob: https: http:",
+    // 'wasm-unsafe-eval': RNNoise worklet'i WebAssembly derliyor; olmadan paketli uygulamada gürültü bastırma ve
+    // ses algılama (VAD) hiç kurulmuyordu. Tam 'unsafe-eval' açmaya gerek yok.
+    "default-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' file: data: blob: https: wss: http: ws:",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' file: data: blob: https: http:",
     "img-src 'self' data: blob: https: http:",
     "media-src 'self' data: blob: https: http:",
     "font-src 'self' data: https: http:",
