@@ -268,6 +268,9 @@ export default function RoomEventsHandler({
           if (room?.localParticipant) {
             await publishMic(room);
             useMicStatusStore.getState().setPublished();
+            // Ham mikrofon yayını başladı: karşı taraf artık sesi duyuyor. İşlemcinin hazır olmasını beklemeden
+            // "bağlanıyor" göstergesini kaldır (aksi halde ses gelirken kartta bağlanıyor yazısı kalıyordu).
+            setLocalMicConnecting(room?.localParticipant, false);
             console.log("🎤 Mikrofon publish edildi (onRoomConnected)");
           }
         } catch (micError) {

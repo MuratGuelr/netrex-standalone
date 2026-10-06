@@ -41,7 +41,7 @@ import { useCursorShareController } from "@/src/hooks/useCursorShareController";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import SpatialCanvas from "./active-room/SpatialCanvas";
 import { db, rtdb } from "@/src/lib/firebase";
-import { ref, set, remove, onDisconnect, get } from "firebase/database";
+import { ref, set, remove, onDisconnect, get, onValue } from "firebase/database";
 import {
   doc,
   setDoc,
@@ -1051,6 +1051,41 @@ export default function ActiveRoom({
       }
     }
   }, [userId, roomName, username, user?.photoURL, cleanupOldRoomPresence, queuePresenceUpdate, setVoiceState]);
+
+  // 🛡️ Presence kendini onarsın: RTDB soketi anlık koparsa (ağ dalgalanması, uyku) sunucu onDisconnect ile
+  // kaydımızı siler; LiveKit bağlı kaldığı için kimse geri yazmazdı ve kullanıcı sol listeden kaybolurdu.
+  // `.info/connected` tekrar true olunca kayıt (ve onDisconnect) yeniden kurulur.
+  useEffect(() => {
+    if (!hasConnectedOnce || !userId || !roomName) return;
+    const connectedRef = ref(rtdb, ".info/connected");
+    let first = true;
+    const unsub = onValue(connectedRef, async (snap) => {
+      if (snap.val() !== true) return;
+      if (first) {
+        first = false; // ilk değer: normal katılım akışı zaten yazıyor
+        return;
+      }
+      try {
+        const presenceRef = ref(rtdb, `room_presence/${roomName}/${userId}`);
+        const existing = await get(presenceRef);
+        if (!existing.exists()) {
+          const s = useSettingsStore.getState();
+          await set(presenceRef, {
+            userId,
+            username,
+            photoURL: user?.photoURL || null,
+            isMuted: s.isMuted,
+            isDeafened: s.isDeafened,
+          });
+        }
+        onDisconnect(presenceRef).remove();
+        await setVoiceState(roomName);
+      } catch (e) {
+        console.warn("Room presence yeniden yazılamadı:", e);
+      }
+    });
+    return () => unsub();
+  }, [hasConnectedOnce, userId, roomName, username, user?.photoURL, setVoiceState]);
 
   // Sync isMuted and isDeafened in real-time with debouncing
   useEffect(() => {

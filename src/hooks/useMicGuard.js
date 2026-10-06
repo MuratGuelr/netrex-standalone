@@ -60,7 +60,7 @@ const MESSAGES = {
   muted: {
     title: "Mikrofonunuz kapalı",
     message: "Konuşuyorsunuz ama sesiniz karşıya gitmiyor.",
-    speech: "Mikrofonunuz kapalı. Sesiniz karşıya gitmiyor.",
+    speech: "Mikrofonunuz kapalı. Sesiniz gitmiyor.",
     action: {
       label: "Mikrofonu aç",
       run: () => {
@@ -242,7 +242,7 @@ export function useMicGuard({ serverMuted = false, serverDeafened = false } = {}
     let sampleTimer = null;
     let ctx = null;
     let source = null;
-    let clone = null;
+    let stream = null;
 
     const mutedSince = Date.now();
     let alertsThisSession = 0;
@@ -273,25 +273,69 @@ export function useMicGuard({ serverMuted = false, serverDeafened = false } = {}
       raiseAlert(kind);
     };
 
-    const start = () => {
+    // Analiz için LiveKit track'lerine HİÇ bağlanmayız. Ses işlemcisi bağlıyken track.mediaStreamTrack işlenmiş
+    // (mute'ta sessiz) track'i verir; ham track'e erişim de SDK iç durumuna bağlıdır. Bunun yerine kendi ham
+    // mikrofon akışımızı seçili cihazla açarız: ses işlemcisi/mute/LiveKit durumundan bağımsız, her zaman gerçek
+    // girdiyi ölçer. Akış yalnızca mikrofon KAPALIyken, odada dinleyen biri varken ve bekleme süresi dolunca
+    // açılır; analiz yereldir, ses hiçbir yere gönderilmez/kaydedilmez.
+    let failures = 0;
+    const scheduleRetry = (ms) => {
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(start, ms);
+    };
+
+    const teardownAudio = () => {
+      clearInterval(sampleTimer);
+      sampleTimer = null;
+      try { source?.disconnect(); } catch (e) {}
+      try { stream?.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      try { ctx?.close(); } catch (e) {}
+      source = null;
+      stream = null;
+      ctx = null;
+    };
+
+    async function start() {
       if (cancelled) return;
-      const pub = localParticipant.getTrackPublication(Track.Source.Microphone);
-      const mst = pub?.track?.mediaStreamTrack;
-      if (!mst || mst.readyState !== "live") {
-        // Track henüz yok/hazır değil: biraz sonra tekrar dene
-        retryTimer = setTimeout(start, 1000);
+      // Gereksiz yere mikrofon açma: dinleyen yoksa veya bekleme süresi dolmadıysa sonra tekrar bak
+      if (room.state !== ConnectionState.Connected || room.remoteParticipants.size === 0) {
+        scheduleRetry(2000);
+        return;
+      }
+      const delayMs = (useSettingsStore.getState().micGuardDelaySec ?? 15) * 1000;
+      const remaining = delayMs - (Date.now() - mutedSince);
+      if (remaining > 0) {
+        scheduleRetry(Math.min(remaining, 5000) + 50);
         return;
       }
 
       try {
-        // Klon, orijinalden bağımsız `enabled` bayrağına sahiptir; orijinal sessize alınmış
-        // olsa da klonu açarak yerel sesi analiz edebiliriz.
-        clone = mst.clone();
-        clone.enabled = true;
+        const deviceId = useSettingsStore.getState().audioInputId;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...(deviceId && deviceId !== "default" ? { deviceId: { ideal: deviceId } } : {}),
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+          return;
+        }
+        failures = 0;
+        const clone = stream.getAudioTracks()[0];
+        // Cihaz çıkarılırsa akış biter: kapat ve yeniden dene
+        clone.onended = () => {
+          if (cancelled) return;
+          teardownAudio();
+          scheduleRetry(2000);
+        };
 
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         ctx = new AudioCtx();
-        source = ctx.createMediaStreamSource(new MediaStream([clone]));
+        source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = FRAME_SIZE;
         source.connect(analyser); // BİLEREK hiçbir yere (destination dahil) bağlanmıyor
@@ -325,19 +369,20 @@ export function useMicGuard({ serverMuted = false, serverDeafened = false } = {}
           }
         }, CONFIG.SAMPLE_MS);
       } catch (e) {
-        console.warn("MicGuard: yerel ses analizi başlatılamadı", e);
+        // İzin yok / cihaz meşgul olabilir: sessizce seyrek tekrar dene (kullanıcıyı uyarı yağmuruna tutma)
+        failures += 1;
+        if (failures <= 3) console.warn("MicGuard: yerel ses analizi başlatılamadı", e?.message || e);
+        teardownAudio();
+        scheduleRetry(Math.min(60000, 5000 * failures));
       }
-    };
+    }
 
     start();
 
     return () => {
       cancelled = true;
       clearTimeout(retryTimer);
-      clearInterval(sampleTimer);
-      try { source?.disconnect(); } catch (e) {}
-      try { clone?.stop(); } catch (e) {} // yalnızca klonu durdurur, orijinal track etkilenmez
-      try { ctx?.close(); } catch (e) {}
+      teardownAudio();
     };
   }, [enabled, room, localParticipant, isMicrophoneEnabled]);
 

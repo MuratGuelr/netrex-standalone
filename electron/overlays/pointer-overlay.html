@@ -295,6 +295,8 @@
 
   var alertTimer = null;
   var lastRequestCount = 0;
+  var lastReqSig = null;
+  var lastListSig = null;
 
   function requestRow(r, cls) {
     var row = el('div', cls);
@@ -321,13 +323,22 @@
     else if (pointers.length > 0) { badge.textContent = String(pointers.length); badge.className = 'on'; }
     else { badge.className = ''; }
 
+    // NOT: Konum her ~33ms'de değişir; listeleri her güncellemede yeniden kurarsak düğme mousedown ile mouseup
+    // arasında DOM'dan silinir ve `click` hiç oluşmaz (kullanıcı "Kaldır"a defalarca basmak zorunda kalıyordu).
+    // Bu yüzden listeler yalnızca içerikleri (id/ad/renk) değişince yeniden çizilir.
+    var reqSig = requests.map(function (r) { return r.id + '|' + r.name; }).join('\n');
+    var listSig = pointers.map(function (p) { return p.id + '|' + p.name + '|' + p.color; }).join('\n');
+
     // İstekler: hem küçük kartta hem panelde
-    card.textContent = ''; rlist.textContent = '';
     reqSection.classList.toggle('hidden', requests.length === 0);
-    requests.forEach(function (r) {
-      card.appendChild(requestRow(r, 'req-row'));
-      rlist.appendChild(requestRow(r, 'item req'));
-    });
+    if (reqSig !== lastReqSig) {
+      lastReqSig = reqSig;
+      card.textContent = ''; rlist.textContent = '';
+      requests.forEach(function (r) {
+        card.appendChild(requestRow(r, 'req-row'));
+        rlist.appendChild(requestRow(r, 'item req'));
+      });
+    }
 
     // Yeni istek: baloncuk dikkat çeker (panel zorla açılmaz — dikkat dağıtmasın)
     if (requests.length > lastRequestCount) {
@@ -340,6 +351,8 @@
     refreshVisibility();
 
     // İzinliler listesi
+    if (listSig !== lastListSig) {
+    lastListSig = listSig;
     ulist.textContent = '';
     if (pointers.length === 0) {
       ulist.appendChild(el('div', 'empty', 'Henüz kimse yok'));
@@ -354,6 +367,7 @@
         row.appendChild(left); row.appendChild(rm);
         ulist.appendChild(row);
       });
+    }
     }
 
     // İmleç elemanları (konumu olmayan, hareketsiz kalmış kullanıcının imleci eski yerinde takılı kalmasın)

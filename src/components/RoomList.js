@@ -268,7 +268,7 @@ export default function RoomList({
           batchedPresence[roomName] = { users: [] };
           scheduleFlush();
       });
-      return () => off(presenceRef, 'value', unsub);
+      return unsub; // onValue'nun döndürdüğü fonksiyon dinleyiciyi gerçekten kaldırır (off(..., unsub) kaldırmıyordu)
     });
 
     return () => {

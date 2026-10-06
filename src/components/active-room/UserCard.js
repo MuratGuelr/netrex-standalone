@@ -9,6 +9,7 @@ import React, {
 import {
   useParticipantInfo,
   useParticipantAttributes,
+  useParticipantTracks,
   useIsSpeaking,
   VideoTrack,
 } from "@livekit/components-react";
@@ -83,7 +84,14 @@ const UserCard = ({
   // Odaya yeni katılan kişinin mikrofonu hazır olana kadar (LiveKit özniteliği) "bağlanıyor" göster.
   // Kendi kartımızda gösterme: biz zaten odaya hazır olunca giriyoruz.
   const { attributes: participantAttributes } = useParticipantAttributes({ participant });
-  const remoteMicConnecting = !participant.isLocal && isMicConnectingAttr(participantAttributes);
+  // Öznitelik gecikebilir/takılı kalabilir (güncelleme kaybı, yeniden bağlanma). Mikrofon yayını zaten
+  // alınıyorsa (ses gerçekten geliyor) "bağlanıyor" göstermek yanlış olur; bu durumda gösterme.
+  const remoteMicTracks = useParticipantTracks([Track.Source.Microphone], participant.identity);
+  const remoteMicLive = remoteMicTracks.some(
+    (t) => !!t.publication?.track && !t.publication.isMuted,
+  );
+  const remoteMicConnecting =
+    !participant.isLocal && isMicConnectingAttr(participantAttributes) && !remoteMicLive;
 
   // ✅ OPTIMIZATION: useTracks parent'tan Map olarak geliyor (O(1) lookup)
   const screenShareTrack = screenShareTrackMap?.get(participant.sid) || null;

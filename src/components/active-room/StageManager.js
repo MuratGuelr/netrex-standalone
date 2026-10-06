@@ -454,7 +454,14 @@ const WatcherCountBadge = React.memo(({ participantIdentity, compact }) => {
       if (p.identity === participantIdentity) return false;
       try {
         const meta = p.metadata ? JSON.parse(p.metadata) : {};
-        return meta.watchingStreamId === participantIdentity;
+        // Sabitlenen yayın kimlikleri "identity:screen" biçimindedir ve birden fazla olabilir
+        // (watchingStreamIds); eski sürümler düz identity yazar. Kamera izlemek ekran izleyicisi sayılmaz.
+        const ids = Array.isArray(meta.watchingStreamIds) && meta.watchingStreamIds.length
+          ? meta.watchingStreamIds
+          : [meta.watchingStreamId];
+        return ids.some(
+          (id) => id === participantIdentity || id === `${participantIdentity}:screen`,
+        );
       } catch (e) {
         return false;
       }
