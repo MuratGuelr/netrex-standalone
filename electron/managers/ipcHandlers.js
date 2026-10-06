@@ -262,6 +262,7 @@ function registerIpcHandlers(
     hideTicker,
     closeTicker,
     setTickerButtonRect,
+    setTickerMessageGeom,
   } = pointerOverlayFns || {};
   const {
     createVoiceOverlayWindow,
@@ -288,6 +289,9 @@ function registerIpcHandlers(
   });
   ipcMain.on("ticker-button-rect", (event, rect) => {
     if (setTickerButtonRect) setTickerButtonRect(rect);
+  });
+  ipcMain.on("ticker-message-geom", (event, geom) => {
+    if (setTickerMessageGeom) setTickerMessageGeom(geom);
   });
 
   ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {

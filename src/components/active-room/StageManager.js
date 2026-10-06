@@ -37,6 +37,7 @@ import {
   MousePointer2,
   Pencil,
   Eraser,
+  MessageSquareText,
 } from "lucide-react";
 import {
   DndContext,
@@ -62,6 +63,7 @@ import { getVideoContentRect } from "@/src/utils/pointerGeometry";
 import { addClick, addStrokePoints, clearStrokesOf } from "@/src/utils/pointerFx";
 import { toast } from "@/src/utils/toast";
 import TickerMessageButton from "./TickerMessageButton";
+import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/tickerSend";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
@@ -226,6 +228,7 @@ function StreamContextMenu({
   onSpotlight,
   onMoveFirst,
   onFullscreen,
+  onQuickMessage, // verilirse "Hızlı mesaj" bölümü gösterilir (uzak yayınlarda)
   streamName,
 }) {
   const menuRef = useRef(null);
@@ -326,6 +329,41 @@ function StreamContextMenu({
           {item.label}
         </button>
       ))}
+
+      {/* 💬 Hızlı mesaj: mikrofonunu açamayan izleyici tek tıkla yayıncıya kayan yazı gönderir */}
+      {onQuickMessage && (() => {
+        const wait = getTickerWait();
+        const waitSec = Math.ceil(wait.ms / 1000);
+        const cooling = waitSec > 0;
+        return (
+          <>
+            <div className="h-px bg-white/[0.06] my-1" />
+            <div className="px-3 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold">
+              <MessageSquareText size={11} />
+              Hızlı mesaj
+            </div>
+            {QUICK_MESSAGES.map((msg) => (
+              <button
+                key={msg}
+                disabled={cooling}
+                onClick={() => {
+                  onQuickMessage(msg);
+                  onClose();
+                }}
+                className="w-full px-3 py-1.5 text-xs font-medium text-left text-[#dbdee1] hover:bg-white/[0.06] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#dbdee1] transition-colors"
+              >
+                {msg}
+              </button>
+            ))}
+            {cooling && (
+              <div className="px-3 pt-1 pb-2 text-[10px] text-amber-300/90">
+                {wait.limit ? "Dakika sınırına ulaştın. " : ""}
+                {waitSec} sn sonra gönderebilirsin
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -1382,6 +1420,18 @@ function StageManager({
                       : `${contextMenu.track?.participant?.name || contextMenu.track?.participant?.identity || "Stream"}`
                   }
                   onClose={() => setContextMenu(null)}
+                  onQuickMessage={
+                    contextMenu.track &&
+                    !contextMenu.track.participant?.isLocal &&
+                    contextMenu.track.source === Track.Source.ScreenShare
+                      ? (text) =>
+                          sendTickerMessage(
+                            localParticipant,
+                            contextMenu.track.participant.identity,
+                            text,
+                          )
+                      : undefined
+                  }
                   onRemove={() => {
                     userStoppedWatchingRef.current = true;
                     setPinnedStreamIds((prev) =>
@@ -1654,6 +1704,8 @@ function PointerCapture({ targetParticipant, containerRef }) {
 
     const handlePointerDown = (e) => {
       if (isToolbar(e)) return;
+      // Shift + sağ tık: işaret değil, yayının menüsü (hızlı mesaj) için ayrıldı
+      if (e.button === 2 && e.shiftKey) return;
       // Çizim yalnızca sol tuşla; işaretlemede sol / orta / sağ tık ayrı renkte dalga üretir
       const isDraw = modeRef.current === "draw" && e.button === 0;
       if (!isDraw && e.button > 2) return;
@@ -1724,7 +1776,11 @@ function PointerCapture({ targetParticipant, containerRef }) {
       className="absolute inset-0 z-40 group/pointer-capture cursor-crosshair"
       style={{ touchAction: "none" }}
       // Sağ tık işaret olarak kullanılıyor: yayın kutusunun bağlam menüsü açılmasın
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onContextMenu={(e) => {
+        if (e.shiftKey) return; // Shift + sağ tık: yayının menüsü açılsın (hızlı mesaj)
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
       {/* ✨ Kenar parıltısı: işaretçi / çizim modunda olduğunu belli eder */}
       <div className={`absolute inset-0 border-2 pointer-events-none transition-opacity duration-300 ${
@@ -1746,7 +1802,7 @@ function PointerCapture({ targetParticipant, containerRef }) {
         </button>
         <span
           className="flex items-center gap-1 px-1.5"
-          title="Tıklama renkleri: sol = mavi, orta = yeşil, sağ = kırmızı"
+          title="Tıklama renkleri: sol = mavi, orta = yeşil, sağ = kırmızı. Shift + sağ tık: hızlı mesaj menüsü"
         >
           <span className="w-2 h-2 rounded-full bg-[#3b82f6]" />
           <span className="w-2 h-2 rounded-full bg-[#22c55e]" />

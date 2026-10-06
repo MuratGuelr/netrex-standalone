@@ -485,6 +485,7 @@ let tickerWindow = null;
 let tickerReady = false;
 let tickerPending = [];
 let tickerButtonRect = null;
+let tickerMessageGeom = null; // { startedAt, from, speed, width, top, height } — mesajın hareketi
 let tickerInteractive = false;
 let tickerHoverTimer = null;
 let tickerTopTimer = null;
@@ -519,6 +520,7 @@ function createTickerWindow() {
 
   tickerReady = false;
   tickerButtonRect = null;
+  tickerMessageGeom = null;
   tickerInteractive = false;
 
   tickerWindow = new BrowserWindow({
@@ -559,14 +561,25 @@ function createTickerWindow() {
   // Yalnızca ✕ düğmesinin üstündeyken tıklanabilir (hover algısı ana süreçte)
   tickerHoverTimer = setInterval(() => {
     try {
-      if (!win || win.isDestroyed() || !win.isVisible() || !tickerButtonRect || !tickerButtonRect.width) return;
+      if (!win || win.isDestroyed() || !win.isVisible()) return;
+      const hasButton = !!(tickerButtonRect && tickerButtonRect.width);
+      if (!hasButton && !tickerMessageGeom) return;
       const pt = screen.getCursorScreenPoint();
       const wb = win.getBounds();
       const lx = pt.x - wb.x;
       const ly = pt.y - wb.y;
-      const r = tickerButtonRect;
       const pad = 6;
-      const inside = lx >= r.x - pad && lx <= r.x + r.width + pad && ly >= r.y - pad && ly <= r.y + r.height + pad;
+      let inside = false;
+      if (hasButton) {
+        const r = tickerButtonRect;
+        inside = lx >= r.x - pad && lx <= r.x + r.width + pad && ly >= r.y - pad && ly <= r.y + r.height + pad;
+      }
+      if (!inside && tickerMessageGeom) {
+        // Mesaj sabit hızla sağdan sola kayar: şu anki yatay konumu zamandan hesapla
+        const g = tickerMessageGeom;
+        const x = g.from - ((Date.now() - g.startedAt) / 1000) * g.speed;
+        inside = lx >= x - pad && lx <= x + g.width + pad && ly >= g.top - pad && ly <= g.top + g.height + pad;
+      }
       if (inside !== tickerInteractive) {
         tickerInteractive = inside;
         win.setIgnoreMouseEvents(!inside, { forward: true });
@@ -589,6 +602,7 @@ function createTickerWindow() {
     tickerReady = false;
     tickerPending = [];
     tickerButtonRect = null;
+    tickerMessageGeom = null;
     tickerInteractive = false;
   });
 
@@ -626,10 +640,23 @@ function hideTicker() {
 // Kullanıcı ✕ ile kapattı: tüm sırayı temizle ve gizle
 function closeTicker() {
   tickerPending = [];
+  tickerMessageGeom = null;
   if (tickerWindow && !tickerWindow.isDestroyed()) {
     tickerWindow.webContents.send('ticker-clear');
     tickerWindow.hide();
   }
+}
+
+function setTickerMessageGeom(geom) {
+  if (!geom || typeof geom !== 'object') {
+    tickerMessageGeom = null;
+    return;
+  }
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  tickerMessageGeom = {
+    startedAt: n(geom.startedAt), from: n(geom.from), speed: n(geom.speed),
+    width: n(geom.width), top: n(geom.top), height: n(geom.height),
+  };
 }
 
 function setTickerButtonRect(rect) {
@@ -1316,6 +1343,7 @@ module.exports = {
     hideTicker,
     closeTicker,
     setTickerButtonRect,
+    setTickerMessageGeom,
     // Voice Overlay
     createVoiceOverlayWindow,
     updateVoiceOverlay,

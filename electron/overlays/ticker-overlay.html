@@ -22,7 +22,10 @@
     color: rgba(255, 255, 255, var(--fg, 0.95));
     font-size: 21px; font-weight: 600; letter-spacing: 0.01em;
     will-change: transform;
+    pointer-events: auto; cursor: pointer;   /* tıklayınca kapanır */
+    transition: border-color .15s, background .15s;
   }
+  .msg:hover { border-color: rgba(255, 255, 255, 0.4); }
   .msg .name { color: #a5b4fc; font-weight: 700; }
   .msg .sep { opacity: 0.45; }
 
@@ -71,11 +74,18 @@
     reportRect();
   }
 
+  // Mesaj sürekli hareket ettiği için konumu her karede göndermek yerine hareketin parametrelerini bir kez
+  // bildiriyoruz; ana süreç "şu an nerede" bilgisini kendisi hesaplar ve imleç üstündeyken tıklamayı açar.
+  function reportMessageGeom(geom) {
+    if (api.reportTickerMessageGeom) api.reportTickerMessageGeom(geom);
+  }
+
   function stopCurrent() {
     cancelAnimationFrame(raf);
     raf = 0;
     if (current) { try { lane.removeChild(current.el); } catch (e) {} }
     current = null;
+    reportMessageGeom(null);
   }
 
   function finishAndNext() {
@@ -109,6 +119,15 @@
     var w = el.offsetWidth;
     current = { el: el, w: w, start: performance.now(), from: window.innerWidth };
     setActive(true);
+
+    // Tıklayınca yalnızca bu mesajı kapat (sıradaki varsa devam eder)
+    el.title = 'Kapatmak için tıkla';
+    el.addEventListener('click', function () {
+      if (current && current.el === el) finishAndNext();
+    });
+
+    var box = el.getBoundingClientRect();
+    reportMessageGeom({ startedAt: Date.now(), from: window.innerWidth, speed: SPEED, width: w, top: box.top, height: box.height });
 
     function frame(t) {
       if (!current) return;

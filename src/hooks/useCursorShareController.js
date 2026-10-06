@@ -42,7 +42,10 @@ export const CURSOR_TOPICS = {
 // 💬 Kayan mesaj: mikrofonu kapalı izleyici, yayıncıya kısa bir yazı gönderir
 export const TICKER_TOPIC = "screen_note";
 export const TICKER_MAX_CHARS = 140;
-export const TICKER_SEND_COOLDOWN_MS = 3000;
+export const TICKER_SEND_COOLDOWN_MS = 3000; // aynı kişiden iki mesaj arası en az
+export const TICKER_MAX_PER_MINUTE = 5; // bir kişi dakikada en fazla
+export const TICKER_DUPLICATE_WINDOW_MS = 30_000; // aynı mesajı bu süre içinde tekrar kabul etme
+const TICKER_GLOBAL_MAX_PER_MINUTE = 12; // tüm gönderenler toplamı (kalabalıkta ekran dolmasın)
 
 /** Kontrol karakterlerini ve fazla boşlukları temizler, uzunluğu sınırlar */
 export function sanitizeTickerText(raw) {
@@ -443,7 +446,8 @@ export function useCursorShareController() {
   // ── 4b) Kayan mesajlar: izleyiciden gelen kısa yazıyı en üstte kayan yazı olarak göster ──────────────
   useEffect(() => {
     if (!room) return;
-    const lastFrom = new Map(); // gönderen -> son mesaj zamanı (spam koruması)
+    const senders = new Map(); // gönderen -> { times, lastText, lastTextAt } (spam koruması)
+    let globalTimes = []; // kabul edilen mesajların zamanları (tüm gönderenler)
 
     const onTicker = (payload, participant, _kind, topic) => {
       if (topic !== TICKER_TOPIC || !participant || !payload || payload.byteLength > 2048) return;
@@ -461,8 +465,25 @@ export function useCursorShareController() {
 
       const senderId = participant.identity;
       const now = Date.now();
-      if (now - (lastFrom.get(senderId) || 0) < TICKER_SEND_COOLDOWN_MS - 500) return;
-      lastFrom.set(senderId, now);
+
+      // ── Spam koruması ──
+      // Gönderen istemci atlatılabilir; asıl koruma alıcıda. Reddedilen mesajlar sayaçlara EKLENMEZ
+      // (sürekli deneyen biri penceresini kendi doldurup yine kabul ettiremez, ama sabır da kazanmaz).
+      const st = senders.get(senderId) || { times: [], lastText: "", lastTextAt: 0 };
+      st.times = st.times.filter((t) => now - t < 60_000);
+      globalTimes = globalTimes.filter((t) => now - t < 60_000);
+
+      const lastAt = st.times[st.times.length - 1] || 0;
+      if (now - lastAt < TICKER_SEND_COOLDOWN_MS - 500) return; // çok sık
+      if (st.times.length >= TICKER_MAX_PER_MINUTE) return; // dakika sınırı
+      if (globalTimes.length >= TICKER_GLOBAL_MAX_PER_MINUTE) return; // herkes toplamı
+      if (text === st.lastText && now - st.lastTextAt < TICKER_DUPLICATE_WINDOW_MS) return; // aynı mesajı tekrar
+
+      st.times.push(now);
+      st.lastText = text;
+      st.lastTextAt = now;
+      senders.set(senderId, st);
+      globalTimes.push(now);
 
       const name = participant.name || readMeta(participant).displayName || senderId;
       // Masaüstü overlay'i gösterilemezse (anti-cheat, web sürümü) uygulama içi bildirime düşülür
