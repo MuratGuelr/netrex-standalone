@@ -27,9 +27,13 @@
       {
         "provider": "github",
         "owner": "MuratGuelr",
-        "repo": "netrex-standalone"
+        "repo": "netrex-standalone",
+        "releaseType": "release"
       }
     ],
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
     "directories": {
       "output": "dist"
     },

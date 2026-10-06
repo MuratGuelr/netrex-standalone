@@ -120,6 +120,7 @@ function sendToRenderer(channel, ...args) {
 
 function checkForUpdates() {
     if (app.isPackaged) {
+        if (updateStatus === 'downloading' || updateStatus === 'downloaded') return; // zaten indiriliyor / hazır
         log.info("🔄 Manually checking for updates...");
         autoUpdater.checkForUpdates().catch(e => log.error("Check for updates failed:", e));
     } else {

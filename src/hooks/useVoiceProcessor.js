@@ -271,6 +271,10 @@ export function useVoiceProcessor() {
       
       const { track } = trackPublication;
       if (!track.mediaStreamTrack || track.mediaStreamTrack.kind !== "audio" || track.mediaStreamTrack.readyState === "ended") {
+        // Mikrofon yeniden başlatılıyor olabilir (cihaz değişimi): bitmiş track'e bağlanıp sessiz kalma, tekrar dene
+        retryTimer = setTimeout(() => {
+          if (!isCleaningUpRef.current) setupProcessor();
+        }, 500);
         return;
       }
       
@@ -536,7 +540,20 @@ export function useVoiceProcessor() {
       room.on(RoomEvent.ConnectionStateChanged, checkConnection);
     }
 
+    // Mikrofon track'i değişirse (cihaz değişimi, yeniden publish, varsayılan cihaz bozulması) analiz
+    // zincirini yeni track'e bağla. Aksi halde analiz eski/bitmiş track'i dinler ve konuşma animasyonu hiç yanmaz.
+    const trackWatchdog = setInterval(() => {
+      if (isCleaningUpRef.current || room.state !== ConnectionState.Connected) return;
+      const current = localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
+      if (!current || current.readyState === "ended") return; // yeni track gelince bir sonraki turda yakalanır
+      if (current !== originalStreamTrack) {
+        originalStreamTrack = current; // kurulum sürerken watchdog tekrar tetiklenmesin
+        setupProcessor();
+      }
+    }, 1000);
+
     return () => {
+      clearInterval(trackWatchdog);
       if (retryTimer) clearTimeout(retryTimer);
       if (hasRegisteredConnection) {
         room.off(RoomEvent.ConnectionStateChanged, checkConnection);

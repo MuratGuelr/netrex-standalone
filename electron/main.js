@@ -57,6 +57,8 @@ const { setupUpdateManager, checkForUpdates, quitAndInstall: updateQuitAndInstal
 // --- LOGLAMA AYARLARI ---
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
+// İndirmeyi updateManager "update-available" olayında kendisi başlatıyor; çift indirme olmasın
+autoUpdater.autoDownload = false;
 log.info("App starting...");
 
 // ============================================
@@ -251,6 +253,8 @@ if (!gotTheLock) {
     // Initial Update Check
     if (app.isPackaged) {
        checkForUpdates();
+       // Uygulama günlerce açık kalabilir: yalnızca açılışta değil, periyodik de kontrol et
+       setInterval(checkForUpdates, 30 * 60 * 1000);
     }
   });
 

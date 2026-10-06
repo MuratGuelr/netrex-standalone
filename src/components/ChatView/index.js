@@ -107,21 +107,31 @@ export default function ChatView({ channelId, username, userId }) {
   const dragCounter = useRef(0);
 
   useEffect(() => {
+    // Yalnızca işletim sisteminden gelen dosya sürüklemelerini ele al; uygulama içi
+    // sürüklemeler (kullanıcı/kanal taşıma) buradan geçmemeli.
+    const isFileDrag = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+
     const handleDragEnter = (e) => {
+      if (!isFileDrag(e)) return;
       e.preventDefault(); e.stopPropagation();
       dragCounter.current += 1;
       if (e.dataTransfer.items && e.dataTransfer.items.length > 0) setIsDraggingFile(true);
     };
 
     const handleDragLeave = (e) => {
+      if (!isFileDrag(e)) return;
       e.preventDefault(); e.stopPropagation();
       dragCounter.current -= 1;
-      if (dragCounter.current === 0) setIsDraggingFile(false);
+      if (dragCounter.current <= 0) { dragCounter.current = 0; setIsDraggingFile(false); }
     };
 
-    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const handleDragOver = (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault(); e.stopPropagation();
+    };
 
     const handleDrop = (e) => {
+      if (!isFileDrag(e)) return;
       e.preventDefault(); e.stopPropagation();
       setIsDraggingFile(false); dragCounter.current = 0;
       const files = e.dataTransfer.files;

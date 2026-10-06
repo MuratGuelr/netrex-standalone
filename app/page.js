@@ -273,6 +273,7 @@ export default function Home() {
   // Çağrı durumu 'accepted' olduğunda arayanı da odaya al
   // (aynı kabul birkaç sohbet güncellemesi boyunca görünür kalabilir; odaya iki kez girmesin)
   const handledAcceptedCalls = useRef(new Set());
+  const acceptingCallRef = useRef(false);
   useEffect(() => {
     if (!conversations.length || !user?.uid) return;
     
@@ -283,6 +284,7 @@ export default function Home() {
         setTimeout(() => handledAcceptedCalls.current.delete(c.id), 5000);
         playSound("join");
         selectConversation(c); // ✅ Açılan DMyi seç (chat butonu için gerekli)
+        setShowFriendsPanel(false); // gri panel katmanı odanın üstünde kalmasın
         // Odaya gir
         setCurrentRoom({
            id: "dm_call_" + c.id,
@@ -882,14 +884,24 @@ export default function Home() {
         caller={incomingCallConvo?.otherUser}
         onAccept={async () => {
           if (!incomingCallConvo) return;
-          // Accept the call - this will change status to 'accepted'
-          const accepted = await acceptCall(incomingCallConvo.id);
+          // Çift tıklama / bekleme sırasında ikinci kabul "arama sonlandırılmış" uyarısı üretiyordu
+          if (acceptingCallRef.current) return;
+          acceptingCallRef.current = true;
+          let accepted = false;
+          try {
+            // Accept the call - this will change status to 'accepted'
+            accepted = await acceptCall(incomingCallConvo.id);
+          } finally {
+            setTimeout(() => { acceptingCallRef.current = false; }, 1500);
+          }
           if (!accepted) {
             // Arayan bu arada vazgeçtiyse boş odaya girme
-            toast.info("Arama sonlandırılmış.");
+            toast.info("Arama sonlandırılmış.", { id: "call-ended" });
             return;
           }
-          selectConversation(incomingCallConvo); // ✅ 
+          selectConversation(incomingCallConvo); // ✅
+          // Arkadaşlar paneli açıksa gri katman odanın üstünde kalıyordu
+          setShowFriendsPanel(false);
           playSound("join");
           // And we join locally immediately
           setCurrentRoom({
@@ -966,6 +978,7 @@ export default function Home() {
         >
           {currentRoom && (
             <ActiveRoom
+              key={currentRoom.id}
               roomName={currentRoom.id}
               displayName={currentRoom.name}
               username={user?.displayName || user?.email || "Misafir"}
