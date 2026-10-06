@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   useTracks,
   useLocalParticipant,
@@ -63,7 +64,8 @@ import { getVideoContentRect } from "@/src/utils/pointerGeometry";
 import { addClick, addStrokePoints, clearStrokesOf } from "@/src/utils/pointerFx";
 import { toast } from "@/src/utils/toast";
 import TickerMessageButton from "./TickerMessageButton";
-import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/tickerSend";
+import { getTickerWait, sendTickerMessage } from "@/src/utils/tickerSend";
+import { QuickMessageGrid } from "./QuickMessagePicker";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
@@ -298,10 +300,12 @@ function StreamContextMenu({
     { icon: Trash2, label: "Kaldır", onClick: onRemove, color: "text-red-400" },
   ];
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[180px] bg-[#111214]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+      // Katman: üye listesi, kenar çubukları ve diğer panellerin üstünde. overflow-hidden yalnızca mesaj bölümü
+      // yokken (köşeler için); mesaj karelerinin balonları kırpılmasın diye varken kapalı.
+      className={`fixed z-[10060] ${onQuickMessage ? "w-72" : "min-w-[180px] overflow-hidden"} bg-[#111214]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl`}
       style={{
         left: coords.left,
         top: coords.top,
@@ -342,20 +346,15 @@ function StreamContextMenu({
               <MessageSquareText size={11} />
               Hızlı mesaj
             </div>
-            {QUICK_MESSAGES.map((m) => (
-              <button
-                key={m.text}
+            <div className="px-2 pb-2.5">
+              <QuickMessageGrid
                 disabled={cooling}
-                onClick={() => {
-                  onQuickMessage(m.text);
+                onSend={(text) => {
+                  onQuickMessage(text);
                   onClose();
                 }}
-                className="w-full px-3 py-1.5 text-xs font-medium text-left flex items-center gap-2.5 text-[#dbdee1] hover:bg-white/[0.06] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#dbdee1] transition-colors"
-              >
-                <span className="w-4 text-center text-sm leading-none">{m.icon}</span>
-                {m.text}
-              </button>
-            ))}
+              />
+            </div>
             {cooling && (
               <div className="px-3 pt-1 pb-2 text-[10px] text-amber-300/90">
                 {wait.limit ? "Dakika sınırına ulaştın. " : ""}
@@ -365,7 +364,8 @@ function StreamContextMenu({
           </>
         );
       })()}
-    </div>
+    </div>,
+    document.fullscreenElement || document.body,
   );
 }
 

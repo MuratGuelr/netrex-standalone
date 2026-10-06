@@ -16,7 +16,8 @@ import {
   arrayUnion,
   arrayRemove,
   setDoc,
-  documentId
+  documentId,
+  writeBatch
 } from "firebase/firestore";
 import { ref, onValue, off } from "firebase/database";
 import { auth, db, rtdb } from "@/src/lib/firebase";
@@ -362,6 +363,42 @@ export const useServerStore = create((set, get) => ({
       await addDoc(collection(db, "servers", serverId, "channels"), channelData);
       return { success: true };
     } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Kanalları yeniden sırala (sürükle-bırak / menü). `orderedIds`: o türdeki (text | voice) kanalların YENİ sırası.
+  // Diğer türün kanalları kendi yerinde kalır; tüm kanallar 0..n-1 olarak yeniden numaralanır (eski çift/boş
+  // position değerleri de düzelir). Ekran anında güncellenir, yazma başarısız olursa geri alınır.
+  reorderChannels: async (serverId, type, orderedIds) => {
+    if (!serverId || !Array.isArray(orderedIds)) return { success: false };
+    const all = get().channels;
+    const sameType = all.filter((c) => c.type === type);
+    // Liste bu türün TÜM kanallarını içermiyorsa (ör. bazıları görünmüyorsa) yanlış sıra yazmamak için çık
+    if (sameType.length !== orderedIds.length || !sameType.every((c) => orderedIds.includes(c.id))) {
+      return { success: false, error: "Kanal listesi eşleşmiyor." };
+    }
+
+    const queue = [...orderedIds];
+    const mergedIds = all.map((c) => (c.type === type ? queue.shift() : c.id));
+    const byId = new Map(all.map((c) => [c.id, c]));
+    const changed = mergedIds
+      .map((id, index) => ({ id, index }))
+      .filter(({ id, index }) => byId.get(id)?.position !== index);
+    if (changed.length === 0) return { success: true };
+
+    const previous = all;
+    set({ channels: mergedIds.map((id, index) => ({ ...byId.get(id), position: index })) });
+
+    try {
+      const batch = writeBatch(db);
+      changed.forEach(({ id, index }) =>
+        batch.update(doc(db, "servers", serverId, "channels", id), { position: index }),
+      );
+      await batch.commit();
+      return { success: true };
+    } catch (error) {
+      set({ channels: previous });
       return { success: false, error: error.message };
     }
   },

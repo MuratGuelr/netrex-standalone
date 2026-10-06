@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"; // Portal eklendi
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
-import { Settings, Trash2, Shield, Hash, Volume2, VolumeX, Mic } from "lucide-react";
+import { Settings, Trash2, Shield, Hash, Volume2, VolumeX, Mic, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ChannelContextMenu({
@@ -15,7 +15,7 @@ export default function ChannelContextMenu({
   onClose,
   onOpenSettings,
 }) {
-  const { currentServer, deleteChannel, roles, members } = useServerStore();
+  const { currentServer, deleteChannel, roles, members, channels, reorderChannels } = useServerStore();
   const { user } = useAuthStore();
   const ttsEnabled = useSettingsStore(state => state.ttsEnabled);
   const mutedTtsChannels = useSettingsStore(state => state.mutedTtsChannels);
@@ -35,6 +35,22 @@ export default function ChannelContextMenu({
   const canManageChannels = isOwner || hasManageChannelsPermission;
 
   const isVoiceChannel = channel?.type === "voice";
+
+  // Aynı türdeki kanallar arasında sıra (sürüklemeye alternatif: klavye/dokunmatik dostu)
+  const sameTypeIds = channels.filter((c) => c.type === channel?.type).map((c) => c.id);
+  const channelIndex = sameTypeIds.indexOf(channel?.id);
+  const canMoveUp = channelIndex > 0;
+  const canMoveDown = channelIndex >= 0 && channelIndex < sameTypeIds.length - 1;
+
+  const handleShift = async (direction) => {
+    const next = [...sameTypeIds];
+    const j = channelIndex + direction;
+    if (channelIndex < 0 || j < 0 || j >= next.length) return;
+    [next[channelIndex], next[j]] = [next[j], next[channelIndex]];
+    onClose();
+    const res = await reorderChannels(currentServer.id, channel.type, next);
+    if (res && res.success === false) toast.error("Kanal sırası değiştirilemedi.");
+  };
 
   // Pozisyon Ayarlama (Viewport dışına taşmaması için)
   useEffect(() => {
@@ -178,6 +194,26 @@ export default function ChannelContextMenu({
               >
                 <Shield size={16} className="text-gray-500 group-hover:text-purple-400 transition-colors" />
                 <span className="font-medium">İzinleri Düzenle</span>
+              </button>
+
+              <div className="h-px bg-white/5 my-1.5 mx-2"></div>
+
+              <button
+                onClick={() => handleShift(-1)}
+                disabled={!canMoveUp}
+                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200 disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-gray-400 disabled:cursor-not-allowed"
+              >
+                <ChevronUp size={16} className="text-gray-500 group-hover:text-cyan-400 transition-colors" />
+                <span className="font-medium">Yukarı Taşı</span>
+              </button>
+
+              <button
+                onClick={() => handleShift(1)}
+                disabled={!canMoveDown}
+                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200 disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-gray-400 disabled:cursor-not-allowed"
+              >
+                <ChevronDown size={16} className="text-gray-500 group-hover:text-cyan-400 transition-colors" />
+                <span className="font-medium">Aşağı Taşı</span>
               </button>
 
               <div className="h-px bg-white/5 my-1.5 mx-2"></div>

@@ -10,7 +10,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/src/store/authStore";
 import { toast } from "@/src/utils/toast";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { useVoiceCommands } from "@/src/hooks/useVoiceCommands";
 import { db } from "@/src/lib/firebase";
 
 // Page Components
@@ -370,6 +371,40 @@ export default function Home() {
   useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
   useEffect(() => { currentTextChannelRef.current = currentTextChannel; }, [currentTextChannel]);
   useEffect(() => { currentServerRef.current = currentServer; }, [currentServer]);
+
+  // 🎛️ Yetkili biri beni başka sesli kanala taşıdı / sesli kanaldan attı.
+  // Komutun gönderen yetkisi useVoiceCommands içinde doğrulanır; burada yalnızca uygulanır.
+  const handleVoiceMoved = useCallback(async (cmd) => {
+    const room = currentRoomRef.current;
+    // Yalnızca o sunucuda bir sesli kanaldaysam taşınırım (başka sunucudayken ya da hiçbir yerde değilken değil)
+    if (!room || room._serverId !== cmd.serverId || !cmd.toChannelId || room.id === cmd.toChannelId) return;
+    try {
+      const snap = await getDoc(doc(db, "servers", cmd.serverId, "channels", cmd.toChannelId));
+      if (!snap.exists() || snap.data().type !== "voice") return;
+      const server = useServerStore.getState().servers.find((s) => s.id === cmd.serverId);
+      setCurrentRoom({
+        id: snap.id,
+        ...snap.data(),
+        _sessionStart: Date.now(),
+        _serverId: cmd.serverId,
+        _serverName: server?.name,
+        _serverIcon: server?.iconUrl,
+      });
+      toast.info(`${cmd.byName || "Bir yetkili"} sizi "${snap.data().name}" kanalına taşıdı.`);
+    } catch (e) {
+      console.error("Kanala taşıma uygulanamadı:", e);
+    }
+  }, []);
+
+  const handleVoiceDisconnected = useCallback((cmd) => {
+    const room = currentRoomRef.current;
+    if (!room || room._serverId !== cmd.serverId) return;
+    playSound("left");
+    toast.error(`${cmd.byName || "Bir yetkili"} tarafından sesli kanaldan atıldınız.`, { duration: 8000 });
+    setCurrentRoom(null);
+  }, [playSound]);
+
+  useVoiceCommands({ userId: user?.uid, onMove: handleVoiceMoved, onDisconnect: handleVoiceDisconnected });
 
   // --- GRACEFUL EXIT LOGIC ---
   useEffect(() => {

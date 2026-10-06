@@ -1,12 +1,17 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Volume2, Signal, Lock } from "lucide-react";
 import VoiceParticipantItem from "./VoiceParticipantItem";
+import { USER_MIME, CHANNEL_MIME, hasType, readDragData } from "./dnd";
 
 /**
  * 🎤 VoiceChannelItem - OPTIMIZED Voice Channel Card
  * Memoized with participant list
+ *
+ * Sürükle-bırak:
+ *  - Bir KİŞİYİ (yetkili) bu kanalın üzerine bırakınca o kişi bu kanala taşınır.
+ *  - Bir KANALI (kanal yönetimi yetkisi) başka bir sesli kanalın üzerine bırakınca sıra değişir.
  */
 const VoiceChannelItem = memo(function VoiceChannelItem({
   channel,
@@ -14,18 +19,82 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
   participants,
   hasRestrictions,
   onClick,
-  onContextMenu
+  onContextMenu,
+  canMoveUsers = false,
+  canReorder = false,
+  onMoveUser,                 // (userId, toChannelId) => void
+  onReorder,                  // (draggedChannelId, targetChannelId) => void
+  onParticipantContextMenu,   // (e, participant, channelId)
+  onParticipantDragStart,     // (e, participant, channelId)
 }) {
+  // "user": kişi bırakılabilir, "channel": kanal sırası değişecek
+  const [dropState, setDropState] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e) => {
+    if (canMoveUsers && hasType(e, USER_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (dropState !== "user") setDropState("user");
+    } else if (canReorder && hasType(e, CHANNEL_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (dropState !== "channel") setDropState("channel");
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    // Alt öğelere girerken yanıp sönmesin
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDropState(null);
+  };
+
+  const handleDrop = (e) => {
+    setDropState(null);
+    if (canMoveUsers && hasType(e, USER_MIME)) {
+      e.preventDefault();
+      const data = readDragData(e, USER_MIME);
+      if (data?.userId && data.fromChannelId !== channel.id) onMoveUser?.(data.userId, channel.id);
+    } else if (canReorder && hasType(e, CHANNEL_MIME)) {
+      e.preventDefault();
+      const data = readDragData(e, CHANNEL_MIME);
+      if (data?.id && data.type === "voice" && data.id !== channel.id) onReorder?.(data.id, channel.id);
+    }
+  };
+
   return (
-    <div className="flex flex-col">
+    <div
+      className={`flex flex-col rounded-2xl transition-shadow duration-150 ${
+        dropState === "user"
+          ? "ring-2 ring-cyan-400/60 shadow-[0_0_18px_rgba(34,211,238,0.2)]"
+          : dropState === "channel"
+            ? "ring-2 ring-cyan-400/50 bg-cyan-500/[0.04]"
+            : ""
+      } ${isDragging ? "opacity-50" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Voice Channel Card */}
-      <div 
+      <div
         onClick={onClick}
         onContextMenu={onContextMenu}
+        draggable={canReorder}
+        onDragStart={
+          canReorder
+            ? (e) => {
+                e.dataTransfer.setData(CHANNEL_MIME, JSON.stringify({ id: channel.id, type: "voice" }));
+                e.dataTransfer.setData("text/plain", channel.name);
+                e.dataTransfer.effectAllowed = "move";
+                setIsDragging(true);
+              }
+            : undefined
+        }
+        onDragEnd={() => setIsDragging(false)}
         className={`
           group relative p-3 rounded-2xl cursor-pointer border transition-all duration-300
-          ${isActive 
-            ? "bg-gradient-to-br from-[#1a1b1e] to-[#111214] border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.1)]" 
+          ${isActive
+            ? "bg-gradient-to-br from-[#1a1b1e] to-[#111214] border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.1)]"
             : "bg-[#111214] border-white/5 hover:border-white/10 hover:bg-[#16171a]"
           }
         `}
@@ -48,7 +117,9 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
 
         {/* Participants Count Badge */}
         <div className="flex items-center justify-between">
-          {participants.length > 0 ? (
+          {dropState === "user" ? (
+            <span className="text-[10px] text-cyan-300 font-semibold">Taşımak için bırak</span>
+          ) : participants.length > 0 ? (
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-cyan-400 font-semibold">{participants.length} kişi bağlı</span>
             </div>
@@ -57,19 +128,23 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
               Boş oda
             </span>
           )}
-          
+
           {/* Active Dot if connected */}
           {isActive && <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />}
         </div>
       </div>
-      
+
       {/* Participants List (Under Channel Card) */}
       {participants.length > 0 && (
         <div className="mt-1 ml-3 space-y-0.5">
           {participants.map((participant) => (
-            <VoiceParticipantItem 
-              key={participant.userId} 
-              participant={participant} 
+            <VoiceParticipantItem
+              key={participant.userId}
+              participant={participant}
+              channelId={channel.id}
+              canDrag={canMoveUsers}
+              onParticipantContextMenu={onParticipantContextMenu}
+              onParticipantDragStart={onParticipantDragStart}
             />
           ))}
         </div>
@@ -85,7 +160,13 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
     prevProps.hasRestrictions === nextProps.hasRestrictions &&
     prevProps.participants.length === nextProps.participants.length &&
     JSON.stringify(prevProps.participants) === JSON.stringify(nextProps.participants) &&
-    prevProps.onClick === nextProps.onClick // ✅ onClick değişimini kontrol et!
+    prevProps.onClick === nextProps.onClick && // ✅ onClick değişimini kontrol et!
+    prevProps.canMoveUsers === nextProps.canMoveUsers &&
+    prevProps.canReorder === nextProps.canReorder &&
+    prevProps.onMoveUser === nextProps.onMoveUser &&
+    prevProps.onReorder === nextProps.onReorder &&
+    prevProps.onParticipantContextMenu === nextProps.onParticipantContextMenu &&
+    prevProps.onParticipantDragStart === nextProps.onParticipantDragStart
   );
 });
 

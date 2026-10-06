@@ -6,7 +6,13 @@ import Avatar from "@/src/components/ui/Avatar";
 import { useSpeakingStore } from "@/src/store/speakingStore";
 
 const VoiceParticipantItem = memo(
-  function VoiceParticipantItem({ participant }) {
+  function VoiceParticipantItem({
+    participant,
+    channelId,
+    canDrag = false,                 // yetkili: başka bir sesli kanala sürükleyerek taşıyabilir
+    onParticipantContextMenu,        // (e, participant, channelId) — sağ tık menüsü (taşı / at)
+    onParticipantDragStart,          // (e, participant, channelId)
+  }) {
     const displayName =
       participant.displayName || participant.username || "Kullanıcı";
 
@@ -19,7 +25,18 @@ const VoiceParticipantItem = memo(
     );
 
     return (
-      <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-default">
+      <div
+        draggable={canDrag}
+        onDragStart={canDrag ? (e) => onParticipantDragStart?.(e, participant, channelId) : undefined}
+        onContextMenu={
+          onParticipantContextMenu
+            ? (e) => onParticipantContextMenu(e, participant, channelId)
+            : undefined
+        }
+        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors ${
+          canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+        }`}
+      >
         {/* Avatar */}
         <div className={`relative flex-shrink-0 transition-opacity duration-200 ${(participant.isMuted || participant.isDeafened) ? 'opacity-50' : 'opacity-100'}`}>
           <Avatar
@@ -66,7 +83,7 @@ const VoiceParticipantItem = memo(
                <MicOff size={13} strokeWidth={2.5} className="text-red-400 drop-shadow-sm" />
             </div>
           )}
-          
+
           {/* Speaking Indicator */}
           {!participant.isMuted && !participant.isDeafened && !isSpeaking && (
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shadow-[0_0_4px_rgba(16,185,129,0.3)] ml-0.5" />
@@ -88,7 +105,11 @@ const VoiceParticipantItem = memo(
       prev.participant.quickStatus === next.participant.quickStatus &&
       prev.participant.photoURL === next.participant.photoURL &&
       prev.participant.profileColor === next.participant.profileColor &&
-      prev.participant.color === next.participant.color
+      prev.participant.color === next.participant.color &&
+      prev.channelId === next.channelId &&
+      prev.canDrag === next.canDrag &&
+      prev.onParticipantContextMenu === next.onParticipantContextMenu &&
+      prev.onParticipantDragStart === next.onParticipantDragStart
     );
   },
 );

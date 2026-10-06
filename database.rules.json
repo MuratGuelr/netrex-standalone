@@ -13,6 +13,15 @@
         ".read": "auth != null",
         ".write": "auth != null && auth.uid === $uid"
       }
+    },
+    "voice_commands": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$cmdId": {
+          ".write": "auth != null && (auth.uid === $uid || !data.exists())",
+          ".validate": "!newData.exists() || (newData.child('by').val() === auth.uid && newData.child('type').isString() && newData.child('serverId').isString())"
+        }
+      }
     }
   }
 }

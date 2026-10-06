@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { MessageSquareText, Send, X } from "lucide-react";
 import { useLocalParticipant } from "@livekit/components-react";
@@ -7,7 +7,8 @@ import {
   TICKER_MAX_PER_MINUTE,
   sanitizeTickerText,
 } from "@/src/hooks/useCursorShareController";
-import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/tickerSend";
+import { getTickerWait, sendTickerMessage } from "@/src/utils/tickerSend";
+import { QuickMessageGrid } from "./QuickMessagePicker";
 
 /**
  * 💬 Yayıncıya kayan mesaj gönder
@@ -15,9 +16,9 @@ import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/ti
  * Mikrofonunu o an açamayan izleyici, yayıncıya kısa bir yazı gönderir; yayıncının ekranında
  * (hangi uygulamada olursa olsun) en üstte kayan yazı olarak görünür.
  *
- * Görünüm "Hızlı Durum" kısayollarıyla aynı dilde, küçük ve sade: emojili kareler + tek satırlık yazma alanı.
- * Kutu, izlenen yayının kendi kutusunun içine (alt orta) açılır; tam ekranda da aynı yerde kalır ve üst çubuk
- * gizlense bile yazarken kaybolmaz.
+ * Görünüm, kullanıcıya sağ tıklayınca açılan kartla (UserContextMenu) ve "Hızlı Durum" kareleriyle aynı dilde:
+ * koyu kart, parıltılı avatarlı başlık, emojili kareler. Kart izlenen yayının kendi kutusunun içine (alt orta)
+ * açılır; tam ekranda da aynı yerde kalır ve üst çubuk gizlense bile yazarken kaybolmaz.
  *
  * En hızlı yol: yayına SAĞ TIK → "Hızlı mesaj" (işaretçi izni varsa Shift + sağ tık). Gönderme sınırları
  * (bekleme, dakika sınırı) o menüyle ortaktır: src/utils/tickerSend.js
@@ -25,6 +26,7 @@ import { QUICK_MESSAGES, getTickerWait, sendTickerMessage } from "@/src/utils/ti
 export default function TickerMessageButton({ targetParticipant }) {
   const { localParticipant } = useLocalParticipant();
   const [open, setOpen] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [text, setText] = useState("");
   const [host, setHost] = useState(null);
   const [, forceTick] = useState(0);
@@ -33,17 +35,27 @@ export default function TickerMessageButton({ targetParticipant }) {
 
   const targetId = targetParticipant?.identity;
   const targetName = targetParticipant?.name || targetParticipant?.identity || "Yayıncı";
+  const targetPhoto = useMemo(() => {
+    try {
+      return targetParticipant?.metadata ? JSON.parse(targetParticipant.metadata).photoURL || null : null;
+    } catch (e) {
+      return null;
+    }
+  }, [targetParticipant?.metadata]);
 
   const openBox = () => {
     // Yayının kendi kutusu; bulunamazsa tam ekran elemanı ya da sayfa
     setHost(buttonRef.current?.closest("[data-stage-container]") || document.fullscreenElement || document.body);
+    setWriting(false);
     setOpen(true);
   };
   const closeBox = useCallback(() => setOpen(false), []);
 
-  // Hazır mesajlarla hızlıca gönderilebildiği için yazma alanına odaklanmıyoruz; yazmak isteyen tıklar.
+  useEffect(() => {
+    if (open && writing) inputRef.current?.focus();
+  }, [open, writing]);
 
-  // Kutu açıkken bekleme geri sayımı canlı kalsın (menüden ya da buradan gönderilmiş olabilir)
+  // Kart açıkken bekleme geri sayımı canlı kalsın (menüden ya da buradan gönderilmiş olabilir)
   useEffect(() => {
     if (!open) return;
     const t = setInterval(() => forceTick((n) => n + 1), 500);
@@ -95,98 +107,118 @@ export default function TickerMessageButton({ targetParticipant }) {
         host &&
         createPortal(
           <div
-            // data-pointer-toolbar: işaretçi yakalayıcı bu kutudaki tıklamaları ekran işareti saymasın
+            // data-pointer-toolbar: işaretçi yakalayıcı bu karttaki tıklamaları ekran işareti saymasın
             data-pointer-toolbar
-            className="absolute left-1/2 -translate-x-1/2 bottom-16 z-[60] w-[232px] max-w-[94%] rounded-2xl border border-white/10 bg-[#111214]/95 backdrop-blur-xl shadow-2xl p-2.5 animate-in fade-in slide-in-from-bottom-2 duration-150"
+            className="absolute left-1/2 -translate-x-1/2 bottom-16 z-[60] w-72 max-w-[94%] bg-[#0d0e10] border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)] p-3 flex flex-col gap-2 select-none animate-in fade-in zoom-in-95 duration-150"
             // Tıklamalar altındaki yayın kutusuna (çift tıkla tam ekran, sağ tık menüsü vb.) geçmesin
             onMouseDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
-            {/* Başlık: "Hızlı Durum" ile aynı küçük büyük harfli stil */}
-            <div className="flex items-center justify-between px-1 mb-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <MessageSquareText size={12} className="text-indigo-400 shrink-0" />
-                <span className="text-[10px] font-bold text-[#949ba4] uppercase tracking-wider truncate">
-                  {targetName}
-                </span>
+            {/* Başlık: yayıncı (kullanıcı kartındaki gibi parıltılı avatar) */}
+            <div className="flex items-center gap-3 px-2 pb-3 border-b border-white/[0.06]">
+              <div className="relative">
+                <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full blur-md opacity-40"></div>
+                {targetPhoto ? (
+                  <img
+                    src={targetPhoto}
+                    alt={targetName}
+                    className="relative w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+                  />
+                ) : (
+                  <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white/10">
+                    {targetName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-bold text-white truncate block">{targetName}</span>
+                <span className="text-[10px] text-[#5c5e66]">Ekranında kayan yazı olarak görünür</span>
               </div>
               <button
                 type="button"
                 onClick={closeBox}
-                className="w-5 h-5 rounded-md flex items-center justify-center text-[#5c5e66] hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#5c5e66] hover:text-white hover:bg-white/10 transition-colors shrink-0"
                 title="Kapat (Esc)"
               >
-                <X size={11} />
+                <X size={14} />
               </button>
             </div>
 
-            {/* Hazır mesajlar: Hızlı Durum kareleri gibi emoji + küçük etiket */}
-            <div className="grid grid-cols-3 gap-1.5">
-              {QUICK_MESSAGES.map((m) => (
-                <button
-                  key={m.text}
-                  type="button"
-                  onClick={() => send(m.text)}
-                  disabled={cooling}
-                  title={m.text}
-                  className="group/q flex flex-col items-center justify-center h-[52px] rounded-xl border bg-[#1a1b1e] border-white/5 hover:border-white/10 hover:bg-[#202225] active:scale-95 disabled:opacity-40 disabled:hover:bg-[#1a1b1e] disabled:hover:border-white/5 disabled:active:scale-100 transition-all duration-150"
-                >
-                  <span className="text-lg leading-none mb-0.5 transition-transform duration-150 group-hover/q:scale-110 group-disabled/q:scale-100">
-                    {m.icon}
-                  </span>
-                  <span className="text-[9px] font-semibold text-[#949ba4] group-hover/q:text-white w-full px-1 text-center truncate transition-colors">
-                    {m.text}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Kendin yaz */}
-            <div className="flex items-center gap-1.5 mt-2">
-              <div className="relative flex-1 min-w-0">
-                <input
-                  ref={inputRef}
-                  value={text}
-                  maxLength={TICKER_MAX_CHARS}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation(); // yazarken uygulama kısayolları tetiklenmesin
-                    if (e.key === "Enter") send();
-                    else if (e.key === "Escape") closeBox();
-                  }}
-                  placeholder="Kendin yaz..."
-                  className="w-full h-8 bg-[#1a1b1e] border border-white/5 text-white text-xs pl-2.5 pr-8 rounded-lg outline-none placeholder:text-[#5c5e66] focus:border-[#5865f2]/50 transition-colors"
-                />
-                {remaining <= 30 && (
-                  <span
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 text-[9px] tabular-nums font-semibold ${
-                      remaining <= 10 ? "text-red-400" : "text-[#949ba4]"
-                    }`}
-                  >
-                    {remaining}
-                  </span>
-                )}
+            <div className="px-1 py-1 flex flex-col gap-2">
+              {/* Bölüm başlığı: "Hızlı Durum" ile aynı */}
+              <div className="flex items-center gap-2 px-2">
+                <MessageSquareText size={14} className="text-indigo-400" />
+                <span className="text-[10px] font-bold text-[#949ba4] uppercase tracking-wider">Hızlı Mesaj</span>
               </div>
-              <button
-                type="button"
-                onClick={() => send()}
-                disabled={!canSend}
-                className="w-8 h-8 rounded-lg bg-[#5865f2] text-white flex items-center justify-center shrink-0 hover:bg-[#4752c4] active:scale-95 disabled:opacity-35 disabled:hover:bg-[#5865f2] disabled:active:scale-100 transition-all"
-                title={cooling ? `${waitSec} sn sonra gönderebilirsin` : "Gönder (Enter)"}
-              >
-                {cooling ? <span className="text-[10px] font-bold tabular-nums">{waitSec}</span> : <Send size={13} />}
-              </button>
-            </div>
 
-            {cooling && (
-              <p className="mt-1.5 px-1 text-[10px] text-amber-300/90 leading-snug">
-                {wait.limit
-                  ? `Dakikada en fazla ${TICKER_MAX_PER_MINUTE} mesaj. ${waitSec} sn sonra tekrar.`
-                  : `Kısa bir ara gerekiyor (${waitSec} sn).`}
-              </p>
-            )}
+              <QuickMessageGrid
+                onSend={send}
+                onWrite={() => setWriting((w) => !w)}
+                writing={writing}
+                disabled={cooling}
+              />
+
+              {/* Kendin yaz */}
+              {writing && (
+                <div className="flex items-center gap-1.5 mx-1">
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      ref={inputRef}
+                      value={text}
+                      maxLength={TICKER_MAX_CHARS}
+                      onChange={(e) => setText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation(); // yazarken uygulama kısayolları tetiklenmesin
+                        if (e.key === "Enter") send();
+                        else if (e.key === "Escape") setWriting(false);
+                      }}
+                      placeholder="Kısa bir mesaj yaz..."
+                      className="w-full h-9 bg-[#1a1b1e] border border-white/5 text-white text-xs pl-3 pr-9 rounded-xl outline-none placeholder:text-[#5c5e66] focus:border-indigo-500/40 transition-colors select-text"
+                    />
+                    {remaining <= 30 && (
+                      <span
+                        className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] tabular-nums font-semibold ${
+                          remaining <= 10 ? "text-red-400" : "text-[#949ba4]"
+                        }`}
+                      >
+                        {remaining}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => send()}
+                    disabled={!canSend}
+                    className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/25 flex items-center justify-center shrink-0 hover:bg-indigo-500 hover:text-white active:scale-95 disabled:opacity-40 disabled:hover:bg-indigo-500/15 disabled:hover:text-indigo-300 disabled:active:scale-100 transition-all"
+                    title="Gönder (Enter)"
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Bekleme: Hızlı Durum'daki "AKTİF" kutusu gibi */}
+              {cooling && (
+                <div className="mx-1 p-2.5 rounded-xl bg-[#1a1b1e] border border-amber-500/20 flex items-center justify-between">
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="text-[9px] text-amber-400 font-black uppercase tracking-wider mb-0.5">
+                      {wait.limit ? "Sınıra ulaştın" : "Bekle"}
+                    </span>
+                    <span className="text-xs text-white font-bold truncate leading-none pb-0.5">
+                      {wait.limit
+                        ? `Dakikada en fazla ${TICKER_MAX_PER_MINUTE} mesaj`
+                        : "Mesajlar arasında kısa bir ara gerekiyor"}
+                    </span>
+                  </div>
+                  <span className="text-sm font-black text-amber-300 tabular-nums shrink-0 ml-2">{waitSec}s</span>
+                </div>
+              )}
+            </div>
           </div>,
           host,
         )}

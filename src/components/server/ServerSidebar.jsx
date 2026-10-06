@@ -13,6 +13,10 @@ import LeaveServerModal from "./LeaveServerModal";
 import CreateChannelModal from "./CreateChannelModal";
 import ChannelContextMenu from "./ChannelContextMenu";
 import ChannelSettingsModal from "./ChannelSettingsModal";
+import VoiceParticipantContextMenu from "./VoiceParticipantContextMenu";
+import { USER_MIME } from "./sidebar/dnd";
+import { sendVoiceCommand, VOICE_COMMAND_TYPES } from "@/src/utils/voiceCommands";
+import { toast } from "@/src/utils/toast";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
 import {
   ServerHeader,
@@ -40,6 +44,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   const { unreadCounts, currentChannel, showChatPanel } = useChatStore();
   const canManageChannels = useServerPermission("MANAGE_CHANNELS");
   const canManageServer = useServerPermission("MANAGE_SERVER");
+  const canMoveMembers = useServerPermission("MOVE_MEMBERS");
+  const canDisconnectMembers = useServerPermission("KICK_VOICE_MEMBERS");
   const ttsEnabled = useSettingsStore((state) => state.ttsEnabled);
   const mutedTtsChannels = useSettingsStore((state) => state.mutedTtsChannels);
   const toggleMutedTtsChannel = useSettingsStore(
@@ -64,6 +70,7 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
     data: null,
   });
   const [channelContextMenu, setChannelContextMenu] = useState(null);
+  const [participantMenu, setParticipantMenu] = useState(null); // sesli kanaldaki kişiye sağ tık
   const [channelSettings, setChannelSettings] = useState({
     isOpen: false,
     channel: null,
@@ -168,6 +175,103 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
     [onJoinChannel],
   );
 
+  // ── Sunucu yönetimi: kişi taşıma / atma / kanal sıralama ──────────────
+
+  // Sesli kanaldaki kişiyi başka bir sesli kanala taşı. Komut Realtime Database üzerinden hedefe gider;
+  // hedef, gönderenin yetkisini kendisi doğrular (bu yüzden başkası adına komut yazılamaz).
+  const handleMoveUser = useCallback(
+    async (targetUid, toChannelId) => {
+      if (!currentServer || !user || !targetUid || !toChannelId) return;
+      const toChannel = channels.find((c) => c.id === toChannelId && c.type === "voice");
+      if (!toChannel) return;
+
+      // Kendini sürükleyip bırakmak = o kanala katılmak
+      if (targetUid === user.uid) {
+        onJoinChannel(toChannel);
+        return;
+      }
+      if (!canMoveMembers) {
+        toast.error("Üyeleri taşıma yetkin yok.");
+        return;
+      }
+      const ok = await sendVoiceCommand({
+        serverId: currentServer.id,
+        targetUid,
+        type: VOICE_COMMAND_TYPES.MOVE,
+        toChannelId,
+        byUid: user.uid,
+        byName: user.displayName,
+      });
+      if (ok) toast.success(`"${toChannel.name}" kanalına taşıma isteği gönderildi.`);
+      else toast.error("Taşıma isteği gönderilemedi.");
+    },
+    [currentServer, user, channels, canMoveMembers, onJoinChannel],
+  );
+
+  const handleDisconnectUser = useCallback(
+    async (targetUid) => {
+      if (!currentServer || !user || !targetUid) return;
+      if (!canDisconnectMembers) {
+        toast.error("Sesli kanaldan atma yetkin yok.");
+        return;
+      }
+      const ok = await sendVoiceCommand({
+        serverId: currentServer.id,
+        targetUid,
+        type: VOICE_COMMAND_TYPES.DISCONNECT,
+        byUid: user.uid,
+        byName: user.displayName,
+      });
+      if (ok) toast.success("Sesli kanaldan atma isteği gönderildi.");
+      else toast.error("İstek gönderilemedi.");
+    },
+    [currentServer, user, canDisconnectMembers],
+  );
+
+  // Sürüklenen kanal, bırakıldığı kanalın yerini alır (aynı türdeki kanallar arasında)
+  const handleReorderChannels = useCallback(
+    async (draggedId, targetId) => {
+      if (!currentServer) return;
+      const dragged = channels.find((c) => c.id === draggedId);
+      const target = channels.find((c) => c.id === targetId);
+      if (!dragged || !target || dragged.type !== target.type) return;
+
+      const ids = channels.filter((c) => c.type === dragged.type).map((c) => c.id);
+      const from = ids.indexOf(draggedId);
+      const to = ids.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return;
+      ids.splice(from, 1);
+      ids.splice(to, 0, draggedId);
+
+      const res = await useServerStore.getState().reorderChannels(currentServer.id, dragged.type, ids);
+      if (res && res.success === false) toast.error("Kanal sırası değiştirilemedi.");
+    },
+    [channels, currentServer],
+  );
+
+  const handleParticipantContextMenu = useCallback(
+    (e, participant, channelId) => {
+      if (participant.userId === user?.uid) return; // kendine yönetim menüsü yok
+      if (!canMoveMembers && !canDisconnectMembers) return;
+      e.preventDefault();
+      setParticipantMenu({ x: e.clientX, y: e.clientY, participant, channelId });
+    },
+    [user?.uid, canMoveMembers, canDisconnectMembers],
+  );
+
+  const handleParticipantDragStart = useCallback((e, participant, channelId) => {
+    e.dataTransfer.setData(USER_MIME, JSON.stringify({ userId: participant.userId, fromChannelId: channelId }));
+    e.dataTransfer.setData("text/plain", participant.displayName || "Kullanıcı");
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const closeParticipantMenu = useCallback(() => setParticipantMenu(null), []);
+
+  // Şu an bulunduğum sesli kanal ("Kanalıma çek" için)
+  const myVoiceChannelId = useMemo(() => {
+    return voiceChannels.find((c) => voiceStates?.[c.id]?.some((u) => u.userId === user?.uid))?.id || null;
+  }, [voiceChannels, voiceStates, user?.uid]);
+
   if (!currentServer) return null;
 
   return (
@@ -249,6 +353,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                   onToggleTtsMute={toggleMutedTtsChannel}
                   onClick={() => handleTextChannelClick(channel)}
                   onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                  canReorder={canManageChannels}
+                  onReorder={handleReorderChannels}
                 />
               );
             })}
@@ -302,6 +408,12 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                   hasRestrictions={hasRestrictions(channel)}
                   onClick={() => onJoinChannel(channel)}
                   onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                  canMoveUsers={canMoveMembers}
+                  canReorder={canManageChannels}
+                  onMoveUser={handleMoveUser}
+                  onReorder={handleReorderChannels}
+                  onParticipantContextMenu={handleParticipantContextMenu}
+                  onParticipantDragStart={handleParticipantDragStart}
                 />
               );
             })}
@@ -406,6 +518,22 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
               initialTab: initialTab || "overview",
             })
           }
+        />
+      )}
+
+      {participantMenu && (
+        <VoiceParticipantContextMenu
+          x={participantMenu.x}
+          y={participantMenu.y}
+          participant={participantMenu.participant}
+          currentChannelId={participantMenu.channelId}
+          myChannelId={myVoiceChannelId}
+          voiceChannels={voiceChannels}
+          canMove={canMoveMembers}
+          canDisconnect={canDisconnectMembers}
+          onMove={(toChannelId) => handleMoveUser(participantMenu.participant.userId, toChannelId)}
+          onDisconnect={() => handleDisconnectUser(participantMenu.participant.userId)}
+          onClose={closeParticipantMenu}
         />
       )}
 
