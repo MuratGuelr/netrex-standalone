@@ -60,6 +60,7 @@ import { useCursorBroadcast } from "@/src/hooks/useCursorBroadcast";
 import { CURSOR_TOPICS } from "@/src/hooks/useCursorShareController";
 import { getVideoContentRect } from "@/src/utils/pointerGeometry";
 import { addClick, addStrokePoints, clearStrokesOf } from "@/src/utils/pointerFx";
+import { toast } from "@/src/utils/toast";
 import { useCursorShareStore } from "@/src/store/cursorShareStore";
 import ParticipantList from "./ParticipantList";
 import ChatView from "../ChatView";
@@ -461,6 +462,31 @@ function ActiveSpeakerColor({ onColorChange }) {
   return null;
 }
 
+// 🔁 Yayın kapanıp (ekran değişimi, kısa ara, yeniden başlatma) aynı kişiden tekrar açılırsa,
+// onu izleyenler otomatik olarak eski düzenle devam eder. Bu süre içinde geri gelmesi yeterli.
+const RESUME_GRACE_MS = 10 * 60_000; // 10 dakika
+
+// Geri gelen yayını (daha önce tam ekransa) tekrar tam ekrana almayı dener.
+// Tarayıcılar tam ekranı kullanıcı etkileşimi olmadan reddedebilir; olursa sessizce ipucu veririz.
+function restoreFullscreenFor(streamId) {
+  const attempt = () => {
+    if (document.fullscreenElement) return;
+    const el = Array.from(document.querySelectorAll("[data-stage-container]")).find(
+      (n) => n.getAttribute("data-stream-id") === streamId,
+    );
+    el?.requestFullscreen?.().catch(() => {});
+  };
+  [400, 1200].forEach((ms) => setTimeout(() => { try { attempt(); } catch (e) {} }, ms));
+  setTimeout(() => {
+    const exists = Array.from(document.querySelectorAll("[data-stage-container]")).some(
+      (n) => n.getAttribute("data-stream-id") === streamId,
+    );
+    if (exists && !document.fullscreenElement) {
+      toast.info("Yayın geri geldi. Tam ekran için yayına çift tıklayın.");
+    }
+  }, 1800);
+}
+
 function StageManager({
   showVoicePanel,
   showChatPanel,
@@ -483,6 +509,11 @@ function StageManager({
   const containerRef = useRef(null);
   const userStoppedWatchingRef = useRef(false); // Kullanıcı manuel olarak izlemeyi durdurdu mu?
   const prevScreenTracksRef = useRef([]); // Önceki screen share track'lerini takip etmek için
+  // 🔁 Kapanan uzak yayınların geri dönüş hafızası: pinnedId -> { identity, index, layoutMode, wasFullscreen, lostAt }
+  const resumeRef = useRef(new Map());
+  const layoutModeRef = useRef("grid");
+  const fsIdRef = useRef(null); // şu an tam ekran olan yayının id'si
+  const fsExitRef = useRef({ id: null, at: 0 }); // en son tam ekrandan çıkan yayın
 
   const wpActive = useWatchPartyStore((s) => s.isActive);
   const wpShowPlayer = useWatchPartyStore((s) => s.localPreferences.showPlayer);
@@ -657,6 +688,38 @@ function StageManager({
       return;
     }
 
+    // 🔁 Kapanan yayın aynı kişiden geri geldiyse: eski sırasıyla listeye ekle,
+    // grid/spotlight düzenini geri getir ve (öyleyse) tam ekrana dön.
+    const resume = resumeRef.current;
+    if (resume.size > 0) {
+      const nowTs = Date.now();
+      const current = pinnedStreamIds || [];
+      const restorable = [];
+      resume.forEach((entry, id) => {
+        if (nowTs - entry.lostAt > RESUME_GRACE_MS || current.includes(id)) {
+          resume.delete(id); // süresi doldu ya da kullanıcı kendisi yeniden açtı
+        } else if (screenTracks.some((t) => t.participant.identity === entry.identity)) {
+          restorable.push([id, entry]);
+        }
+      });
+      if (restorable.length > 0) {
+        restorable.sort((a, b) => a[1].index - b[1].index);
+        const wantsSpotlight = restorable.some(([, e]) => e.layoutMode === "spotlight");
+        const fullscreenId = restorable.find(([, e]) => e.wasFullscreen)?.[0];
+        restorable.forEach(([id]) => resume.delete(id));
+        setPinnedStreamIds((prev) => {
+          const next = [...(prev || [])];
+          restorable.forEach(([id, e]) => {
+            if (!next.includes(id)) next.splice(Math.min(e.index, next.length), 0, id);
+          });
+          return next;
+        });
+        if (wantsSpotlight) setLayoutMode("spotlight");
+        if (fullscreenId) restoreFullscreenFor(fullscreenId);
+        return;
+      }
+    }
+
     // Track kaybolduysa filterla
     if (pinnedStreamIds && pinnedStreamIds.length > 0) {
       const localIdentity = localParticipant?.identity;
@@ -699,6 +762,24 @@ function StageManager({
         );
       });
 
+      // 🔁 Kaybolan UZAK ekran yayınlarını geri dönüş için hatırla (yayıncı ekran değiştiriyor olabilir)
+      const lostAt = Date.now();
+      pinnedStreamIds.forEach((id, index) => {
+        if (stillActiveIds.includes(id)) return;
+        const [identity, source] = id.includes(":") ? id.split(":") : [id, "any"];
+        if (identity === localIdentity || source !== "screen") return;
+        if (resumeRef.current.has(id)) return;
+        const fsExit = fsExitRef.current;
+        resumeRef.current.set(id, {
+          identity,
+          index,
+          lostAt,
+          layoutMode: layoutModeRef.current,
+          // Tam ekrandaydı: şu an hâlâ öyle ya da yayın kapanırken tam ekrandan düştü
+          wasFullscreen: fsIdRef.current === id || (fsExit.id === id && lostAt - fsExit.at < 2000),
+        });
+      });
+
       // Dedup
       const dedupedIds = [...new Set(stillActiveIds)];
       if (
@@ -725,6 +806,26 @@ function StageManager({
     activeTracks.length > 0 && activeTracks[0].track.participant.isLocal;
   const [localPreviewHidden, setLocalPreviewHidden] = useState(false);
   const [layoutMode, setLayoutMode] = useState("grid"); // 'grid' | 'spotlight'
+  layoutModeRef.current = layoutMode;
+  // Hangi yayının tam ekran olduğunu izle: yayın kapanınca tarayıcı tam ekranı kendiliğinden bozar,
+  // geri dönüşte hatırlayabilmek için kapanıştan hemen önceki/sonraki durumu kaydederiz.
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const el = document.fullscreenElement;
+      if (el) {
+        fsIdRef.current = el.getAttribute?.("data-stream-id") || null;
+        return;
+      }
+      const id = fsIdRef.current;
+      fsIdRef.current = null;
+      fsExitRef.current = { id, at: Date.now() };
+      // Olay, yayın kaybı algılandıktan SONRA gelirse kaydı güncelle
+      const entry = id ? resumeRef.current.get(id) : null;
+      if (entry && Date.now() - entry.lostAt < 2000) entry.wasFullscreen = true;
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, trackId, pinnedId }
   const [activeDragId, setActiveDragId] = useState(null);
   const activeDragRef = useRef(null); // Store drag start info for modifier
@@ -2138,6 +2239,7 @@ function ScreenShareStage({
     <div
       ref={containerRef}
       data-stage-container
+      data-stream-id={`${participant?.identity}:${trackRef?.source === Track.Source.ScreenShare ? "screen" : "camera"}`}
       onContextMenu={onContextMenuProp}
       className={`flex flex-col h-full w-full bg-gradient-to-br from-[#1a1b1f] via-[#141518] to-[#0e0f12] relative overflow-hidden`}
     >

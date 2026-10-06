@@ -22,90 +22,91 @@
     font-size: 11px; font-weight: 600; border: 1px solid rgba(255,255,255,0.12);
   }
 
-  /* ═══════════ WIDGET ═══════════ */
+  /* ═══════════ WIDGET: sağ altta minik baloncuk ═══════════ */
+  /* Alttan/sağdan konumlanır; panel ve kart baloncuğun ÜSTÜNE doğru büyür. */
   #widget {
-    position: fixed; right: 12px; top: 42%; z-index: 9999; width: 220px;
-    display: flex; flex-direction: column; align-items: flex-end;
-    opacity: 0.45; transition: opacity 0.2s ease;
+    position: fixed; right: 16px; bottom: 16px; z-index: 9999;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    opacity: 0.3; transition: opacity 0.2s ease;
   }
-  #widget:hover, #widget.alert { opacity: 1; }
-  #widget.alert #pill, #widget.alert #panel { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.35), 0 4px 18px rgba(0,0,0,0.5); }
+  #widget:hover, #widget.open, #widget.alert { opacity: 1; }
 
-  #pill {
-    display: flex; align-items: center; gap: 7px; width: 100%;
-    background: rgba(17,18,20,0.82); border: 1px solid rgba(99,102,241,0.3); border-radius: 16px;
-    padding: 5px 6px 5px 11px; cursor: pointer; backdrop-filter: blur(8px);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  #bubble {
+    position: relative; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(17,18,20,0.78); border: 1px solid rgba(129,140,248,0.45);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.4);
   }
-  #pill:hover { border-color: rgba(99,102,241,0.7); }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 6px #6366f1; flex-shrink: 0; }
-  .dot.off { background: #666; box-shadow: none; }
-  #pill-text { color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
-  #pill-count {
-    margin-left: auto; background: rgba(99,102,241,0.3); color: #c7d2fe; font-size: 10px; font-weight: 700;
-    padding: 1px 7px; border-radius: 8px; min-width: 18px; text-align: center;
+  #bubble:hover { border-color: rgba(165,180,252,0.9); }
+  #bubble svg { display: block; }
+  #widget.alert #bubble { border-color: #f59e0b; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.55); } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); } }
+  #badge {
+    position: absolute; top: -4px; left: -4px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px;
+    background: #6366f1; color: #fff; font-size: 8px; font-weight: 700; line-height: 13px; text-align: center; display: none;
   }
-  #pill-count.hot { background: #f59e0b; color: #1a1305; }
+  #badge.on { display: block; }
+  #badge.hot { background: #f59e0b; color: #1a1305; }
 
-  .x-btn {
-    width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(248,113,113,0.35);
-    background: rgba(248,113,113,0.12); color: #f87171; font-size: 11px; line-height: 1; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  /* ── Küçük istek kartı (panel kapalıyken) ── */
+  #card {
+    display: none; width: 172px; flex-direction: column; gap: 4px;
+    background: rgba(17,18,20,0.94); border: 1px solid rgba(245,158,11,0.5); border-radius: 8px; padding: 6px 7px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
   }
-  .x-btn:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+  #card .req-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
+  /* ── Panel (açılınca) ── */
   #panel {
-    display: none; flex-direction: column; width: 100%;
-    background: rgba(17,18,20,0.92); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
-    backdrop-filter: blur(12px); box-shadow: 0 4px 22px rgba(0,0,0,0.5); overflow: hidden;
+    display: none; flex-direction: column; width: 176px;
+    background: rgba(17,18,20,0.94); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    box-shadow: 0 3px 16px rgba(0,0,0,0.5); overflow: hidden;
   }
-  .ph { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); cursor: grab; }
+  .ph { display: flex; align-items: center; justify-content: space-between; padding: 5px 6px 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.07); cursor: grab; }
   .ph:active { cursor: grabbing; }
-  .ph-left { display: flex; align-items: center; gap: 7px; }
-  .ph-title { color: rgba(255,255,255,0.85); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-  .ph-btns { display: flex; gap: 5px; align-items: center; }
-  .min-btn {
-    width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: none;
-    color: rgba(255,255,255,0.6); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  .ph-title { color: rgba(255,255,255,0.8); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .ph-btns { display: flex; gap: 4px; align-items: center; }
+  .ic-btn {
+    width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: none;
+    color: rgba(255,255,255,0.6); font-size: 9px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
-  .min-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .ic-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .ic-btn.danger { color: #f87171; border-color: rgba(248,113,113,0.3); }
+  .ic-btn.danger:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
 
-  .pb { padding: 9px 10px; display: flex; flex-direction: column; gap: 8px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .row-label { color: rgba(255,255,255,0.75); font-size: 11px; }
-  .sep { font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07); }
+  .pb { padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .row-label { color: rgba(255,255,255,0.7); font-size: 10px; }
+  .sep { font-size: 8.5px; color: rgba(255,255,255,0.38); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.07); }
   .hidden { display: none !important; }
 
-  .tgl { position: relative; display: inline-block; width: 32px; height: 18px; flex-shrink: 0; }
+  .tgl { position: relative; display: inline-block; width: 24px; height: 14px; flex-shrink: 0; }
   .tgl input { opacity: 0; width: 0; height: 0; }
-  .tgl-s { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.15); border-radius: 18px; transition: .2s; }
-  .tgl-s::before { content: ''; position: absolute; width: 14px; height: 14px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
+  .tgl-s { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.15); border-radius: 14px; transition: .2s; }
+  .tgl-s::before { content: ''; position: absolute; width: 10px; height: 10px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
   .tgl input:checked + .tgl-s { background: #6366f1; }
-  .tgl input:checked + .tgl-s::before { transform: translateX(14px); }
+  .tgl input:checked + .tgl-s::before { transform: translateX(10px); }
 
-  .rng { display: flex; align-items: center; gap: 6px; }
-  .rng-val { font-size: 10px; color: rgba(255,255,255,0.55); width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
-  input[type=range] { -webkit-appearance: none; width: 80px; background: transparent; cursor: pointer; }
-  input[type=range]::-webkit-slider-runnable-track { height: 4px; background: rgba(255,255,255,0.15); border-radius: 4px; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #a5b4fc; margin-top: -4px; }
+  input[type=range] { -webkit-appearance: none; width: 70px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: rgba(255,255,255,0.15); border-radius: 3px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #a5b4fc; margin-top: -3.5px; }
 
-  .list { display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; }
-  .list::-webkit-scrollbar { width: 4px; }
-  .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-  .item { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: rgba(255,255,255,0.05); padding: 5px 8px; border-radius: 7px; font-size: 11px; color: rgba(255,255,255,0.9); }
-  .item.req { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); }
-  .item-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .item-left span.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ui-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .item-btns { display: flex; gap: 4px; flex-shrink: 0; }
-  .mini {
-    border-radius: 5px; padding: 3px 8px; font-size: 10px; font-weight: 700; cursor: pointer; border: 1px solid transparent;
-  }
+  .list { display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; }
+  .list::-webkit-scrollbar { width: 3px; }
+  .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+  .item { display: flex; align-items: center; justify-content: space-between; gap: 5px; background: rgba(255,255,255,0.05); padding: 3px 6px; border-radius: 5px; font-size: 10px; color: rgba(255,255,255,0.9); }
+  .item.req { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); }
+  .item-left { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .item-left .nm, .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .item-btns { display: flex; gap: 3px; flex-shrink: 0; }
+  .mini { border-radius: 4px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; border: 1px solid transparent; }
   .mini.ok { background: #16a34a; color: #fff; }
   .mini.ok:hover { background: #22c55e; }
   .mini.no { background: rgba(248,113,113,0.12); color: #f87171; border-color: rgba(248,113,113,0.3); }
   .mini.no:hover { background: #ef4444; color: #fff; }
-  .empty { color: rgba(255,255,255,0.35); font-size: 10px; font-style: italic; padding: 2px 0; }
+  .empty { color: rgba(255,255,255,0.35); font-size: 9.5px; font-style: italic; }
+  .req-name { font-size: 10px; color: rgba(255,255,255,0.92); min-width: 0; }
 </style>
 </head>
 <body>
@@ -113,37 +114,38 @@
 <div id="cursor-layer"></div>
 
 <div id="widget">
-  <div id="pill">
-    <div class="dot" id="dot-pill"></div>
-    <span id="pill-text">İşaretçi</span>
-    <span id="pill-count">0</span>
-    <button class="x-btn" id="pill-close" title="İşaretçi paylaşımını kapat">✕</button>
-  </div>
+  <!-- Panel kapalıyken yeni istek gelirse çıkan minik kart -->
+  <div id="card"></div>
 
   <div id="panel">
     <div class="ph" id="drag-handle">
-      <div class="ph-left"><div class="dot" id="dot-panel"></div><span class="ph-title">İşaretçi Paylaşımı</span></div>
+      <span class="ph-title">İşaretçi</span>
       <div class="ph-btns">
-        <button class="min-btn" id="btn-min" title="Küçült">─</button>
-        <button class="x-btn" id="btn-close" title="Kapat">✕</button>
+        <button class="ic-btn" id="btn-min" title="Küçült">▾</button>
+        <button class="ic-btn danger" id="btn-close" title="Paylaşımı kapat">✕</button>
       </div>
     </div>
     <div class="pb">
       <div id="req-section" class="hidden">
-        <div class="sep" style="border-top:none;padding-top:0;margin-bottom:6px;color:#fbbf24">İzin İstekleri</div>
+        <div class="sep" style="border-top:none;padding-top:0;margin-bottom:4px;color:#fbbf24">İstekler</div>
         <div class="list" id="rlist"></div>
       </div>
       <div class="row">
-        <span class="row-label">İşaretçileri Göster</span>
+        <span class="row-label">Göster</span>
         <label class="tgl"><input type="checkbox" id="chk-vis" checked><span class="tgl-s"></span></label>
       </div>
       <div class="row">
         <span class="row-label">Opaklık</span>
-        <div class="rng"><input type="range" id="rng-opacity" min="10" max="100" value="100"><span class="rng-val" id="val-opacity">100</span></div>
+        <input type="range" id="rng-opacity" min="10" max="100" value="100">
       </div>
-      <div class="sep">İzinli Kullanıcılar</div>
+      <div class="sep">İzinliler</div>
       <div class="list" id="ulist"><div class="empty">Henüz kimse yok</div></div>
     </div>
+  </div>
+
+  <div id="bubble" title="İşaretçi paylaşımı">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-5.07a.5.5 0 0 1 .36-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.36z" fill="#818cf8" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    <span id="badge"></span>
   </div>
 </div>
 
@@ -151,7 +153,7 @@
 (function () {
   'use strict';
   var api = window.netrex || {};
-  var STORE_KEY = 'netrex-pointer-overlay';
+  var STORE_KEY = 'netrex-pointer-overlay-v2';
 
   // ───────── kalıcı ayarlar (konum, opaklık) ─────────
   function loadPrefs() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } }
@@ -169,45 +171,43 @@
   function num(v, min, max) { if (v == null || v === '') return null; v = Number(v); if (!isFinite(v)) return null; return Math.max(min, Math.min(max, v)); }
 
   var widget = document.getElementById('widget');
-  var pill = document.getElementById('pill');
+  var bubble = document.getElementById('bubble');
+  var badge = document.getElementById('badge');
   var panel = document.getElementById('panel');
+  var card = document.getElementById('card');
   var cursorLayer = document.getElementById('cursor-layer');
-  var pillCount = document.getElementById('pill-count');
-  var dots = [document.getElementById('dot-pill'), document.getElementById('dot-panel')];
   var chkVis = document.getElementById('chk-vis');
   var rngOpacity = document.getElementById('rng-opacity');
-  var valOpacity = document.getElementById('val-opacity');
   var ulist = document.getElementById('ulist');
   var rlist = document.getElementById('rlist');
   var reqSection = document.getElementById('req-section');
   var expanded = false;
   var dragging = false;
   var didDrag = false;
+  var lastRequests = [];
 
-  // ───────── widget konumu ─────────
-  function clampWidget() {
-    var r = widget.getBoundingClientRect();
-    var left = Math.max(0, Math.min(window.innerWidth - r.width, r.left));
-    var top = Math.max(0, Math.min(window.innerHeight - r.height, r.top));
-    widget.style.right = 'auto';
-    widget.style.left = left + 'px';
-    widget.style.top = top + 'px';
+  // ───────── konum: sağ alt, görev çubuğunun/saatin hemen üstü ─────────
+  function taskbarInsets() {
+    var s = window.screen;
+    return {
+      bottom: Math.max(0, s.height - (s.availTop || 0) - s.availHeight),
+      right: Math.max(0, s.width - (s.availLeft || 0) - s.availWidth),
+    };
+  }
+  function setAnchor(right, bottom) {
+    var maxR = Math.max(0, window.innerWidth - widget.offsetWidth);
+    var maxB = Math.max(0, window.innerHeight - widget.offsetHeight);
+    widget.style.right = Math.max(0, Math.min(maxR, right)) + 'px';
+    widget.style.bottom = Math.max(0, Math.min(maxB, bottom)) + 'px';
   }
   function applyPrefs() {
-    if (typeof prefs.left === 'number' && typeof prefs.top === 'number') {
-      widget.style.right = 'auto';
-      widget.style.left = prefs.left + 'px';
-      widget.style.top = prefs.top + 'px';
-    } else {
-      // Varsayılan: sağ kenar, ekranın ortasına yakın — pencere kapatma düğmelerinin olduğu sağ üst köşeden uzak
-      widget.style.top = Math.round(window.innerHeight * 0.42) + 'px';
-    }
+    var ins = taskbarInsets();
+    if (typeof prefs.right === 'number' && typeof prefs.bottom === 'number') setAnchor(prefs.right, prefs.bottom);
+    else setAnchor(ins.right + 16, ins.bottom + 14);
     if (typeof prefs.opacity === 'number') {
       rngOpacity.value = String(Math.round(prefs.opacity * 100));
-      valOpacity.textContent = rngOpacity.value;
       cursorLayer.style.opacity = String(prefs.opacity);
     }
-    clampWidget();
   }
 
   // ───────── ana işleme etkileşim alanını bildir (hover algısını ana süreç yapar) ─────────
@@ -224,66 +224,58 @@
     });
   }
   if (window.ResizeObserver) new ResizeObserver(reportRect).observe(widget);
-  window.addEventListener('resize', function () { clampWidget(); reportRect(); });
+  window.addEventListener('resize', function () { applyPrefs(); reportRect(); });
 
   // ───────── aç / kapat ─────────
-  function setExpanded(v) {
-    expanded = v;
-    pill.style.display = v ? 'none' : 'flex';
-    panel.style.display = v ? 'flex' : 'none';
-    clampWidget();
+  function refreshVisibility() {
+    // Panel açıkken istekler panelin içinde; kapalıyken küçük kart
+    panel.style.display = expanded ? 'flex' : 'none';
+    card.style.display = (!expanded && lastRequests.length > 0) ? 'flex' : 'none';
+    widget.classList.toggle('open', expanded);
     reportRect();
   }
-  pill.addEventListener('click', function () { if (!didDrag) setExpanded(true); });
-  document.getElementById('btn-min').addEventListener('click', function () { setExpanded(false); });
+  function setExpanded(v) { expanded = v; refreshVisibility(); }
 
-  function closeAll() {
+  bubble.addEventListener('click', function () { if (!didDrag) setExpanded(!expanded); });
+  document.getElementById('btn-min').addEventListener('click', function () { setExpanded(false); });
+  document.getElementById('btn-close').addEventListener('click', function () {
     if (api.revokeAllPointers) api.revokeAllPointers();
     if (api.closePointerOverlay) api.closePointerOverlay();
-  }
-  document.getElementById('btn-close').addEventListener('click', closeAll);
-  document.getElementById('pill-close').addEventListener('click', function (e) { e.stopPropagation(); closeAll(); });
+  });
 
-  // ───────── sürükleme ─────────
-  var dx = 0, dy = 0, sx = 0, sy = 0;
+  // ───────── sürükleme (baloncuk + panel başlığı) ─────────
+  var sx = 0, sy = 0, startRight = 0, startBottom = 0;
   function startDrag(e) {
-    if (e.target.closest('button') || e.target.closest('.tgl') || e.target.tagName === 'INPUT') return;
+    if (e.target.closest('button') && e.target.id !== 'bubble') return;
     dragging = true; didDrag = false;
-    var r = widget.getBoundingClientRect();
-    dx = e.clientX - r.left; dy = e.clientY - r.top; sx = e.clientX; sy = e.clientY;
-    widget.style.right = 'auto';
+    sx = e.clientX; sy = e.clientY;
+    startRight = parseFloat(widget.style.right) || 0;
+    startBottom = parseFloat(widget.style.bottom) || 0;
     reportRect();
     e.preventDefault();
   }
   document.getElementById('drag-handle').addEventListener('mousedown', startDrag);
-  pill.addEventListener('mousedown', startDrag);
+  bubble.addEventListener('mousedown', startDrag);
   document.addEventListener('mousemove', function (e) {
     if (!dragging) return;
     if (Math.abs(e.clientX - sx) > 3 || Math.abs(e.clientY - sy) > 3) didDrag = true;
-    var mw = window.innerWidth - widget.offsetWidth;
-    var mh = window.innerHeight - widget.offsetHeight;
-    widget.style.left = Math.max(0, Math.min(mw, e.clientX - dx)) + 'px';
-    widget.style.top = Math.max(0, Math.min(mh, e.clientY - dy)) + 'px';
+    setAnchor(startRight - (e.clientX - sx), startBottom - (e.clientY - sy));
     reportRect();
   });
   document.addEventListener('mouseup', function () {
     if (!dragging) return;
     dragging = false;
-    var r = widget.getBoundingClientRect();
-    prefs.left = r.left; prefs.top = r.top; savePrefs(prefs);
+    prefs.right = parseFloat(widget.style.right) || 0;
+    prefs.bottom = parseFloat(widget.style.bottom) || 0;
+    savePrefs(prefs);
     reportRect();
     setTimeout(function () { didDrag = false; }, 0);
   });
 
   // ───────── ayarlar ─────────
-  chkVis.addEventListener('change', function (e) {
-    var on = e.target.checked;
-    cursorLayer.style.display = on ? 'block' : 'none';
-    dots.forEach(function (d) { d.className = on ? 'dot' : 'dot off'; });
-  });
+  chkVis.addEventListener('change', function (e) { cursorLayer.style.display = e.target.checked ? 'block' : 'none'; });
   rngOpacity.addEventListener('input', function (e) {
     var o = e.target.value / 100;
-    valOpacity.textContent = e.target.value;
     cursorLayer.style.opacity = String(o);
     prefs.opacity = o; savePrefs(prefs);
   });
@@ -301,46 +293,53 @@
     return svg;
   }
 
-  var lastRequestCount = 0;
   var alertTimer = null;
+  var lastRequestCount = 0;
+
+  function requestRow(r, cls) {
+    var row = el('div', cls);
+    row.appendChild(el('span', 'nm req-name', r.name || 'Kullanıcı'));
+    var btns = el('div', 'item-btns');
+    var ok = el('button', 'mini ok', '✓');
+    var no = el('button', 'mini no', '✕');
+    ok.title = 'İzin ver'; no.title = 'Reddet';
+    ok.addEventListener('click', function () { if (api.grantPointerRequest) api.grantPointerRequest(r.id); });
+    no.addEventListener('click', function () { if (api.denyPointerRequest) api.denyPointerRequest(r.id); });
+    btns.appendChild(ok); btns.appendChild(no);
+    row.appendChild(btns);
+    return row;
+  }
 
   function render(payload) {
     var data = Array.isArray(payload) ? { pointers: payload, requests: [] } : (payload || {});
     var pointers = Array.isArray(data.pointers) ? data.pointers : [];
     var requests = Array.isArray(data.requests) ? data.requests : [];
+    lastRequests = requests;
 
-    // Sayaç: bekleyen istek varsa onu vurgula
-    if (requests.length > 0) { pillCount.textContent = String(requests.length); pillCount.className = 'hot'; }
-    else { pillCount.textContent = String(pointers.length); pillCount.className = ''; }
+    // Rozet: bekleyen istek varsa amber, yoksa izinli sayısı
+    if (requests.length > 0) { badge.textContent = String(requests.length); badge.className = 'on hot'; }
+    else if (pointers.length > 0) { badge.textContent = String(pointers.length); badge.className = 'on'; }
+    else { badge.className = ''; }
 
-    // İzin istekleri
-    rlist.textContent = '';
+    // İstekler: hem küçük kartta hem panelde
+    card.textContent = ''; rlist.textContent = '';
     reqSection.classList.toggle('hidden', requests.length === 0);
     requests.forEach(function (r) {
-      var row = el('div', 'item req');
-      var left = el('div', 'item-left');
-      left.appendChild(el('span', 'nm', r.name || 'Kullanıcı'));
-      var btns = el('div', 'item-btns');
-      var ok = el('button', 'mini ok', 'İzin Ver');
-      var no = el('button', 'mini no', 'Reddet');
-      ok.addEventListener('click', function () { if (api.grantPointerRequest) api.grantPointerRequest(r.id); });
-      no.addEventListener('click', function () { if (api.denyPointerRequest) api.denyPointerRequest(r.id); });
-      btns.appendChild(ok); btns.appendChild(no);
-      row.appendChild(left); row.appendChild(btns);
-      rlist.appendChild(row);
+      card.appendChild(requestRow(r, 'req-row'));
+      rlist.appendChild(requestRow(r, 'item req'));
     });
 
-    // Yeni istek geldi: paneli aç ve dikkat çek
+    // Yeni istek: baloncuk dikkat çeker (panel zorla açılmaz — dikkat dağıtmasın)
     if (requests.length > lastRequestCount) {
-      setExpanded(true);
       widget.classList.add('alert');
       clearTimeout(alertTimer);
-      alertTimer = setTimeout(function () { widget.classList.remove('alert'); }, 10000);
+      alertTimer = setTimeout(function () { widget.classList.remove('alert'); }, 12000);
     }
     if (requests.length === 0) widget.classList.remove('alert');
     lastRequestCount = requests.length;
+    refreshVisibility();
 
-    // İzinli kullanıcılar
+    // İzinliler listesi
     ulist.textContent = '';
     if (pointers.length === 0) {
       ulist.appendChild(el('div', 'empty', 'Henüz kimse yok'));
@@ -357,8 +356,7 @@
       });
     }
 
-    // İmleç elemanları
-    // Konumu olmayan (hareketsiz kalmış) kullanıcının imleci eski yerinde takılı kalmasın
+    // İmleç elemanları (konumu olmayan, hareketsiz kalmış kullanıcının imleci eski yerinde takılı kalmasın)
     var ids = new Set(pointers.filter(function (p) { return num(p.x, -0.1, 1.1) != null && num(p.y, -0.1, 1.1) != null; }).map(function (p) { return String(p.id); }));
     cursorEls.forEach(function (node, id) { if (!ids.has(id)) { cursorLayer.removeChild(node); cursorEls.delete(id); } });
     pointers.forEach(function (p) {
@@ -398,7 +396,7 @@
 
   function startLoop() { if (!running) { running = true; requestAnimationFrame(frame); } }
 
-  function frame(now) {
+  function frame() {
     var W = window.innerWidth, H = window.innerHeight;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -458,7 +456,7 @@
       startLoop();
     } else if (evt.type === 'draw_clear') {
       var pid = String(evt.participantId || '');
-      strokes.forEach(function (s, id) { if (s.pid === pid) strokes.delete(id); });
+      strokes.forEach(function (st, sid) { if (st.pid === pid) strokes.delete(sid); });
       startLoop();
     }
   }
@@ -468,7 +466,7 @@
   if (api.onPointerOverlayEvent) api.onPointerOverlayEvent(handleEvent);
 
   applyPrefs();
-  setExpanded(false);
+  refreshVisibility();
 })();
 </script>
 </body>

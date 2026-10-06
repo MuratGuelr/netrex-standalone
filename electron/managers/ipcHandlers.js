@@ -1,20 +1,27 @@
-const { ipcMain, desktopCapturer, shell, autoUpdater, app, screen } = require('electron');
-const path = require('path');
-const Store = require('electron-store');
+const {
+  ipcMain,
+  desktopCapturer,
+  shell,
+  autoUpdater,
+  app,
+  screen,
+} = require("electron");
+const path = require("path");
+const Store = require("electron-store");
 const { AccessToken } = require("livekit-server-sdk");
-const log = require('electron-log');
-const { quitAndInstall: updateQuitAndInstall } = require('./updateManager');
+const log = require("electron-log");
+const { quitAndInstall: updateQuitAndInstall } = require("./updateManager");
 
 // Local imports
-const { getLoginHtml, getSuccessHtml } = require('./utils');
-const http = require('http');
-const url = require('url');
-const fs = require('fs');
+const { getLoginHtml, getSuccessHtml } = require("./utils");
+const http = require("http");
+const url = require("url");
+const fs = require("fs");
 
 // ============================================
 // 🚀 OPTIMIZED IPC HANDLERS v2.0
 // ============================================
-// 
+//
 // Optimizasyonlar:
 // 1. ✅ LiveKit server count cached (20 iterasyon → 0)
 // 2. ✅ Logo file cached (disk I/O → memory)
@@ -36,7 +43,7 @@ let currentUserUid = null;
 const ADMIN_UID = (process.env.NEXT_PUBLIC_ADMIN_UID || "").trim();
 
 function isAdminUser(userUid) {
-    return ADMIN_UID && userUid === ADMIN_UID;
+  return ADMIN_UID && userUid === ADMIN_UID;
 }
 
 // ============================================
@@ -46,45 +53,51 @@ let LIVEKIT_SERVER_COUNT = null;
 let LIVEKIT_SERVERS = null;
 
 function initLiveKitServers() {
-    if (LIVEKIT_SERVER_COUNT !== null) return;
-    
-    LIVEKIT_SERVERS = [];
-    
-    // Try to load pool servers
-    for (let i = 0; i < 20; i++) {
-        const url = process.env[`LIVEKIT_SERVERS_${i}_URL`];
-        if (!url) break;
-        
-        LIVEKIT_SERVERS.push({
-            url,
-            key: process.env[`LIVEKIT_SERVERS_${i}_KEY`],
-            secret: process.env[`LIVEKIT_SERVERS_${i}_SECRET`]
-        });
-    }
-    
-    LIVEKIT_SERVER_COUNT = LIVEKIT_SERVERS.length;
-    
-    // Fallback: Single server mode
-    if (LIVEKIT_SERVER_COUNT === 0) {
-        const fallbackKey = process.env.LIVEKIT_API_KEY;
-        const fallbackSecret = process.env.LIVEKIT_API_SECRET;
-        const fallbackUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-        
-        if (fallbackKey && fallbackSecret) {
-            LIVEKIT_SERVERS.push({
-                url: fallbackUrl || '',
-                key: fallbackKey,
-                secret: fallbackSecret
-            });
-            LIVEKIT_SERVER_COUNT = 1;
-            console.log('⚠️ LiveKit: Pool sunucuları bulunamadı, fallback mode kullanılıyor');
-        } else {
-            console.error('❌ HATA: LiveKit credentials bulunamadı! .env.local dosyasını kontrol edin.');
-            console.error('   Gerekli: LIVEKIT_SERVERS_0_* veya LIVEKIT_API_KEY/SECRET');
-        }
+  if (LIVEKIT_SERVER_COUNT !== null) return;
+
+  LIVEKIT_SERVERS = [];
+
+  // Try to load pool servers
+  for (let i = 0; i < 20; i++) {
+    const url = process.env[`LIVEKIT_SERVERS_${i}_URL`];
+    if (!url) break;
+
+    LIVEKIT_SERVERS.push({
+      url,
+      key: process.env[`LIVEKIT_SERVERS_${i}_KEY`],
+      secret: process.env[`LIVEKIT_SERVERS_${i}_SECRET`],
+    });
+  }
+
+  LIVEKIT_SERVER_COUNT = LIVEKIT_SERVERS.length;
+
+  // Fallback: Single server mode
+  if (LIVEKIT_SERVER_COUNT === 0) {
+    const fallbackKey = process.env.LIVEKIT_API_KEY;
+    const fallbackSecret = process.env.LIVEKIT_API_SECRET;
+    const fallbackUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+
+    if (fallbackKey && fallbackSecret) {
+      LIVEKIT_SERVERS.push({
+        url: fallbackUrl || "",
+        key: fallbackKey,
+        secret: fallbackSecret,
+      });
+      LIVEKIT_SERVER_COUNT = 1;
+      console.log(
+        "⚠️ LiveKit: Pool sunucuları bulunamadı, fallback mode kullanılıyor",
+      );
     } else {
-        console.log(`✅ LiveKit Pool: ${LIVEKIT_SERVER_COUNT} servers loaded`);
+      console.error(
+        "❌ HATA: LiveKit credentials bulunamadı! .env.local dosyasını kontrol edin.",
+      );
+      console.error(
+        "   Gerekli: LIVEKIT_SERVERS_0_* veya LIVEKIT_API_KEY/SECRET",
+      );
     }
+  } else {
+    console.log(`✅ LiveKit Pool: ${LIVEKIT_SERVER_COUNT} servers loaded`);
+  }
 }
 
 initLiveKitServers();
@@ -95,45 +108,45 @@ initLiveKitServers();
 let hotkeysCache = null;
 
 function initHotkeysCache() {
-    const allHotkeys = store.get("hotkeys") || {};
-    hotkeysCache = {
-        mute: allHotkeys.mute || null,
-        deafen: allHotkeys.deafen || null,
-        camera: allHotkeys.camera || null,
-        "quick-status": allHotkeys["quick-status"] || null,
-        // ✅ Per-slot quick status hotkeys (max 6 slot)
-        "quick-status-0": allHotkeys["quick-status-0"] || null,
-        "quick-status-1": allHotkeys["quick-status-1"] || null,
-        "quick-status-2": allHotkeys["quick-status-2"] || null,
-        "quick-status-3": allHotkeys["quick-status-3"] || null,
-        "quick-status-4": allHotkeys["quick-status-4"] || null,
-        "quick-status-5": allHotkeys["quick-status-5"] || null,
-    };
+  const allHotkeys = store.get("hotkeys") || {};
+  hotkeysCache = {
+    mute: allHotkeys.mute || null,
+    deafen: allHotkeys.deafen || null,
+    camera: allHotkeys.camera || null,
+    "quick-status": allHotkeys["quick-status"] || null,
+    // ✅ Per-slot quick status hotkeys (max 6 slot)
+    "quick-status-0": allHotkeys["quick-status-0"] || null,
+    "quick-status-1": allHotkeys["quick-status-1"] || null,
+    "quick-status-2": allHotkeys["quick-status-2"] || null,
+    "quick-status-3": allHotkeys["quick-status-3"] || null,
+    "quick-status-4": allHotkeys["quick-status-4"] || null,
+    "quick-status-5": allHotkeys["quick-status-5"] || null,
+  };
 }
 
 // Global olarak çağrılmaması gereken ancak hotkey ile eklenen "tts"
 const ensureHotkeyCache = (key) => {
-    if (!hotkeysCache[key]) {
-        const allHotkeys = store.get("hotkeys") || {};
-        hotkeysCache[key] = allHotkeys[key] || null;
-    }
-}
+  if (!hotkeysCache[key]) {
+    const allHotkeys = store.get("hotkeys") || {};
+    hotkeysCache[key] = allHotkeys[key] || null;
+  }
+};
 
 initHotkeysCache();
 ensureHotkeyCache("tts-stop");
 ensureHotkeyCache("tts-toggle");
 
 function updateHotkeyCache(action, keybinding) {
-    hotkeysCache[action] = keybinding;
+  hotkeysCache[action] = keybinding;
 }
 
 function getKeybinding(action) {
-    return hotkeysCache[action];
+  return hotkeysCache[action];
 }
 
 function setKeybinding(action, keybinding) {
-    store.set(`hotkeys.${action}`, keybinding);
-    updateHotkeyCache(action, keybinding);
+  store.set(`hotkeys.${action}`, keybinding);
+  updateHotkeyCache(action, keybinding);
 }
 
 // ============================================
@@ -143,21 +156,21 @@ let cachedLogo = null;
 let cachedLogoPath = null;
 
 function getLogoData() {
-    const logoPath = app.isPackaged
-        ? path.join(process.resourcesPath, "logo.png")
-        : path.join(__dirname, "../../public/logo.png");
-    
-    if (cachedLogoPath !== logoPath || !cachedLogo) {
-        if (fs.existsSync(logoPath)) {
-            cachedLogo = fs.readFileSync(logoPath);
-            cachedLogoPath = logoPath;
-            console.log(`✅ Logo cached from: ${logoPath}`);
-        } else {
-            cachedLogo = null;
-            console.warn(`⚠️ Logo not found: ${logoPath}`);
-        }
+  const logoPath = app.isPackaged
+    ? path.join(process.resourcesPath, "logo.png")
+    : path.join(__dirname, "../../public/logo.png");
+
+  if (cachedLogoPath !== logoPath || !cachedLogo) {
+    if (fs.existsSync(logoPath)) {
+      cachedLogo = fs.readFileSync(logoPath);
+      cachedLogoPath = logoPath;
+      console.log(`✅ Logo cached from: ${logoPath}`);
+    } else {
+      cachedLogo = null;
+      console.warn(`⚠️ Logo not found: ${logoPath}`);
     }
-    return cachedLogo;
+  }
+  return cachedLogo;
 }
 
 // ============================================
@@ -167,417 +180,454 @@ let loginHtmlCache = null;
 let successHtmlCache = null;
 
 const getLoginHtmlCached = () => {
-    if (!loginHtmlCache) {
-        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-        const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-        loginHtmlCache = getLoginHtml(apiKey, authDomain);
-    }
-    return loginHtmlCache;
+  if (!loginHtmlCache) {
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+    loginHtmlCache = getLoginHtml(apiKey, authDomain);
+  }
+  return loginHtmlCache;
 };
 
 const getSuccessHtmlCached = () => {
-    if (!successHtmlCache) {
-        successHtmlCache = getSuccessHtml();
-    }
-    return successHtmlCache;
+  if (!successHtmlCache) {
+    successHtmlCache = getSuccessHtml();
+  }
+  return successHtmlCache;
 };
 
 // ============================================
 // LOCAL AUTH SERVER
 // ============================================
 const startLocalAuthServer = (mainWindow) => {
-    return new Promise((resolve) => {
-        if (authServer) {
-            authServer.close();
-            authServer = null;
+  return new Promise((resolve) => {
+    if (authServer) {
+      authServer.close();
+      authServer = null;
+    }
+
+    const server = http.createServer((req, res) => {
+      const parsedUrl = url.parse(req.url, true);
+
+      if (parsedUrl.pathname === "/login") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(getLoginHtmlCached());
+      } else if (parsedUrl.pathname === "/logo.png") {
+        // ✅ Cached logo
+        const logoData = getLogoData();
+        if (logoData) {
+          res.writeHead(200, { "Content-Type": "image/png" });
+          res.end(logoData);
+        } else {
+          res.writeHead(404);
+          res.end("Logo not found");
         }
-        
-        const server = http.createServer((req, res) => {
-            const parsedUrl = url.parse(req.url, true);
-            
-            if (parsedUrl.pathname === "/login") {
-                res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-                res.end(getLoginHtmlCached());
-            } 
-            else if (parsedUrl.pathname === "/logo.png") {
-                // ✅ Cached logo
-                const logoData = getLogoData();
-                if (logoData) {
-                    res.writeHead(200, { "Content-Type": "image/png" });
-                    res.end(logoData);
-                } else {
-                    res.writeHead(404);
-                    res.end("Logo not found");
-                }
-            } 
-            else if (parsedUrl.pathname === "/oauth/callback") {
-                const token = parsedUrl.query.token;
-                if (token && mainWindow) {
-                    mainWindow.webContents.send("oauth-success", token);
-                }
-                res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-                res.end(getSuccessHtmlCached());
-            } 
-            else {
-                res.writeHead(404);
-                res.end("Not Found");
-            }
-        });
-        
-        server.listen(0, "127.0.0.1", () => {
-            authServer = server;
-            resolve(server);
-        });
+      } else if (parsedUrl.pathname === "/oauth/callback") {
+        const token = parsedUrl.query.token;
+        if (token && mainWindow) {
+          mainWindow.webContents.send("oauth-success", token);
+        }
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(getSuccessHtmlCached());
+      } else {
+        res.writeHead(404);
+        res.end("Not Found");
+      }
     });
+
+    server.listen(0, "127.0.0.1", () => {
+      authServer = server;
+      resolve(server);
+    });
+  });
 };
 
 // ============================================
 // IPC HANDLERS REGISTRATION
 // ============================================
-function registerIpcHandlers(mainWindowFn, showMainWindowFn, inputManager, setQuittingFn, pointerOverlayFns, voiceOverlayFns) {
-     const { updatePointerOverlay, closePointerOverlay, setPointerOverlayInteractive, sendPointerOverlayEvent, setPointerOverlayWidgetRect } = pointerOverlayFns || {};
-     const { 
-       createVoiceOverlayWindow, updateVoiceOverlay, setVoiceOverlayInteractive, 
-       closeVoiceOverlay, destroyVoiceOverlay, moveVoiceOverlay, 
-       getVoiceOverlayPosition, startAntiCheatCheck, stopAntiCheatCheck 
-     } = voiceOverlayFns || {};
+function registerIpcHandlers(
+  mainWindowFn,
+  showMainWindowFn,
+  inputManager,
+  setQuittingFn,
+  pointerOverlayFns,
+  voiceOverlayFns,
+) {
+  const {
+    updatePointerOverlay,
+    closePointerOverlay,
+    setPointerOverlayInteractive,
+    sendPointerOverlayEvent,
+    setPointerOverlayWidgetRect,
+  } = pointerOverlayFns || {};
+  const {
+    createVoiceOverlayWindow,
+    updateVoiceOverlay,
+    setVoiceOverlayInteractive,
+    closeVoiceOverlay,
+    destroyVoiceOverlay,
+    moveVoiceOverlay,
+    getVoiceOverlayPosition,
+    startAntiCheatCheck,
+    stopAntiCheatCheck,
+  } = voiceOverlayFns || {};
 
-     ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {
-        if (updatePointerOverlay) updatePointerOverlay(pointers, forceShow);
-     });
+  ipcMain.on("update-pointer-overlay", (event, pointers, forceShow) => {
+    if (updatePointerOverlay) updatePointerOverlay(pointers, forceShow);
+  });
 
-     ipcMain.on("close-pointer-overlay", () => {
-        if (closePointerOverlay) closePointerOverlay();
-     });
+  ipcMain.on("close-pointer-overlay", () => {
+    if (closePointerOverlay) closePointerOverlay();
+  });
 
-     ipcMain.on("set-overlay-interactive", (event, interactive) => {
-        if (setPointerOverlayInteractive) setPointerOverlayInteractive(interactive);
-     });
+  ipcMain.on("set-overlay-interactive", (event, interactive) => {
+    if (setPointerOverlayInteractive) setPointerOverlayInteractive(interactive);
+  });
 
-     ipcMain.on("revoke-pointer-overlay", (event, id) => {
+  ipcMain.on("revoke-pointer-overlay", (event, id) => {
+    if (mainWindowFn()) {
+      mainWindowFn().webContents.send("pointer-overlay-revoked", id);
+    }
+  });
+
+  // Overlay'deki "İzin Ver / Reddet" düğmeleri → ana pencere (asıl izin mantığı orada)
+  ipcMain.on("pointer-overlay-grant", (event, id) => {
+    if (mainWindowFn() && typeof id === "string")
+      mainWindowFn().webContents.send("pointer-overlay-granted", id);
+  });
+  ipcMain.on("pointer-overlay-deny", (event, id) => {
+    if (mainWindowFn() && typeof id === "string")
+      mainWindowFn().webContents.send("pointer-overlay-denied", id);
+  });
+
+  // Ana pencere → overlay: tıklama dalgası / çizim olayları
+  ipcMain.on("pointer-overlay-event", (event, evt) => {
+    if (sendPointerOverlayEvent) sendPointerOverlayEvent(evt);
+  });
+
+  // Overlay widget'ının konumu (hover algısı ana süreçte yapılır)
+  ipcMain.on("pointer-overlay-widget-rect", (event, rect) => {
+    if (setPointerOverlayWidgetRect) setPointerOverlayWidgetRect(rect);
+  });
+
+  // ============================================
+  // 🎮 VOICE OVERLAY IPC HANDLERS
+  // ============================================
+  ipcMain.on("update-voice-overlay", (event, data) => {
+    if (updateVoiceOverlay) updateVoiceOverlay(data);
+  });
+
+  ipcMain.on("set-voice-overlay-interactive", (event, interactive) => {
+    if (setVoiceOverlayInteractive) setVoiceOverlayInteractive(interactive);
+  });
+
+  ipcMain.on("close-voice-overlay", () => {
+    if (closeVoiceOverlay) closeVoiceOverlay();
+  });
+
+  ipcMain.on("set-voice-overlay-enabled", (event, enabled, settings) => {
+    if (enabled) {
+      if (createVoiceOverlayWindow) {
+        createVoiceOverlayWindow(settings);
+        if (settings?.antiCheatProtection && startAntiCheatCheck) {
+          startAntiCheatCheck();
+        }
+      }
+    } else {
+      if (destroyVoiceOverlay) destroyVoiceOverlay();
+      if (stopAntiCheatCheck) stopAntiCheatCheck();
+    }
+  });
+
+  ipcMain.on("voice-overlay-action", (event, action, payload) => {
+    // Actions from overlay → forwarded to main renderer window
+    switch (action) {
+      case "toggle-mute":
+      case "leave":
+        // Forward to main window
         if (mainWindowFn()) {
-           mainWindowFn().webContents.send("pointer-overlay-revoked", id);
+          mainWindowFn().webContents.send(
+            "voice-overlay-action-response",
+            action,
+            payload,
+          );
         }
-     });
-
-     $1
-
-     // Overlay'deki "İzin Ver / Reddet" düğmeleri → ana pencere (asıl izin mantığı orada)
-     ipcMain.on("pointer-overlay-grant", (event, id) => {
-        if (mainWindowFn() && typeof id === "string") mainWindowFn().webContents.send("pointer-overlay-granted", id);
-     });
-     ipcMain.on("pointer-overlay-deny", (event, id) => {
-        if (mainWindowFn() && typeof id === "string") mainWindowFn().webContents.send("pointer-overlay-denied", id);
-     });
-
-     // Ana pencere → overlay: tıklama dalgası / çizim olayları
-     ipcMain.on("pointer-overlay-event", (event, evt) => {
-        if (sendPointerOverlayEvent) sendPointerOverlayEvent(evt);
-     });
-
-     // Overlay widget'ının konumu (hover algısı ana süreçte yapılır)
-     ipcMain.on("pointer-overlay-widget-rect", (event, rect) => {
-        if (setPointerOverlayWidgetRect) setPointerOverlayWidgetRect(rect);
-     });
-
-     // ============================================
-     // 🎮 VOICE OVERLAY IPC HANDLERS
-     // ============================================
-     ipcMain.on("update-voice-overlay", (event, data) => {
-        if (updateVoiceOverlay) updateVoiceOverlay(data);
-     });
-
-     ipcMain.on("set-voice-overlay-interactive", (event, interactive) => {
-        if (setVoiceOverlayInteractive) setVoiceOverlayInteractive(interactive);
-     });
-
-     ipcMain.on("close-voice-overlay", () => {
-        if (closeVoiceOverlay) closeVoiceOverlay();
-     });
-
-     ipcMain.on("set-voice-overlay-enabled", (event, enabled, settings) => {
-        if (enabled) {
-           if (createVoiceOverlayWindow) {
-              createVoiceOverlayWindow(settings);
-              if (settings?.antiCheatProtection && startAntiCheatCheck) {
-                 startAntiCheatCheck();
-              }
-           }
-        } else {
-           if (destroyVoiceOverlay) destroyVoiceOverlay();
-           if (stopAntiCheatCheck) stopAntiCheatCheck();
+        break;
+      case "drag":
+        if (moveVoiceOverlay && payload) {
+          moveVoiceOverlay(payload.dx || 0, payload.dy || 0);
         }
-     });
-
-     ipcMain.on("voice-overlay-action", (event, action, payload) => {
-        // Actions from overlay → forwarded to main renderer window
-        switch (action) {
-           case 'toggle-mute':
-           case 'leave':
-              // Forward to main window
-              if (mainWindowFn()) {
-                 mainWindowFn().webContents.send("voice-overlay-action-response", action, payload);
-              }
-              break;
-           case 'drag':
-              if (moveVoiceOverlay && payload) {
-                 moveVoiceOverlay(payload.dx || 0, payload.dy || 0);
-              }
-              break;
-           case 'save-position':
-              if (getVoiceOverlayPosition && mainWindowFn()) {
-                 const pos = getVoiceOverlayPosition();
-                 if (pos) {
-                    mainWindowFn().webContents.send("voice-overlay-action-response", 'position-saved', pos);
-                 }
-              }
-              break;
+        break;
+      case "save-position":
+        if (getVoiceOverlayPosition && mainWindowFn()) {
+          const pos = getVoiceOverlayPosition();
+          if (pos) {
+            mainWindowFn().webContents.send(
+              "voice-overlay-action-response",
+              "position-saved",
+              pos,
+            );
+          }
         }
-     });
-    
-    // ============================================
-    // AUTH
-    // ============================================
-    ipcMain.handle("start-oauth", async () => {
-        try {
-            const mainWindow = mainWindowFn();
-            const s = await startLocalAuthServer(mainWindow);
-            await shell.openExternal(`http://127.0.0.1:${s.address().port}/login`);
-        } catch (e) {
-            console.error(e);
-        }
-    });
+        break;
+    }
+  });
 
-    // ============================================
-    // APP LIFECYCLE
-    // ============================================
-    ipcMain.handle("app-quit-force", () => {
-        if (setQuittingFn) setQuittingFn(true);
-        app.quit();
-    });
+  // ============================================
+  // AUTH
+  // ============================================
+  ipcMain.handle("start-oauth", async () => {
+    try {
+      const mainWindow = mainWindowFn();
+      const s = await startLocalAuthServer(mainWindow);
+      await shell.openExternal(`http://127.0.0.1:${s.address().port}/login`);
+    } catch (e) {
+      console.error(e);
+    }
+  });
 
-    // ============================================
-    // UTILS
-    // ============================================
-    ipcMain.handle("open-external-link", async (e, u) => {
-        if (u.startsWith("http")) await shell.openExternal(u);
-    });
+  // ============================================
+  // APP LIFECYCLE
+  // ============================================
+  ipcMain.handle("app-quit-force", () => {
+    if (setQuittingFn) setQuittingFn(true);
+    app.quit();
+  });
 
-    // ============================================
-    // HOTKEYS
-    // ============================================
-    ipcMain.handle("update-hotkey", (e, a, k) => {
-        try {
-            if (k === null || k === undefined) {
-                store.delete(`hotkeys.${a}`);
-                updateHotkeyCache(a, null);
-            } else {
-                setKeybinding(a, k);
-            }
-            
-            // Input Manager cache refresh
-            if (inputManager?.refreshCache) {
-                inputManager.refreshCache();
-            }
-            
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    });
+  // ============================================
+  // UTILS
+  // ============================================
+  ipcMain.handle("open-external-link", async (e, u) => {
+    if (u.startsWith("http")) await shell.openExternal(u);
+  });
 
-    ipcMain.handle("get-hotkey", (e, a) => getKeybinding(a));
+  // ============================================
+  // HOTKEYS
+  // ============================================
+  ipcMain.handle("update-hotkey", (e, a, k) => {
+    try {
+      if (k === null || k === undefined) {
+        store.delete(`hotkeys.${a}`);
+        updateHotkeyCache(a, null);
+      } else {
+        setKeybinding(a, k);
+      }
 
-    ipcMain.handle("set-recording-mode", (e, en) => {
-        isRecordingMode = en;
-        if (inputManager?.setRecordingMode) {
-            inputManager.setRecordingMode(en);
-        }
-        return { success: true };
-    });
+      // Input Manager cache refresh
+      if (inputManager?.refreshCache) {
+        inputManager.refreshCache();
+      }
 
-    // ============================================
-    // ✅ LIVEKIT TOKEN - Pool-Aware with Validation
-    // ============================================
-    ipcMain.handle("get-livekit-token", async (e, room, identity, displayName, serverIndex = 0) => {
-        const name = displayName || identity;
-        
-        // Validate server configuration
-        if (LIVEKIT_SERVER_COUNT === 0) {
-            throw new Error('LiveKit credentials not configured. Please add LIVEKIT_SERVERS_0_* or LIVEKIT_API_KEY/SECRET to .env.local');
-        }
-        
-        // Get server with bounds check
-        const actualIndex = Math.min(Math.max(0, serverIndex), LIVEKIT_SERVER_COUNT - 1);
-        const server = LIVEKIT_SERVERS[actualIndex];
-        
-        if (!server || !server.key || !server.secret) {
-            throw new Error(`Server ${actualIndex} credentials missing. Check .env.local`);
-        }
-        
-        const at = new AccessToken(server.key, server.secret, { 
-            identity,
-            name,
-            ttl: '24h'
-        });
-        
-        at.addGrant({
-            roomJoin: true,
-            room,
-            canPublish: true,
-            canSubscribe: true,
-            canPublishData: true,
-            canUpdateOwnMetadata: true,
-        });
-        
-        return at.toJwt();
-    });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 
-    // ============================================
-    // ✅ LIVEKIT SERVER INFO - Pool Support
-    // ============================================
-    ipcMain.handle("get-livekit-server-info", async (e, serverIndex = 0) => {
-        if (LIVEKIT_SERVER_COUNT === 0) {
-            return {
-                url: '',
-                serverCount: 0,
-                serverIndex: 0,
-                poolMode: false,
-                error: 'No LiveKit servers configured'
-            };
-        }
-        
-        const actualIndex = Math.min(Math.max(0, serverIndex), LIVEKIT_SERVER_COUNT - 1);
-        
-        return {
-            url: LIVEKIT_SERVERS[actualIndex].url,
-            serverCount: LIVEKIT_SERVER_COUNT,
-            serverIndex: actualIndex,
-            poolMode: LIVEKIT_SERVER_COUNT > 1,
-        };
-    });
+  ipcMain.handle("get-hotkey", (e, a) => getKeybinding(a));
 
-    // ============================================
-    // AUTO UPDATER
-    // ============================================
-    ipcMain.handle("quit-and-install", () => updateQuitAndInstall());
+  ipcMain.handle("set-recording-mode", (e, en) => {
+    isRecordingMode = en;
+    if (inputManager?.setRecordingMode) {
+      inputManager.setRecordingMode(en);
+    }
+    return { success: true };
+  });
 
-    ipcMain.handle("splash-complete", () => {
-        showMainWindowFn();
-    });
+  // ============================================
+  // ✅ LIVEKIT TOKEN - Pool-Aware with Validation
+  // ============================================
+  ipcMain.handle(
+    "get-livekit-token",
+    async (e, room, identity, displayName, serverIndex = 0) => {
+      const name = displayName || identity;
 
-    // ============================================
-    // ✅ SCREEN SHARE - Optimized Thumbnails
-    // ============================================
-    ipcMain.handle("get-desktop-sources", async () => {
-        const s = await desktopCapturer.getSources({
-            types: ["window", "screen"],
-            thumbnailSize: { width: 150, height: 150 }, // ✅ 400 → 150
-            fetchWindowIcons: true
-        });
-        
-        return s.map((src) => ({
-            id: src.id,
-            name: src.name,
-            thumbnail: src.thumbnail.toDataURL('image/jpeg', 0.7), // ✅ JPEG + 70% quality
-            appIcon: src.appIcon?.toDataURL('image/png') // PNG only for icons
-        }));
-    });
+      // Validate server configuration
+      if (LIVEKIT_SERVER_COUNT === 0) {
+        throw new Error(
+          "LiveKit credentials not configured. Please add LIVEKIT_SERVERS_0_* or LIVEKIT_API_KEY/SECRET to .env.local",
+        );
+      }
 
-    // ============================================
-    // SETTINGS
-    // ============================================
-    ipcMain.handle("set-setting", (e, k, v) => { 
-        store.set(`settings.${k}`, v); 
-        return true; 
-    });
-    
-    ipcMain.handle("get-setting", (e, k) => store.get(`settings.${k}`));
+      // Get server with bounds check
+      const actualIndex = Math.min(
+        Math.max(0, serverIndex),
+        LIVEKIT_SERVER_COUNT - 1,
+      );
+      const server = LIVEKIT_SERVERS[actualIndex];
 
-    // ============================================
-    // APP PATH
-    // ============================================
-    ipcMain.handle("get-app-path", () => app.getAppPath());
-    
-    ipcMain.handle("get-resources-path", () => 
-        app.isPackaged ? process.resourcesPath : path.join(__dirname, "../../")
+      if (!server || !server.key || !server.secret) {
+        throw new Error(
+          `Server ${actualIndex} credentials missing. Check .env.local`,
+        );
+      }
+
+      const at = new AccessToken(server.key, server.secret, {
+        identity,
+        name,
+        ttl: "24h",
+      });
+
+      at.addGrant({
+        roomJoin: true,
+        room,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+        canUpdateOwnMetadata: true,
+      });
+
+      return at.toJwt();
+    },
+  );
+
+  // ============================================
+  // ✅ LIVEKIT SERVER INFO - Pool Support
+  // ============================================
+  ipcMain.handle("get-livekit-server-info", async (e, serverIndex = 0) => {
+    if (LIVEKIT_SERVER_COUNT === 0) {
+      return {
+        url: "",
+        serverCount: 0,
+        serverIndex: 0,
+        poolMode: false,
+        error: "No LiveKit servers configured",
+      };
+    }
+
+    const actualIndex = Math.min(
+      Math.max(0, serverIndex),
+      LIVEKIT_SERVER_COUNT - 1,
     );
 
-    // ============================================
-    // WINDOW CONTROL
-    // ============================================
-    ipcMain.handle("focus-window", () => {
-        const mw = mainWindowFn();
-        if (mw) {
-            if (mw.isMinimized()) mw.restore();
-            mw.show();
-            mw.focus();
-        }
+    return {
+      url: LIVEKIT_SERVERS[actualIndex].url,
+      serverCount: LIVEKIT_SERVER_COUNT,
+      serverIndex: actualIndex,
+      poolMode: LIVEKIT_SERVER_COUNT > 1,
+    };
+  });
+
+  // ============================================
+  // AUTO UPDATER
+  // ============================================
+  ipcMain.handle("quit-and-install", () => updateQuitAndInstall());
+
+  ipcMain.handle("splash-complete", () => {
+    showMainWindowFn();
+  });
+
+  // ============================================
+  // ✅ SCREEN SHARE - Optimized Thumbnails
+  // ============================================
+  ipcMain.handle("get-desktop-sources", async () => {
+    const s = await desktopCapturer.getSources({
+      types: ["window", "screen"],
+      thumbnailSize: { width: 150, height: 150 }, // ✅ 400 → 150
+      fetchWindowIcons: true,
     });
 
-    ipcMain.on("cleanup-complete", () => {
-        // Cleanup signal received from renderer - handled in main.js before-quit
-    });
+    return s.map((src) => ({
+      id: src.id,
+      name: src.name,
+      thumbnail: src.thumbnail.toDataURL("image/jpeg", 0.7), // ✅ JPEG + 70% quality
+      appIcon: src.appIcon?.toDataURL("image/png"), // PNG only for icons
+    }));
+  });
 
-    // ============================================
-    // DEVTOOLS / ADMIN
-    // ============================================
-    ipcMain.handle("is-admin", (event, userUid) => isAdminUser(userUid));
-    
-    ipcMain.handle("set-current-user-uid", (event, userUid) => {
-        currentUserUid = userUid;
-        return { success: true };
-    });
+  // ============================================
+  // SETTINGS
+  // ============================================
+  ipcMain.handle("set-setting", (e, k, v) => {
+    store.set(`settings.${k}`, v);
+    return true;
+  });
 
-    ipcMain.handle("open-devtools", async (event, userUid) => {
-        if (!isAdminUser(userUid)) return { success: false, error: "Unauthorized" };
-        const mw = mainWindowFn();
-        if (mw) {
-            mw.webContents.openDevTools();
-            return { success: true };
-        }
-        return { success: false, error: "Window not found" };
-    });
-    
-    // ============================================
-    // INPUT LISTENER HANDLERS
-    // ============================================
-    ipcMain.handle("start-input-listener", () => {
-        if (inputManager) {
-            inputManager.start();
-            return { success: true };
-        }
-        return { success: false, error: "Input Manager not initialized" };
-    });
+  ipcMain.handle("get-setting", (e, k) => store.get(`settings.${k}`));
 
-    ipcMain.handle("stop-input-listener", () => {
-        if (inputManager) {
-            inputManager.stop();
-            return { success: true };
-        }
-        return { success: false, error: "Input Manager not initialized" };
-    });
+  // ============================================
+  // APP PATH
+  // ============================================
+  ipcMain.handle("get-app-path", () => app.getAppPath());
 
-    // ============================================
-    // 🖱️ CURSOR POSITION (Screen Share)
-    // ============================================
-    ipcMain.handle("get-mouse-position", () => {
-        try {
-            const point = screen.getCursorScreenPoint();
-            const primaryDisplay = screen.getPrimaryDisplay();
-            // TAM ekran sınırları (görev çubuğu dahil): paylaşılan görüntü ve overlay ile aynı alan.
-            // Eskiden workAreaSize kullanılıyordu; görev çubuğu kadar dikey kayma yapıyordu.
-            const { x: ox, y: oy, width, height } = primaryDisplay.bounds;
-            return {
-                x: point.x - ox,
-                y: point.y - oy,
-                screenWidth: width,
-                screenHeight: height
-            };
-        } catch (e) {
-            return null;
-        }
-    });
+  ipcMain.handle("get-resources-path", () =>
+    app.isPackaged ? process.resourcesPath : path.join(__dirname, "../../"),
+  );
+
+  // ============================================
+  // WINDOW CONTROL
+  // ============================================
+  ipcMain.handle("focus-window", () => {
+    const mw = mainWindowFn();
+    if (mw) {
+      if (mw.isMinimized()) mw.restore();
+      mw.show();
+      mw.focus();
+    }
+  });
+
+  ipcMain.on("cleanup-complete", () => {
+    // Cleanup signal received from renderer - handled in main.js before-quit
+  });
+
+  // ============================================
+  // DEVTOOLS / ADMIN
+  // ============================================
+  ipcMain.handle("is-admin", (event, userUid) => isAdminUser(userUid));
+
+  ipcMain.handle("set-current-user-uid", (event, userUid) => {
+    currentUserUid = userUid;
+    return { success: true };
+  });
+
+  ipcMain.handle("open-devtools", async (event, userUid) => {
+    if (!isAdminUser(userUid)) return { success: false, error: "Unauthorized" };
+    const mw = mainWindowFn();
+    if (mw) {
+      mw.webContents.openDevTools();
+      return { success: true };
+    }
+    return { success: false, error: "Window not found" };
+  });
+
+  // ============================================
+  // INPUT LISTENER HANDLERS
+  // ============================================
+  ipcMain.handle("start-input-listener", () => {
+    if (inputManager) {
+      inputManager.start();
+      return { success: true };
+    }
+    return { success: false, error: "Input Manager not initialized" };
+  });
+
+  ipcMain.handle("stop-input-listener", () => {
+    if (inputManager) {
+      inputManager.stop();
+      return { success: true };
+    }
+    return { success: false, error: "Input Manager not initialized" };
+  });
+
+  // ============================================
+  // 🖱️ CURSOR POSITION (Screen Share)
+  // ============================================
+  ipcMain.handle("get-mouse-position", () => {
+    try {
+      const point = screen.getCursorScreenPoint();
+      const primaryDisplay = screen.getPrimaryDisplay();
+      // TAM ekran sınırları (görev çubuğu dahil): paylaşılan görüntü ve overlay ile aynı alan.
+      // Eskiden workAreaSize kullanılıyordu; görev çubuğu kadar dikey kayma yapıyordu.
+      const { x: ox, y: oy, width, height } = primaryDisplay.bounds;
+      return {
+        x: point.x - ox,
+        y: point.y - oy,
+        screenWidth: width,
+        screenHeight: height,
+      };
+    } catch (e) {
+      return null;
+    }
+  });
 }
 
 // ============================================
@@ -589,9 +639,9 @@ const getCurrentUserUid = () => currentUserUid;
 const getIsAdminUser = (uid) => isAdminUser(uid);
 
 module.exports = {
-    registerIpcHandlers,
-    getHotkeysCache,
-    getIsRecordingMode,
-    getIsAdminUser,
-    getCurrentUserUid
+  registerIpcHandlers,
+  getHotkeysCache,
+  getIsRecordingMode,
+  getIsAdminUser,
+  getCurrentUserUid,
 };

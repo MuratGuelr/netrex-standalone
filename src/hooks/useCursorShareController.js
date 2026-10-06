@@ -95,10 +95,13 @@ export function sendPointingDeny(localParticipant, targetIdentity) {
   if (!localParticipant) return;
   publish(localParticipant, CURSOR_TOPICS.PERMISSION, { targetId: targetIdentity, value: false });
   const store = useCursorShareStore.getState();
+  // Yayıncıya da doğru mesaj: izin vermiştiysem "kaldırıldı", bekleyen istekse "reddedildi"
+  const wasAllowed = !!store.allowedPointers[targetIdentity];
   store.removePointingRequest(targetIdentity);
   store.revokePointingPermission(targetIdentity);
   store.removeRemoteCursor(targetIdentity);
-  toast.error("İşaretçi izni reddedildi/kaldırıldı.");
+  if (wasAllowed) toast.info("İşaretçi izni kaldırıldı.");
+  else toast.error("İşaretçi isteği reddedildi.");
 }
 
 // ──────────────────────────────────────
@@ -235,10 +238,14 @@ export function useCursorShareController() {
 
         case CURSOR_TOPICS.PERMISSION:
           if (msg.targetId === identity) {
+            // "false" iki anlama gelir: istek reddedildi VEYA verilmiş izin geri alındı.
+            // Önceden iznim varsa bu bir hata değil, normal bir kapanıştır.
+            const hadPermission = !!s.myPermissions[senderId];
             s.setMyPermission(senderId, !!msg.value);
             s.removePendingRequest(senderId);
             if (msg.value) toast.success("Ekran sahibi işaretçi izni verdi!");
-            else toast.error("Ekran sahibi işaretçi iznini reddetti.");
+            else if (hadPermission) toast.info("Ekran sahibi işaretçi paylaşımını kapattı.");
+            else toast.error("Ekran sahibi işaretçi isteğini reddetti.");
           }
           break;
 
