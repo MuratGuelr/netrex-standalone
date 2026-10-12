@@ -24,7 +24,7 @@ export function WatchPartyMiniBadge() {
       {isActive && !showPlayer && (
         <motion.button
           key="mini-badge"
-          initial={{ scale: 0, opacity: 0, y: 20 }}
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ 
             scale: 1, 
             opacity: 1, 
@@ -36,7 +36,7 @@ export function WatchPartyMiniBadge() {
               ? chatWidth + (controlBarHidden ? 88 : 24)
               : "auto",
           }}
-          exit={{ scale: 0, opacity: 0, y: 20 }}
+          exit={{ scale: 0.9, opacity: 0, y: 20 }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.93 }}
           transition={{ type: "spring", damping: 25, stiffness: 400 }}

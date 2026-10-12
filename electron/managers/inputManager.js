@@ -50,13 +50,18 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
 
   const setRecordingMode = (val) => {
     cachedRecordingMode = val;
+    if (val) releaseAllHeld();
   };
 
   // ============================================
   // ✅ HOTKEYS CACHE (dışarıda tutuluyor)
   // ============================================
   let cachedHotkeys = null;
-  
+
+  // 🎙️ Basılı tut-konuş: "talk-" ile başlayan eylemler bırakılana kadar basılı sayılır
+  const HOLD_PREFIX = "talk-";
+  const heldActions = new Map(); // action -> keybinding
+
   const refreshCache = () => {
     cachedHotkeys = getHotkeysCacheFn();
   };
@@ -123,10 +128,48 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
     // ✅ Tek döngü ile tüm hotkey'leri kontrol et
     for (const [action, keybinding] of Object.entries(cachedHotkeys)) {
       if (keybinding && matchesKeybinding(event, keybinding)) {
+        // 🎙️ Basılı tut-konuş tuşları: toggle değil, basış + bırakış olayı gönderilir
+        if (action.startsWith(HOLD_PREFIX)) {
+          // İşletim sistemi tuş tekrarı (basılı tutarken tekrar eden keydown) yeni basış sayılmaz
+          if (!heldActions.has(action)) {
+            heldActions.set(action, keybinding);
+            mainWindow.webContents.send("hotkey-triggered", `hold-start-${action}`);
+          }
+          return;
+        }
         mainWindow.webContents.send("hotkey-triggered", `toggle-${action}`);
         return; // ✅ İlk eşleşmede çık
       }
     }
+  }
+
+  // Basılı tutulan bir tuş bırakıldı mı?
+  function handleReleaseEvent(event, type) {
+    if (heldActions.size === 0) return;
+    const mainWindow = getWindow();
+    for (const [action, keybinding] of heldActions) {
+      const released =
+        type === "mouse"
+          ? !!keybinding.mouseButton && event.button === keybinding.mouseButton
+          : !!keybinding.keycode && event.keycode === keybinding.keycode;
+      if (!released) continue;
+      heldActions.delete(action);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("hotkey-triggered", `hold-end-${action}`);
+      }
+    }
+  }
+
+  // Tüm basılı tutmaları bırak (dinleyici durunca / tuş kaydı başlayınca takılı kalmasın)
+  function releaseAllHeld() {
+    if (heldActions.size === 0) return;
+    const mainWindow = getWindow();
+    for (const action of heldActions.keys()) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("hotkey-triggered", `hold-end-${action}`);
+      }
+    }
+    heldActions.clear();
   }
 
   // ============================================
@@ -140,6 +183,13 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
     handleInputEvent(e, "mouse");
   });
 
+  // Basılı tut-konuş için bırakma olayları
+  uIOhook.on("keyup", (e) => handleReleaseEvent(e, "keyboard"));
+  uIOhook.on("mouseup", (e) => {
+    if (e.button === 1 || e.button === 2) return;
+    handleReleaseEvent(e, "mouse");
+  });
+
   // ============================================
   // CONTROL METHODS
   // ============================================
@@ -151,6 +201,7 @@ function setupInputListeners(getMainWindowFn, getHotkeysCacheFn, getIsRecordingM
   };
 
   const stop = () => {
+    releaseAllHeld();
     if (isListenerRunning) {
       uIOhook.stop();
       isListenerRunning = false;

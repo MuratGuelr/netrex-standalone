@@ -75,8 +75,8 @@ export default function Modal({
           from { opacity: 0; transform: scale(0.95) translateY(10px); } 
           to { opacity: 1; transform: scale(1) translateY(0); } 
         }
-        .animate-nds-fade-in { animation: nds-fade-in 0.3s ease-out forwards; }
-        .animate-nds-scale-in { animation: nds-scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-nds-fade-in { animation: nds-fade-in 0.28s cubic-bezier(0.33, 1, 0.68, 1) forwards; }
+        .animate-nds-scale-in { animation: nds-scale-in 0.38s cubic-bezier(0.33, 1, 0.68, 1) forwards; }
       `}</style>
 
       {/* 

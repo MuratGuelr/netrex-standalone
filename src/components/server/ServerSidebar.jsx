@@ -19,6 +19,8 @@ import { USER_MIME } from "./sidebar/dnd";
 import { sendVoiceCommand, describeVoiceCommandError, VOICE_COMMAND_TYPES } from "@/src/utils/voiceCommands";
 import { toast } from "@/src/utils/toast";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
+import { useVoiceGroupStore, DEFAULT_GROUP_ID } from "@/src/store/voiceGroupStore";
+import { groupActions } from "@/src/hooks/useVoiceGroups";
 import {
   ServerHeader,
   TextChannelItem,
@@ -89,6 +91,9 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
   });
   const [channelContextMenu, setChannelContextMenu] = useState(null);
   const [participantMenu, setParticipantMenu] = useState(null); // sesli kanaldaki kişiye sağ tık
+  // 🎙️ Konuşma grupları: bağlı olduğum odanın grup durumu (sol listede gruplar için)
+  const groupAssignments = useVoiceGroupStore((s) => s.assignments);
+  const groupsReady = useVoiceGroupStore((s) => !!s.localIdentity);
   const [channelSettings, setChannelSettings] = useState({
     isOpen: false,
     channel: null,
@@ -269,12 +274,16 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
 
   const handleParticipantContextMenu = useCallback(
     (e, participant, channelId) => {
-      if (participant.userId === user?.uid) return; // kendine yönetim menüsü yok
-      if (!canMoveMembers && !canDisconnectMembers) return;
+      const isSelf = participant.userId === user?.uid;
+      // 🎙️ Bağlı olduğum kanaldaki herkese (kendim dahil) konuşma grubu menüsü açılır, yetki gerekmez
+      const inMyChannel = !!voiceStates?.[channelId]?.some((u) => u.userId === user?.uid);
+      const canGroup = inMyChannel && groupsReady;
+      // Kendime yönetim (taşı/at) menüsü yok; sadece grup menüsü
+      if (!canGroup && (isSelf || (!canMoveMembers && !canDisconnectMembers))) return;
       e.preventDefault();
-      setParticipantMenu({ x: e.clientX, y: e.clientY, participant, channelId });
+      setParticipantMenu({ x: e.clientX, y: e.clientY, participant, channelId, canGroup, isSelf });
     },
-    [user?.uid, canMoveMembers, canDisconnectMembers],
+    [user?.uid, canMoveMembers, canDisconnectMembers, voiceStates, groupsReady],
   );
 
   const handleParticipantDragStart = useCallback((e, participant, channelId) => {
@@ -432,6 +441,8 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
                   onReorder={handleReorderChannels}
                   onParticipantContextMenu={handleParticipantContextMenu}
                   onParticipantDragStart={handleParticipantDragStart}
+                  groupAssignments={isActive && groupsReady ? groupAssignments : undefined}
+                  myIdentity={isActive && groupsReady ? user?.uid : undefined}
                 />
               );
             })}
@@ -547,8 +558,24 @@ export default function ServerSidebar({ onJoinChannel, activeTextChannelId }) {
           currentChannelId={participantMenu.channelId}
           myChannelId={myVoiceChannelId}
           voiceChannels={voiceChannels}
-          canMove={canMoveMembers}
-          canDisconnect={canDisconnectMembers}
+          canMove={canMoveMembers && !participantMenu.isSelf}
+          canDisconnect={canDisconnectMembers && !participantMenu.isSelf}
+          group={
+            participantMenu.canGroup
+              ? {
+                  groupId: groupAssignments[participantMenu.participant.userId] ?? DEFAULT_GROUP_ID,
+                  isSelf: participantMenu.isSelf,
+                  onMoveToGroup: (gid) => groupActions.move(participantMenu.participant.userId, gid),
+                  onSplit: () =>
+                    groupActions.splitWith(
+                      participantMenu.participant.userId,
+                      (voiceStates?.[participantMenu.channelId] || []).map((u) => u.userId),
+                    ),
+                  roomSize: (voiceStates?.[participantMenu.channelId] || []).length,
+                  myGroupId: groupAssignments[user?.uid] ?? DEFAULT_GROUP_ID,
+                }
+              : null
+          }
           onMove={(toChannelId) => handleMoveUser(participantMenu.participant.userId, toChannelId)}
           onDisconnect={() => handleDisconnectUser(participantMenu.participant.userId)}
           onClose={closeParticipantMenu}

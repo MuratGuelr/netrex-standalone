@@ -74,8 +74,15 @@
   --nds-duration-slow: 500ms;
   
   /* Timing Functions */
-  --nds-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --nds-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1); /* hover / renk geçişleri için; girişlerde --ease-out kullan */
   --nds-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* Güçlü easing'ler: giriş/çıkış = ease-out, ekranda hareket = ease-in-out, çekmece = drawer */
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --nds-duration-enter: 340ms; /* kayarak giriş animasyonları */
+  --nds-duration-enter-short: 280ms; /* solma / ölçek girişleri */
   
   /* Layout Sizes */
   --nds-sidebar-width: 240px;
@@ -408,23 +415,23 @@
 @layer utilities {
   /* Entry Animations */
   .animate-fadeIn {
-    animation: ndsFadeIn var(--nds-duration-normal) var(--nds-ease-smooth) forwards;
+    animation: ndsFadeIn var(--nds-duration-enter-short) var(--ease-out) forwards;
   }
 
   .animate-scaleIn {
-    animation: ndsScaleIn var(--nds-duration-normal) var(--nds-ease-smooth) forwards;
+    animation: ndsScaleIn var(--nds-duration-enter-short) var(--ease-out) forwards;
   }
 
   .animate-slideIn {
-    animation: ndsSlideIn var(--nds-duration-medium) var(--nds-ease-smooth) forwards;
+    animation: ndsSlideIn var(--nds-duration-enter) var(--ease-out) forwards;
   }
 
   .animate-slideUp {
-    animation: ndsSlideUp var(--nds-duration-medium) var(--nds-ease-smooth) forwards;
+    animation: ndsSlideUp var(--nds-duration-enter) var(--ease-out) forwards;
   }
 
   .animate-slideDown {
-    animation: ndsSlideDown var(--nds-duration-medium) var(--nds-ease-smooth) forwards;
+    animation: ndsSlideDown var(--nds-duration-enter) var(--ease-out) forwards;
   }
 
   /* State Animations */
@@ -493,23 +500,23 @@
 }
 
 @keyframes ndsScaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { scale: 0.95; opacity: 0; }
+  to { scale: 1; opacity: 1; }
 }
 
 @keyframes ndsSlideIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { translate: 0 20px; opacity: 0; }
+  to { translate: 0 0; opacity: 1; }
 }
 
 @keyframes ndsSlideUp {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { translate: 0 10px; opacity: 0; }
+  to { translate: 0 0; opacity: 1; }
 }
 
 @keyframes ndsSlideDown {
-  from { transform: translateY(-10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { translate: 0 -10px; opacity: 0; }
+  to { translate: 0 0; opacity: 1; }
 }
 
 @keyframes ndsPulse {
@@ -599,13 +606,13 @@
 
 /* Settings page transition wrapper */
 .animate-page-enter {
-  animation: ndsPageEnter 0.3s ease-out forwards;
+  animation: ndsPageEnter 0.35s var(--ease-out) forwards;
 }
 
 /* Staggered children animations for settings cards - fade only */
 .animate-page-enter > div {
   opacity: 0;
-  animation: ndsStaggerIn 0.35s ease-out forwards;
+  animation: ndsStaggerIn 0.35s var(--ease-out) forwards;
 }
 
 .animate-page-enter > div:nth-child(1) { animation-delay: 0.03s; }
@@ -1015,7 +1022,7 @@
 
 /* Base Toast Animation */
 [data-sonner-toaster] [data-sonner-toast] {
-  animation: toastSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  animation: toastSlideIn 0.45s var(--ease-out) forwards !important;
 }
 
 @keyframes toastSlideIn {
@@ -1298,16 +1305,11 @@ body.graphics-quality-low .glass-modal {
   border: 1px solid #313338 !important;
 }
 
-/* GPU Hızlandırma - Performans Yaması */
-.backdrop-blur-xl, 
-.backdrop-blur-md, 
-.animate-pulse,
-.glass-modal,
-.nds-modal {
-  /* Bu komut tarayıcıyı render işlemini GPU'ya vermeye zorlar */
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
+/* GPU Hızlandırma yaması KALDIRILDI:
+   `.backdrop-blur-*`, `.animate-pulse`, `.glass-modal` sınıflarına `transform: translateZ(0)` zorlamak
+   (1) aynı elemandaki Tailwind `-translate-x-1/2` / `scale-*` değerlerini eziyordu (ortalanmış tooltip'ler kayıyordu),
+   (2) her bulanık/pulse elemanı için ayrı GPU katmanı açıp bellek tüketiyordu.
+   backdrop-filter ve opacity/transform animasyonları tarayıcı tarafından zaten kendiliğinden katmanlanır. */
 
 /* Animasyonları devre dışı bırakma ayarı için (zaten js ile eklemişsin ama css levelinde de olsun) */
 body.disable-animations * {
@@ -1568,3 +1570,29 @@ video {
   height: 100% !important;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ♿ HAREKETİ AZALT (işletim sistemi "animasyonları azalt" ayarı)
+   Hareketi (kayma, ölçek, süzülme) bırakır, solmayı korur — "sıfır animasyon" değil, "daha az ve daha yumuşak".
+   Framer Motion tarafı app/providers.js içindeki <MotionConfig reducedMotion="user"> ile yönetilir.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  /* Süs amaçlı sürekli hareket tamamen durur */
+  .animate-float,
+  .animate-float-slow,
+  .animate-bounce-subtle,
+  .animate-speaking-ring,
+  .animate-shimmer,
+  .animate-pulse-slow {
+    animation: none !important;
+  }
+
+  /* Giriş animasyonları: konum/ölçek değişimi yok, sadece opaklık */
+  @keyframes ndsScaleIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ndsSlideIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ndsSlideUp { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ndsSlideDown { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideInFromLeft { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideOutToRight { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes toastSlideIn { from { opacity: 0; } to { opacity: 1; } }
+}

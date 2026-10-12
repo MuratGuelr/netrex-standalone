@@ -1,10 +1,33 @@
 import { useState, useEffect, useMemo } from "react";
-import { Keyboard, Info, Mic, Volume2, Camera, Clock, Zap, VolumeX, MessageSquare } from "lucide-react";
+import { Keyboard, Info, Mic, Volume2, Camera, Clock, Zap, VolumeX, MessageSquare, Megaphone, Ear } from "lucide-react";
+import { VOICE_GROUPS } from "@/src/store/voiceGroupStore";
 import { useRoomContext } from "@livekit/components-react";
 import { getKeyLabel, isModifierKey, getMouseLabel } from "@/src/utils/keyMap";
 import { toastOnce } from "@/src/utils/toast";
 import KeybindRow from "../KeybindRow";
 import { useSettingsStore } from "@/src/store/settingsStore";
+
+// 🎙️ Basılı tut-konuş eylemleri (eylem kimliği "talk-" ile başlar: tuş bırakılınca da olay gelir)
+const TALK_ROWS = [
+  {
+    id: "talk-all",
+    label: "Herkese Konuş (basılı tut)",
+    description: "Basılı tuttuğun sürece tüm gruplar seni duyar. Bırakınca sadece kendi grubun duyar.",
+    icon: <Megaphone size={16} className="text-amber-400" />,
+  },
+  {
+    id: "talk-whisper",
+    label: "Fısılda (basılı tut)",
+    description: "Basılı tuttuğun sürece sadece en son fısıldadığın kişi seni duyar. Kişiyi seçmek için bir kez kartındaki kulak simgesini basılı tutarak fısılda.",
+    icon: <Ear size={16} className="text-purple-400" />,
+  },
+  ...VOICE_GROUPS.map((g) => ({
+    id: `talk-group-${g.id}`,
+    label: `${g.name}'a da Konuş (basılı tut)`,
+    description: `Basılı tuttuğun sürece kendi grubun ve ${g.name} seni duyar.`,
+    icon: <Megaphone size={16} style={{ color: g.color }} />,
+  })),
+];
 
 const formatKeybinding = (keybinding) => {
   if (!keybinding) return "Atanmadı";
@@ -40,6 +63,8 @@ export default function KeybindSettings() {
   const [ttsStopKeybinding, setTtsStopKeybinding] = useState(null);
   const [ttsToggleKeybinding, setTtsToggleKeybinding] = useState(null);
   const [slotKeybindings, setSlotKeybindings] = useState({});
+  // 🎙️ Basılı tut-konuş tuşları: { "talk-all": binding, "talk-whisper": binding, "talk-group-1": binding, ... }
+  const [talkBindings, setTalkBindings] = useState({});
   const quickStatusPresets = useSettingsStore(s => s.quickStatusPresets);
 
   useEffect(() => {
@@ -73,6 +98,16 @@ export default function KeybindSettings() {
               } catch {}
             }
             setSlotKeybindings(slotBindings);
+
+            // 🎙️ Konuşma grubu tuşlarını yükle
+            const talk = {};
+            for (const row of TALK_ROWS) {
+              try {
+                const binding = await window.netrex.getHotkey(row.id);
+                if (binding) talk[row.id] = binding;
+              } catch {}
+            }
+            setTalkBindings(talk);
         } catch (error) {
             console.error("Failed to load hotkeys:", error);
             setError("Tuş atamaları yüklenirken bir sorun oluştu.");
@@ -132,10 +167,15 @@ export default function KeybindSettings() {
           .filter(([idx]) => recording !== `quick-status-${idx}`)
           .map(([, binding]) => binding);
 
+        const otherTalkBindings = Object.entries(talkBindings)
+          .filter(([id]) => recording !== id)
+          .map(([, binding]) => binding);
+
         const isDuplicate = [
           currentMute, currentDeafen, currentCamera, currentQuickStatus,
           currentTtsStop, currentTtsToggle,
-          ...allSlotBindings
+          ...allSlotBindings,
+          ...otherTalkBindings
         ].some(existing => {
             if (!existing) return false;
             // Mouse
@@ -174,6 +214,9 @@ export default function KeybindSettings() {
           if (recording === "quick-status") setQuickStatusKeybinding(keybinding);
           if (recording === "tts-stop") setTtsStopKeybinding(keybinding);
           if (recording === "tts-toggle") setTtsToggleKeybinding(keybinding);
+          if (recording.startsWith("talk-")) {
+            setTalkBindings(prev => ({ ...prev, [recording]: keybinding }));
+          }
           // ✅ Per-slot quick status keybinding update
           const slotRecordMatch = recording.match(/^quick-status-(\d+)$/);
           if (slotRecordMatch) {
@@ -429,6 +472,56 @@ export default function KeybindSettings() {
             }
           }}
         />
+      </div>
+
+      {/* 🎙️ Konuşma Grupları: basılı tut-konuş tuşları */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card mt-4">
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+
+        <div className="flex bg-gradient-to-r from-[#1a1b1e] via-[#25272a] to-[#1a1b1e] p-4 border-b border-white/10">
+          <div className="flex-1 text-xs font-bold text-[#949ba4] uppercase flex items-center gap-2">
+            <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
+            Konuşma Grupları
+            <span className="normal-case font-normal text-[#5c5e66] ml-1">(tuşa basılı tutarken geçerli, bırakınca normale döner)</span>
+          </div>
+          <div className="w-44 text-center text-xs font-bold text-[#949ba4] uppercase flex items-center justify-center gap-2">
+            <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
+            Tuş Kombinasyonu
+          </div>
+        </div>
+
+        {TALK_ROWS.map((row) => (
+          <KeybindRow
+            key={row.id}
+            label={row.label}
+            description={row.description}
+            shortcut={formatKeybinding(talkBindings[row.id])}
+            isRecording={recording === row.id}
+            recordedKeybinding={recording === row.id ? recordedKeybinding : null}
+            formatKeybinding={formatKeybinding}
+            icon={row.icon}
+            onClick={() => {
+              setRecording(row.id);
+              setRecordedKeybinding(null);
+              setError(null);
+            }}
+            onRemove={async () => {
+              if (window.netrex) {
+                const result = await window.netrex.updateHotkey(row.id, null);
+                if (result?.success) {
+                  setTalkBindings(prev => {
+                    const next = { ...prev };
+                    delete next[row.id];
+                    return next;
+                  });
+                  toastOnce("Tuş ataması kaldırıldı.", "success");
+                } else {
+                  toastOnce(result?.error || "Tuş ataması kaldırılamadı.", "error");
+                }
+              }
+            }}
+          />
+        ))}
       </div>
 
       {/* ✅ Per-Slot Quick Status Hotkeys */}

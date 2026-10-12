@@ -36,7 +36,7 @@ export default function ChatInput({
               <img src={pendingImage} alt="Preview" className="h-32 sm:h-40 rounded-xl object-contain bg-black/40 border border-white/5 shadow-inner" />
               <button
                 onClick={removePendingImage}
-                className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-lg hover:bg-rose-600 transition-all hover:scale-110 active:scale-95 z-10 border border-white/10"
+                className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-lg hover:bg-rose-600 transition hover:scale-110 active:scale-95 z-10 border border-white/10"
               >
                 <Trash2 size={14} />
               </button>
@@ -85,7 +85,7 @@ export default function ChatInput({
         {/* Animated Background Border */}
         <div className="absolute -inset-[1px] bg-gradient-to-r from-indigo-500/40 via-purple-500/40 to-indigo-500/40 rounded-[1.25rem] opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 blur-[2px] pointer-events-none" />
         
-        <div className="relative flex items-center gap-2 bg-[#1e1f22] border border-white/[0.05] rounded-[1.25rem] p-1.5 transition-all duration-300 focus-within:bg-[#232428] shadow-2xl">
+        <div className="relative flex items-center gap-2 bg-[#1e1f22] border border-white/[0.05] rounded-[1.25rem] p-1.5 transition duration-300 focus-within:bg-[#232428] shadow-2xl">
           
           <div className="flex items-center gap-1 pl-1">
             <input
@@ -98,7 +98,7 @@ export default function ChatInput({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-10 h-10 flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-white/5 rounded-xl transition-all duration-200 group/btn"
+              className="w-10 h-10 flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-white/5 rounded-xl transition duration-200 group/btn"
               title="Resim Ekle"
             >
               <PlusCircle size={20} className="group-hover/btn:scale-110 transition-transform" />
@@ -110,7 +110,7 @@ export default function ChatInput({
                 e.stopPropagation();
                 setShowEmojiPicker(!showEmojiPicker);
               }}
-              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 group/btn ${
+              className={`w-10 h-10 flex items-center justify-center rounded-xl transition duration-200 group/btn ${
                 showEmojiPicker
                    ? "text-yellow-400 bg-yellow-400/10 shadow-inner shadow-yellow-400/5 cursor-default"
                    : "text-[#b5bac1] hover:text-yellow-100 hover:bg-white/5"
@@ -145,7 +145,7 @@ export default function ChatInput({
               type="submit"
               disabled={(!messageInput.trim() && !pendingImageFile) || isSending || cooldownRemaining > 0}
               className={`
-                w-10 h-10 rounded-xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group/send
+                w-10 h-10 rounded-xl transition duration-300 flex items-center justify-center relative overflow-hidden group/send
                 ${
                   (!messageInput.trim() && !pendingImageFile) || isSending || cooldownRemaining > 0
                     ? "bg-white/5 text-white/10 cursor-not-allowed"
@@ -180,7 +180,7 @@ export default function ChatInput({
                       key={i}
                       type="button"
                       onClick={(e) => handleEmojiClick(emoji, e)}
-                      className="w-10 h-10 flex items-center justify-center text-xl hover:bg-white/10 rounded-[12px] transition-all duration-200 hover:scale-125 active:scale-90"
+                      className="w-10 h-10 flex items-center justify-center text-xl hover:bg-white/10 rounded-[12px] transition duration-200 hover:scale-125 active:scale-90"
                     >
                       {emoji}
                     </button>

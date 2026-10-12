@@ -39,6 +39,10 @@ function getOrCreateIcon() {
 
     // ✅ Cache miss - yükle ve cache'le
     cachedIcon = nativeImage.createFromPath(iconPath);
+    // macOS menü çubuğu ikonu ~18px olmalı; tam boyutlu PNG tüm alanı kaplıyor
+    if (process.platform === "darwin" && !cachedIcon.isEmpty()) {
+        cachedIcon = cachedIcon.resize({ width: 18, height: 18 });
+    }
     cachedIconPath = iconPath;
     console.log("✅ Tray icon cached:", iconPath);
     

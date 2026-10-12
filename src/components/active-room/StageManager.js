@@ -551,6 +551,7 @@ function StageManager({
 }) {
   const activeConversation = useDMStore((state) => state.activeConversation);
   const shouldShowChat = showChatPanel && (currentTextChannel || activeConversation);
+  const controlBarHidden = useSettingsStore((s) => s.controlBarHidden);
 
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef(null);
@@ -1515,7 +1516,9 @@ function StageManager({
             : "opacity-0 pointer-events-none"
         }`}
         style={{
-          width: shouldShowChat ? `${chatWidth}px` : "0px",
+          // Kişiler paneli gizliyse sohbet tüm alanı kaplar; kontrol çubuğu altta kalsın diye altta boşluk bırakılır
+          width: shouldShowChat ? (showVoicePanel ? `${chatWidth}px` : "100%") : "0px",
+          paddingBottom: shouldShowChat && !showVoicePanel && !controlBarHidden ? "104px" : 0,
           flexShrink: 0,
           transform:
             shouldShowChat
@@ -1845,6 +1848,7 @@ const StageOverlay = React.memo(
     setVolume,
     compact,
     onRequestPointing,
+    onReleasePointing,
     hasPointingPermission,
     isPointingRequested,
     allowedPointers,
@@ -1911,16 +1915,15 @@ const StageOverlay = React.memo(
             {/* 🤝 Collaborative Pointing Request Button */}
             {!isLocalSharing && trackRef.source === Track.Source.ScreenShare && (
               <button
-                onClick={onRequestPointing}
-                disabled={hasPointingPermission}
+                onClick={hasPointingPermission || isPointingRequested ? onReleasePointing : onRequestPointing}
                 className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all duration-200 border ${
-                   hasPointingPermission 
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-default" 
+                   hasPointingPermission
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
                     : isPointingRequested
                       ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                       : "bg-white/5 text-[#b5bac1] border-white/5 hover:bg-white/10 hover:text-white group-hover:border-white/10"
                 }`}
-                title={hasPointingPermission ? "Ekran üzerinde işaretleme yapabilirsiniz" : "Ekran sahibinden işaretçi izni iste"}
+                title={hasPointingPermission ? "İşaretlemeyi kapatmak için tıkla" : isPointingRequested ? "İsteği geri çekmek için tıkla" : "Ekran sahibinden işaretçi izni iste"}
               >
                 <div className="relative flex items-center">
                    {isPointingRequested && !hasPointingPermission && (
@@ -2016,7 +2019,7 @@ const StageOverlay = React.memo(
 
         {/* Bottom Controls - responsive visibility */}
         <div 
-          className={`absolute inset-0 flex flex-col justify-end p-4 sm:p-6 pointer-events-none transition-all duration-500 will-change-opacity ${
+          className={`absolute inset-0 z-50 flex flex-col justify-end p-4 sm:p-6 pointer-events-none transition-all duration-500 will-change-opacity ${
             showOverlay ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
@@ -2142,7 +2145,8 @@ function ScreenShareStage({
   const { 
     requestPointing, 
     grantPointing, 
-    denyPointing, 
+    denyPointing,
+    releasePointing,
     myPermissions,
     pointingRequests,
     allowedPointers 
@@ -2407,6 +2411,7 @@ function ScreenShareStage({
           setVolume={setVolume}
           compact={compact}
           onRequestPointing={() => requestPointing(participant?.identity)}
+          onReleasePointing={() => releasePointing(participant?.identity)}
           hasPointingPermission={hasPointingPermission}
           isPointingRequested={isPointingRequested}
           allowedPointers={allowedPointers}

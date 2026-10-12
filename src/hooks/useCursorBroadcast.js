@@ -6,6 +6,7 @@ import {
   sendPointingRequest,
   sendPointingGrant,
   sendPointingDeny,
+  sendPointingRelease,
 } from '@/src/hooks/useCursorShareController';
 
 /**
@@ -145,9 +146,15 @@ export function useCursorBroadcast({ isScreenSharing = false }) {
     [localParticipant],
   );
 
+  // 🤝 İzleyici: kendi işaretlememi kapat / isteği geri çek
+  const releasePointing = useCallback(
+    (sharerIdentity) => sendPointingRelease(localParticipant, sharerIdentity),
+    [localParticipant],
+  );
+
   return {
     isBroadcasting: isActiveRef.current,
-    requestPointing, grantPointing, denyPointing,
+    requestPointing, grantPointing, denyPointing, releasePointing,
     myPermissions, allowedPointers, pointingRequests,
   };
 }

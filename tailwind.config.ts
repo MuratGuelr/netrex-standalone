@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /**
  * 🎨 Netrex Design System (NDS) v2.0 - Tailwind Configuration
@@ -175,11 +176,11 @@ const config: Config = {
       // ═══════════════════════════════════════════════════════════════
       animation: {
         // Entry animations
-        "nds-fade-in": "ndsFadeIn 200ms ease-out forwards",
-        "nds-scale-in": "ndsScaleIn 200ms ease-out forwards",
-        "nds-slide-in": "ndsSlideIn 300ms ease-out forwards",
-        "nds-slide-up": "ndsSlideUp 300ms ease-out forwards",
-        "nds-slide-down": "ndsSlideDown 300ms ease-out forwards",
+        "nds-fade-in": "ndsFadeIn 280ms cubic-bezier(0.33, 1, 0.68, 1) forwards",
+        "nds-scale-in": "ndsScaleIn 280ms cubic-bezier(0.33, 1, 0.68, 1) forwards",
+        "nds-slide-in": "ndsSlideIn 340ms cubic-bezier(0.33, 1, 0.68, 1) forwards",
+        "nds-slide-up": "ndsSlideUp 340ms cubic-bezier(0.33, 1, 0.68, 1) forwards",
+        "nds-slide-down": "ndsSlideDown 340ms cubic-bezier(0.33, 1, 0.68, 1) forwards",
         
         // Default overrides to stop infinite CPU draining
         "pulse": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) forwards",
@@ -212,20 +213,20 @@ const config: Config = {
           "100%": { opacity: "1" },
         },
         ndsScaleIn: {
-          "0%": { transform: "scale(0.95)", opacity: "0" },
-          "100%": { transform: "scale(1)", opacity: "1" },
+          "0%": { scale: "0.95", opacity: "0" },
+          "100%": { scale: "1", opacity: "1" },
         },
         ndsSlideIn: {
-          "0%": { transform: "translateY(20px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
+          "0%": { translate: "0 20px", opacity: "0" },
+          "100%": { translate: "0 0", opacity: "1" },
         },
         ndsSlideUp: {
-          "0%": { transform: "translateY(10px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
+          "0%": { translate: "0 10px", opacity: "0" },
+          "100%": { translate: "0 0", opacity: "1" },
         },
         ndsSlideDown: {
-          "0%": { transform: "translateY(-10px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
+          "0%": { translate: "0 -10px", opacity: "0" },
+          "100%": { translate: "0 0", opacity: "1" },
         },
 
         // State animations
@@ -289,7 +290,10 @@ const config: Config = {
       transitionTimingFunction: {
         "nds-smooth": "cubic-bezier(0.4, 0, 0.2, 1)",
         "nds-bounce": "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
-        "nds-ease-out": "cubic-bezier(0, 0, 0.2, 1)",
+        "nds-ease-out": "cubic-bezier(0.33, 1, 0.68, 1)",
+        "ui-out": "cubic-bezier(0.33, 1, 0.68, 1)",
+        "ui-in-out": "cubic-bezier(0.77, 0, 0.175, 1)",
+        "ui-drawer": "cubic-bezier(0.32, 0.72, 0, 1)",
       },
 
       // ═══════════════════════════════════════════════════════════════
@@ -343,7 +347,78 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /**
+     * 🎬 Giriş animasyonu yardımcıları: `animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200`
+     *
+     * Kodda 63 yerde bu sözlük kullanılıyor ama `tailwindcss-animate` eklentisi kurulu değildi → sınıflar hiçbir şey yapmıyordu.
+     * Bağımlılık eklemeden aynı sözlüğü burada tanımlıyoruz. Önemli fark: hareket `transform` yerine bağımsız
+     * `translate` / `scale` özellikleriyle yapılır; böylece aynı elemandaki `-translate-x-1/2` (ortalama) bozulmaz.
+     */
+    plugin(({ addBase, addUtilities, matchUtilities, theme }) => {
+      addBase({
+        "@keyframes nds-enter": {
+          from: {
+            opacity: "var(--tw-enter-opacity, 1)",
+            translate: "var(--tw-enter-translate-x, 0) var(--tw-enter-translate-y, 0)",
+            scale: "var(--tw-enter-scale, 1)",
+          },
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          // Hareketi bırak, solmayı koru
+          ".animate-in": {
+            "--tw-enter-translate-x": "0 !important",
+            "--tw-enter-translate-y": "0 !important",
+            "--tw-enter-scale": "1 !important",
+          },
+        },
+      });
+
+      addUtilities({
+        ".animate-in": {
+          animationName: "nds-enter",
+          animationDuration: "300ms",
+          animationTimingFunction: "var(--ease-out, cubic-bezier(0.33, 1, 0.68, 1))",
+          animationFillMode: "backwards",
+        },
+        ".fade-in": { "--tw-enter-opacity": "0" },
+        ".zoom-in": { "--tw-enter-scale": "0.95" },
+        ".zoom-in-95": { "--tw-enter-scale": "0.95" },
+        ".zoom-in-90": { "--tw-enter-scale": "0.9" },
+      });
+
+      // `duration-300` normalde sadece transition süresini ayarlar; animate-in ile birlikte animasyon süresini de ayarla
+      const durations = theme("transitionDuration") as Record<string, string>;
+      const durationUtils: Record<string, Record<string, string>> = {};
+      Object.entries(durations).forEach(([key, value]) => {
+        if (key === "DEFAULT") return;
+        durationUtils[`.animate-in.duration-${key}`] = { animationDuration: `calc(${value} * 1.4)` }; // giriş animasyonu geçişten biraz yavaş hissettirir
+      });
+      addUtilities(durationUtils);
+
+      const spacing = theme("spacing") as Record<string, string>;
+      matchUtilities(
+        { "slide-in-from-top": (v: string) => ({ "--tw-enter-translate-y": `calc(${v} * -1)` }) },
+        { values: spacing },
+      );
+      matchUtilities(
+        { "slide-in-from-bottom": (v: string) => ({ "--tw-enter-translate-y": v }) },
+        { values: spacing },
+      );
+      matchUtilities(
+        { "slide-in-from-left": (v: string) => ({ "--tw-enter-translate-x": `calc(${v} * -1)` }) },
+        { values: spacing },
+      );
+      matchUtilities(
+        { "slide-in-from-right": (v: string) => ({ "--tw-enter-translate-x": v }) },
+        { values: spacing },
+      );
+    }),
+  ],
+  future: {
+    // hover: varyantları sadece gerçek hover'ı olan cihazlarda çalışır (dokunmatikte yanlış hover tetiklenmesin)
+    hoverOnlyWhenSupported: true,
+  },
 };
 
 export default config;

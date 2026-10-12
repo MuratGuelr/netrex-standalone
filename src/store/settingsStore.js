@@ -25,6 +25,7 @@ export const useSettingsStore = create(
 
       // Watch Party
       watchPartyEnabled: false,
+      tabletopEnabled: false, // 🎲 Masa (3D tabletop) modülü — kapalıyken hiçbir şey yüklenmez ve düğme görünmez
       wpAutoMute: false, // Odaya katılınca veya Watch Party başlayınca otomatik mikrofonu kapat
       wpAutoJoin: true,  // Biri Watch Party açtığında otomatik olarak Player'ı (veya mini player'ı) göster
       wpDefaultVolume: 20, // Watch Party açıldığında varsayılan ses seviyesi (yüksek ses koruması)
@@ -80,6 +81,7 @@ export const useSettingsStore = create(
       micGuardEnabled: true, // "Sesiniz karşıya gitmiyor" uyarı sistemi (görsel bildirim)
       micGuardVoice: true, // Uyarıyı ayrıca sesli (TTS) söyle
       micGuardDelaySec: 15, // Mikrofon kapatıldıktan kaç saniye sonra (konuşursa) uyarılsın
+      whisperAutoReply: true, // Bana fısıldayana yanıtım otomatik olarak sadece ona gitsin (konuşma grupları)
       mutedTtsChannels: [], // Sesi kapatılan kanalların ID'leri
       mutedTtsUsers: [], // Sesi kapatılan kullanıcıların ID'leri
 
@@ -197,6 +199,8 @@ export const useSettingsStore = create(
       toggleEnableCamera: () =>
         set((state) => ({ enableCamera: !state.enableCamera })),
         
+      toggleTabletopEnabled: () =>
+        set((state) => ({ tabletopEnabled: !state.tabletopEnabled })),
       toggleWatchPartyEnabled: () =>
         set((state) => ({ watchPartyEnabled: !state.watchPartyEnabled })),
       
@@ -305,6 +309,7 @@ export const useSettingsStore = create(
       setTtsVolume: (volume) => set({ ttsVolume: Math.max(0, Math.min(100, volume)) }),
       setTtsVoiceURI: (uri) => set({ ttsVoiceURI: uri }),
       setTtsOnlyUnfocused: (enabled) => set({ ttsOnlyUnfocused: enabled }),
+      setWhisperAutoReply: (enabled) => set({ whisperAutoReply: !!enabled }),
       setMicGuardEnabled: (enabled) => set({ micGuardEnabled: enabled }),
       setMicGuardVoice: (enabled) => set({ micGuardVoice: enabled }),
       setMicGuardDelaySec: (sec) => set({ micGuardDelaySec: Math.max(0, Math.min(300, Math.round(Number(sec) || 0))) }),

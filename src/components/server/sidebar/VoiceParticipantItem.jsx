@@ -33,7 +33,7 @@ const VoiceParticipantItem = memo(
             ? (e) => onParticipantContextMenu(e, participant, channelId)
             : undefined
         }
-        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors ${
+        className={`animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors ${
           canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         }`}
       >

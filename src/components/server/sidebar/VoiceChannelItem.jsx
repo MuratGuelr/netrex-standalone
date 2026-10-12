@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
+import { VOICE_GROUPS, DEFAULT_GROUP_ID } from "@/src/store/voiceGroupStore";
 import { Volume2, Signal, Lock } from "lucide-react";
 import VoiceParticipantItem from "./VoiceParticipantItem";
 import { USER_MIME, CHANNEL_MIME, hasType, readDragData } from "./dnd";
@@ -26,10 +27,23 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
   onReorder,                  // (draggedChannelId, targetChannelId) => void
   onParticipantContextMenu,   // (e, participant, channelId)
   onParticipantDragStart,     // (e, participant, channelId)
+  groupAssignments,           // { [userId]: groupId } — sadece bağlı olduğum kanalda dolu
+  myIdentity,
 }) {
   // "user": kişi bırakılabilir, "channel": kanal sırası değişecek
   const [dropState, setDropState] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // 🎙️ Konuşma grupları: yalnızca bağlı olduğum kanal için (grup bilgisi odadakilerde paylaşılır)
+  const grouped = useMemo(() => {
+    if (!groupAssignments || Object.keys(groupAssignments).length === 0) return null;
+    const mineId = myIdentity ? (groupAssignments[myIdentity] ?? DEFAULT_GROUP_ID) : null;
+    return VOICE_GROUPS.map((group) => ({
+      group,
+      isMine: group.id === mineId,
+      members: participants.filter((p) => (groupAssignments[p.userId] ?? DEFAULT_GROUP_ID) === group.id),
+    })).filter((g) => g.members.length > 0);
+  }, [groupAssignments, myIdentity, participants]);
 
   const handleDragOver = (e) => {
     if (canMoveUsers && hasType(e, USER_MIME)) {
@@ -136,18 +150,59 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
 
       {/* Participants List (Under Channel Card) */}
       {participants.length > 0 && (
-        <div className="mt-1 ml-3 space-y-0.5">
-          {participants.map((participant) => (
-            <VoiceParticipantItem
-              key={participant.userId}
-              participant={participant}
-              channelId={channel.id}
-              canDrag={canMoveUsers}
-              onParticipantContextMenu={onParticipantContextMenu}
-              onParticipantDragStart={onParticipantDragStart}
-            />
-          ))}
-        </div>
+        grouped ? (
+          // 🎙️ Konuşma grupları açıksa: kişiler renkli grup bloklarında (sadece bağlı olduğum kanalda bilinir)
+          <div className="mt-1 ml-3 space-y-1.5">
+            {grouped.map(({ group, members, isMine }) => (
+              <div
+                key={group.id}
+                className="rounded-xl border-l-2 pl-1 py-1"
+                style={{ borderColor: group.color, background: `${group.color}${isMine ? "14" : "0a"}` }}
+              >
+                <div className="flex items-center gap-1.5 px-2 pb-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: group.color }} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: group.color }}>
+                    {group.name}
+                  </span>
+                  <span className="text-[10px] text-[#5c5e66]">{members.length}</span>
+                  {isMine && (
+                    <span
+                      className="ml-auto text-[8px] font-black px-1.5 py-0.5 rounded text-white tracking-wide"
+                      style={{ background: group.color }}
+                    >
+                      SEN
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  {members.map((participant) => (
+                    <VoiceParticipantItem
+                      key={participant.userId}
+                      participant={participant}
+                      channelId={channel.id}
+                      canDrag={canMoveUsers}
+                      onParticipantContextMenu={onParticipantContextMenu}
+                      onParticipantDragStart={onParticipantDragStart}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1 ml-3 space-y-0.5">
+            {participants.map((participant) => (
+              <VoiceParticipantItem
+                key={participant.userId}
+                participant={participant}
+                channelId={channel.id}
+                canDrag={canMoveUsers}
+                onParticipantContextMenu={onParticipantContextMenu}
+                onParticipantDragStart={onParticipantDragStart}
+              />
+            ))}
+          </div>
+        )
       )}
     </div>
   );
@@ -166,7 +221,9 @@ const VoiceChannelItem = memo(function VoiceChannelItem({
     prevProps.onMoveUser === nextProps.onMoveUser &&
     prevProps.onReorder === nextProps.onReorder &&
     prevProps.onParticipantContextMenu === nextProps.onParticipantContextMenu &&
-    prevProps.onParticipantDragStart === nextProps.onParticipantDragStart
+    prevProps.onParticipantDragStart === nextProps.onParticipantDragStart &&
+    prevProps.groupAssignments === nextProps.groupAssignments &&
+    prevProps.myIdentity === nextProps.myIdentity
   );
 });
 

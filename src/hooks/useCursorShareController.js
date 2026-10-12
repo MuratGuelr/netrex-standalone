@@ -32,6 +32,7 @@ export const CURSOR_TOPICS = {
   HIDE: "cursor_hide",
   REQUEST: "cursor_request",
   PERMISSION: "cursor_permission",
+  RELEASE: "cursor_release", // izleyici kendi işaretçi iznini bırakır / bekleyen isteğini geri çeker
   CLICK: "cursor_click",
   DRAW: "cursor_draw",
   DRAW_CLEAR: "cursor_draw_clear",
@@ -120,6 +121,18 @@ export function sendPointingDeny(localParticipant, targetIdentity) {
   store.removeRemoteCursor(targetIdentity);
   if (wasAllowed) toast.info("İşaretçi izni kaldırıldı.");
   else toast.error("İşaretçi isteği reddedildi.");
+}
+
+// İzleyici kendi tarafında işaretlemeyi kapatır (izin verilmişse bırakır, bekliyorsa isteği geri çeker)
+export function sendPointingRelease(localParticipant, sharerIdentity) {
+  if (!localParticipant) return;
+  publish(localParticipant, CURSOR_TOPICS.RELEASE, { targetId: sharerIdentity });
+  const store = useCursorShareStore.getState();
+  const hadPermission = !!store.myPermissions[sharerIdentity];
+  store.setMyPermission(sharerIdentity, false);
+  store.removePendingRequest(sharerIdentity);
+  clearStrokesOf(localParticipant.identity, sharerIdentity);
+  toast.info(hadPermission ? "İşaretleme kapatıldı." : "İşaretçi isteği geri çekildi.");
 }
 
 // ──────────────────────────────────────
@@ -264,6 +277,20 @@ export function useCursorShareController() {
             if (msg.value) toast.success("Ekran sahibi işaretçi izni verdi!");
             else if (hadPermission) toast.info("Ekran sahibi işaretçi paylaşımını kapattı.");
             else toast.error("Ekran sahibi işaretçi isteğini reddetti.");
+          }
+          break;
+
+        // İzleyici işaretlemeyi kendisi kapattı: yayıncı tarafında izin/istek/imleç temizlenir
+        case CURSOR_TOPICS.RELEASE:
+          if (msg.targetId === identity) {
+            // Overlay'e iletim izin kaydına bakar; izin silinmeden ÖNCE gönder
+            forwardToOverlay(senderId, { type: "draw_clear", participantId: senderId });
+            s.revokePointingPermission(senderId);
+            s.removePointingRequest(senderId);
+            s.removeRemoteCursor(senderId);
+            clearStale(senderId);
+            clearStrokesOf(senderId, identity);
+            toast.dismiss(`ptr-req-${senderId}`);
           }
           break;
 

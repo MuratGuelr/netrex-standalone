@@ -32,6 +32,8 @@ import { useAuthStore } from "@/src/store/authStore";
 import { startWatchParty, endWatchParty } from "@/src/services/watchPartyService";
 import { toastOnce } from "@/src/utils/toast";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
+import { VoiceGroupsControl } from "./VoiceGroupsUI";
+import TabletopButton from "@/src/modules/tabletop/TabletopButton";
 import ScreenShareModal from "../ScreenShareModal";
 import TtsStopBadge from "../TtsStopBadge";
 function ControlButton({
@@ -53,7 +55,7 @@ function ControlButton({
       onClick={handleClick}
       title={tooltip}
       disabled={disabled}
-      className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+      className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 relative group ${
         disabled
           ? "opacity-40 cursor-not-allowed bg-white/5 border border-white/5 text-white/40"
           : danger
@@ -80,6 +82,7 @@ function ControlButton({
 }
 
 export default function BottomControls({
+  voicePanelHidden = false, // Kişiler paneli gizliyse sohbet tüm alanı kaplar; kontrol çubuğu sohbetin kenarına göre kaydırılmaz
   username,
   serverId,
   channelId,
@@ -117,9 +120,11 @@ export default function BottomControls({
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
   const cameraMirrorEffect = useSettingsStore(state => state.cameraMirrorEffect);
   // Seçicisiz abonelik her sohbet mesajında alt kontrolleri de yeniden render ediyordu
-  const { showChatPanel, chatPosition, chatWidth } = useChatStore(
+  const { showChatPanel, chatPosition, chatWidth: storedChatWidth } = useChatStore(
     useShallow((s) => ({ showChatPanel: s.showChatPanel, chatPosition: s.chatPosition, chatWidth: s.chatWidth })),
   );
+  // Kişiler paneli gizliyken sohbet tüm alanı kaplar: kontrol çubuğu yan tarafa değil ortaya yerleşir
+  const chatWidth = voicePanelHidden ? 0 : storedChatWidth;
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const [showScreenShareMenu, setShowScreenShareMenu] = useState(false);
   const screenShareMenuRef = useRef(null);
@@ -1352,10 +1357,11 @@ export default function BottomControls({
       {controlBarHidden && createPortal(
         <button
           onClick={toggleControlBarHidden}
-          className="fixed bottom-6 z-[50000] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition-all duration-700 ease-in-out group overflow-hidden"
+          className="fixed bottom-6 z-[50000] pointer-events-auto flex items-center justify-center w-11 h-11 rounded-xl backdrop-blur-md bg-gradient-to-br from-indigo-600/90 to-indigo-500/80 border border-indigo-400/50 shadow-[0_8px_32px_rgba(79,70,229,0.4),0_0_20px_rgba(99,102,241,0.3)] hover:bg-indigo-500 hover:border-indigo-300 hover:shadow-[0_0_60px_rgba(99,102,241,0.8),0_0_30px_rgba(129,140,248,0.6),inset_0_0_20px_rgba(255,255,255,0.2)] hover:scale-110 active:scale-95 transition duration-700 ease-in-out group overflow-hidden"
           style={{
             right: showChatPanel && chatPosition === "right" ? `${chatWidth + 24}px` : "24px",
             left: showChatPanel && chatPosition === "left" ? `${chatWidth + 24}px` : "auto",
+            ...(voicePanelHidden && showChatPanel ? { bottom: "96px" } : {}),
           }}
           title="Kontrolleri Göster"
         >
@@ -1366,14 +1372,14 @@ export default function BottomControls({
           <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           
           {/* Icon */}
-          <ChevronUp size={22} className="text-white drop-shadow-md relative z-10 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transition-all" strokeWidth={2.5} />
+          <ChevronUp size={22} className="text-white drop-shadow-md relative z-10 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transition" strokeWidth={2.5} />
         </button>,
         document.body
       )}
       
       {/* Floating Control Bar Container */}
       <div 
-        className={`h-controls absolute bottom-[52px] sm:bottom-0 pb-0.5 sm:pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition-all duration-700 ease-in-out origin-bottom-right ${
+        className={`h-controls absolute bottom-[52px] sm:bottom-0 pb-0.5 sm:pb-12 flex items-center justify-center shrink-0 select-none z-50 pointer-events-none transition duration-700 ease-in-out origin-bottom-right ${
           controlBarHidden 
             ? 'opacity-0 pointer-events-none translate-x-[calc(50vw-80px)] scale-[0.15]' 
             : 'opacity-100 translate-x-0 scale-100'
@@ -1387,7 +1393,7 @@ export default function BottomControls({
         <TtsStopBadge />
 
         {/* Kontrol Butonları - Floating Glass Style */}
-        <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-2.5 relative z-10 rounded-xl sm:rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+        <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-2.5 relative z-10 rounded-xl sm:rounded-2xl backdrop-blur-2xl bg-[#131418]/90 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition duration-300 hover:bg-[#131418] hover:border-white/15 hover:shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
           {/* Inner Glow */}
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
 
@@ -1421,7 +1427,7 @@ export default function BottomControls({
             <button
               onClick={toggleCamera}
               disabled={!enableCamera}
-              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 relative group ${
                 !enableCamera
                   ? "opacity-40 cursor-not-allowed bg-white/5 border border-white/5 text-white/40"
                   : isCameraOn
@@ -1450,7 +1456,7 @@ export default function BottomControls({
                     fetchCameras();
                     setShowCameraMenu(!showCameraMenu);
                   }}
-                  className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 active:scale-95 border ${
+                  className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 active:scale-95 border ${
                     showCameraMenu
                       ? "bg-indigo-600 text-white border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
                       : "bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 hover:text-white shadow-[0_0_15px_rgba(99,102,241,0.2)]"
@@ -1481,7 +1487,7 @@ export default function BottomControls({
                     {/* Hızlı Ön Kamera Seçeneği */}
                     <button
                       onClick={() => handleSelectCamera({ facingMode: "user", label: "Ön Kamera (Selfie)" })}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition ${
                         (!selectedCameraDeviceId && cameraFacingMode === "user") || (selectedCameraDeviceId && cameraFacingMode === "user")
                           ? "bg-indigo-600/30 text-white border border-indigo-500/40"
                           : "text-[#dbdee1] hover:bg-white/5 hover:text-white"
@@ -1497,7 +1503,7 @@ export default function BottomControls({
                     {/* Hızlı Arka Kamera Seçeneği */}
                     <button
                       onClick={() => handleSelectCamera({ facingMode: "environment", label: "Arka Kamera (Çevre)" })}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition ${
                         (!selectedCameraDeviceId && cameraFacingMode === "environment") || (selectedCameraDeviceId && cameraFacingMode === "environment")
                           ? "bg-cyan-600/30 text-white border border-cyan-500/40"
                           : "text-[#dbdee1] hover:bg-white/5 hover:text-white"
@@ -1523,7 +1529,7 @@ export default function BottomControls({
                             <button
                               key={item.deviceId || idx}
                               onClick={() => handleSelectCamera({ deviceId: item.deviceId, facingMode: item.isFront ? "user" : "environment", label: item.friendlyName })}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all text-left truncate ${
+                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition text-left truncate ${
                                 isSelected
                                   ? "bg-white/10 text-white border border-white/15 font-semibold"
                                   : "text-[#949ba4] hover:text-white hover:bg-white/5"
@@ -1555,7 +1561,7 @@ export default function BottomControls({
                     setShowScreenShareModal(true);
                   }
                 }}
-                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 relative group ${
                   isScreenSharing
                     ? "bg-[#23a559] text-white shadow-[0_0_20px_rgba(35,165,89,0.3)] hover:bg-[#1b8746] hover:scale-105 hover:shadow-[0_0_25px_rgba(35,165,89,0.4)]"
                     : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
@@ -1593,7 +1599,7 @@ export default function BottomControls({
                         setShowScreenShareMenu(false);
                         setShowScreenShareModal(true);
                       }}
-                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition flex items-center gap-3"
                     >
                       <Monitor size={16} />
                       Ekranı Değiştir
@@ -1604,7 +1610,7 @@ export default function BottomControls({
                         setShowScreenShareMenu(false);
                         stopScreenShare();
                       }}
-                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition flex items-center gap-3"
                     >
                       <MonitorOff size={16} />
                       Paylaşımı Durdur
@@ -1631,7 +1637,7 @@ export default function BottomControls({
                     setShowWatchPartyMenu(!showWatchPartyMenu);
                   }
                 }}
-                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+                className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 relative group ${
                   wpActive 
                     ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95"
                     : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
@@ -1667,7 +1673,7 @@ export default function BottomControls({
                         setShowWatchPartyMenu(false);
                         useWatchPartyStore.getState().setLocalPref('showPlayer', true);
                       }}
-                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
+                      className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition flex items-center gap-3"
                     >
                       <Music size={16} />
                       Oynatıcıyı Göster
@@ -1679,7 +1685,7 @@ export default function BottomControls({
                           setShowWatchPartyMenu(false);
                           endWatchParty(serverId, channelId);
                         }}
-                        className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
+                        className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition flex items-center gap-3"
                       >
                         <PhoneOff size={16} />
                         Watch Party'yi Kapat
@@ -1697,7 +1703,7 @@ export default function BottomControls({
               <div className="w-px h-8 bg-white/10 mx-1"></div>
               <button
                 onClick={onInviteClick}
-                className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300 active:scale-95 group relative"
+                className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition duration-300 active:scale-95 group relative"
                 title="Kişi Davet Et"
               >
                 <div className="relative z-10">
@@ -1706,6 +1712,12 @@ export default function BottomControls({
               </button>
             </div>
           )}
+
+          {/* 🎙️ Konuşma Grupları */}
+          <VoiceGroupsControl />
+
+          {/* 🎲 Masa (isteğe bağlı modül; ayarlardan kapalıysa görünmez) */}
+          <TabletopButton />
 
           {/* 🎧 Spatial Audio Toggle */}
           <div className="relative flex items-center" ref={spatialButtonRef}>
@@ -1719,7 +1731,7 @@ export default function BottomControls({
                   setShowSpatialMenu(!showSpatialMenu);
                 }
               }}
-              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition-all duration-300 relative group ${
+              className={`w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl transition duration-300 relative group ${
                 spatialEnabled
                   ? "bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] active:scale-95"
                   : "bg-white/5 border border-white/10 text-[#b5bac1] hover:bg-white/10 hover:text-white hover:border-white/20 active:scale-95"
@@ -1758,7 +1770,7 @@ export default function BottomControls({
                       setShowSpatialMenu(false);
                       setShowWindow(true);
                     }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition-all flex items-center gap-3"
+                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[#b5bac1] hover:text-white hover:bg-white/5 transition flex items-center gap-3"
                   >
                     <Radar size={16} />
                     Arayüzü Göster
@@ -1770,7 +1782,7 @@ export default function BottomControls({
                       toggleSpatial();
                       setShowWindow(false);
                     }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all flex items-center gap-3"
+                    className="w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-red-400 hover:bg-red-500/10 transition flex items-center gap-3"
                   >
                     <Radar size={16} className="opacity-50" />
                     Spatial Audio'yu Kapat
@@ -1786,7 +1798,7 @@ export default function BottomControls({
           {/* Çıkış butonu */}
           <button
             onClick={onLeave}
-            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-all duration-300 active:scale-95 group relative overflow-hidden"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] transition duration-300 active:scale-95 group relative overflow-hidden"
             title="Bağlantıyı Kes"
           >
             <PhoneOff size={20} className="sm:w-5 sm:h-5 relative z-10" />
@@ -1798,7 +1810,7 @@ export default function BottomControls({
           {/* Hide Button */}
           <button
             onClick={toggleControlBarHidden}
-            className="flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-all duration-200 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30"
+            className="flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition duration-200 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30"
             title="Kontrolleri Gizle"
           >
             <ChevronDown size={16} className="text-white/40 hover:text-indigo-400 transition-colors" />

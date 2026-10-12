@@ -137,6 +137,8 @@ const ensureHotkeyCache = (key) => {
 initHotkeysCache();
 ensureHotkeyCache("tts-stop");
 ensureHotkeyCache("tts-toggle");
+// 🎙️ Konuşma grubu (basılı tut-konuş) tuşları — yeniden başlatınca kaybolmasın
+["talk-all", "talk-whisper", "talk-group-1", "talk-group-2", "talk-group-3"].forEach(ensureHotkeyCache);
 
 function updateHotkeyCache(action, keybinding) {
   hotkeysCache[action] = keybinding;

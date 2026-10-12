@@ -1,4 +1,4 @@
-import { AppWindow, Monitor, Zap, ChevronRight, Film } from "lucide-react";
+import { AppWindow, Monitor, Zap, ChevronRight, Film, Dices } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
@@ -7,6 +7,8 @@ export default function ApplicationSettings() {
   const setCloseToTray = useSettingsStore(state => state.setCloseToTray);
   const checkUpdatesOnStartup = useSettingsStore(state => state.checkUpdatesOnStartup);
   const setCheckUpdatesOnStartup = useSettingsStore(state => state.setCheckUpdatesOnStartup);
+  const tabletopEnabled = useSettingsStore(state => state.tabletopEnabled);
+  const toggleTabletopEnabled = useSettingsStore(state => state.toggleTabletopEnabled);
   const watchPartyEnabled = useSettingsStore(state => state.watchPartyEnabled);
   const toggleWatchPartyEnabled = useSettingsStore(state => state.toggleWatchPartyEnabled);
   
@@ -71,6 +73,27 @@ export default function ApplicationSettings() {
             description="Kapat (X) butonuna bastığında uygulama kapanmak yerine sağ alt köşedeki (saat yanı) simge durumuna küçülür."
             checked={closeToTray}
             onChange={() => setCloseToTray(!closeToTray)}
+          />
+        </div>
+      </div>
+
+      {/* 🎲 Masa (Tabletop) — isteğe bağlı modül */}
+      <div className="glass-strong rounded-2xl border border-white/20 overflow-hidden p-4 mb-3 shadow-soft-lg hover:shadow-xl transition-all duration-300 relative group/card">
+        <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+
+        <h4 className="text-xs font-bold text-[#949ba4] uppercase mb-3 flex items-center gap-2 relative z-10">
+          <div className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center">
+            <Dices size={14} className="text-amber-400" />
+          </div>
+          Masa (Beta)
+        </h4>
+
+        <div className="relative z-10 bg-[#1e1f22] rounded-xl px-4 py-2.5 border border-white/5 hover:border-amber-500/20 transition-colors duration-300">
+          <ToggleSwitch
+            label="Masa Modülünü Etkinleştir"
+            description="Ses odasında arkadaşlarınızla ortak bir 3D masa açar: zar atın, parçaları sürükleyin. Kapalıyken hiçbir kod yüklenmez ve hiç bellek kullanmaz. Açıksa bile masa yalnızca siz açtığınızda yüklenir ve kapatınca bellekten tamamen silinir."
+            checked={tabletopEnabled}
+            onChange={() => toggleTabletopEnabled()}
           />
         </div>
       </div>

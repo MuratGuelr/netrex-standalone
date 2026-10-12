@@ -18,6 +18,7 @@ import { Tv, Maximize, VolumeX, MicOff, Clock, ShieldAlert, Loader2 } from "luci
 import { isMicConnectingAttr } from "@/src/utils/micConnectingAttr";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useSpeakingStore } from "@/src/store/speakingStore";
+import { GroupChip, CardTalkStatus, WhisperHold } from "./VoiceGroupsUI";
 import { useAuthStore } from "@/src/store/authStore";
 import ScreenSharePreviewComponent from "./ScreenSharePreview";
 import { useRemoteSpeaking } from "@/src/hooks/useRemoteSpeaking";
@@ -366,7 +367,13 @@ const UserCard = ({
         }}
         className={`relative w-full h-full rounded-xl flex flex-col items-center justify-center group overflow-hidden bg-[#141418]/85 ${hasScreenShare || shouldShowVideo ? "cursor-pointer" : "cursor-context-menu"}`}
         style={borderStyle}
+        data-vg-card={participant.identity}
       >
+        {/* 🎙️ Konuşma durumu: fısıltı / yanıt / özel konuşma — kartın kenarına bitişik çerçeve + etiket */}
+        {!participant.isLocal && (
+          <CardTalkStatus identity={participant.identity} compact={compact} />
+        )}
+
         {/* 🚀 Speaking Indicator Layer - Her modda göster */}
         {/* ✅ CPU OPT: SIFIR RE-RENDER - Ref ve doğrudan DOM Manipülasyonuna geçirildi */}
         <div
@@ -414,7 +421,7 @@ const UserCard = ({
               {/* Hover overlay - Ekran Paylaşımı İzleme */}
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-[#00000090] opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
+                  className={`absolute inset-0 bg-[#00000090] opacity-0 group-hover/camera:opacity-100 transition duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     // Yayını izle + kamera da açıksa onu da ekle
@@ -426,7 +433,7 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/camera:translate-y-0 transition-all duration-300 hover:bg-[#4752c4] hover:scale-105">
+                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/camera:translate-y-0 transition duration-300 hover:bg-[#4752c4] hover:scale-105">
                     <Tv size={13} strokeWidth={2.5} />
                     Yayını İzle
                   </div>
@@ -436,7 +443,7 @@ const UserCard = ({
               {/* Hover overlay - Kamerayı Büyüt */}
               {!hasScreenShare && shouldShowVideo && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-[#00000085] opacity-0 group-hover/camera:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
+                  className={`absolute inset-0 bg-[#00000085] opacity-0 group-hover/camera:opacity-100 transition duration-300 flex items-center justify-center cursor-pointer z-50 ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setPinnedStreamIds?.((prev) =>
@@ -449,7 +456,7 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-lg backdrop-blur-md border border-white/10 transform translate-y-2 group-hover/camera:translate-y-0 transition-all duration-300 hover:scale-105">
+                  <div className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-lg backdrop-blur-md border border-white/10 transform translate-y-2 group-hover/camera:translate-y-0 transition duration-300 hover:scale-105">
                     <Maximize size={13} strokeWidth={2.5} />
                     Büyüt
                   </div>
@@ -501,7 +508,7 @@ const UserCard = ({
 
               {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
                 <div
-                  className={`absolute inset-0 bg-[#00000095] opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
+                  className={`absolute inset-0 bg-[#00000095] opacity-0 group-hover/avatar:opacity-100 transition duration-300 flex items-center justify-center cursor-pointer z-50 rounded-2xl ${shouldBlur ? "backdrop-blur-[4px]" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setPinnedStreamIds?.((prev) =>
@@ -514,7 +521,7 @@ const UserCard = ({
                     );
                   }}
                 >
-                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/avatar:translate-y-0 transition-all duration-300 hover:bg-[#4752c4] hover:scale-105">
+                  <div className="bg-[#5865f2] text-white px-3 py-1.5 rounded-full font-bold text-[11px] sm:text-xs tracking-wide flex items-center gap-1.5 shadow-[0_4px_14px_rgba(88,101,242,0.4)] transform translate-y-2 group-hover/avatar:translate-y-0 transition duration-300 hover:bg-[#4752c4] hover:scale-105">
                     <Tv size={13} strokeWidth={2.5} />
                     Yayını İzle
                   </div>
@@ -546,8 +553,16 @@ const UserCard = ({
               >
                 {effectiveDisplayName}
               </span>
+              <GroupChip identity={participant.identity} compact={compact} />
             </div>
           </div>
+
+          {/* 🎙️ Kulak simgesi: basılı tutunca sadece bu kişi seni duyar (kartın üstüne gelince görünür) */}
+          {!participant.isLocal && (
+            <div className="absolute top-2 right-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <WhisperHold identity={participant.identity} size={compact ? "sm" : "md"} />
+            </div>
+          )}
 
           {hasScreenShare && screenShareTrack && !isCurrentlyWatching && (
             <ScreenSharePreviewComponent trackRef={screenShareTrack} />
@@ -571,7 +586,7 @@ const UserCard = ({
             }`}
           >
             {!(shouldShowVideo && videoTrack) && (
-              <div className="absolute inset-0 bg-black/50 transition-all duration-300" />
+              <div className="absolute inset-0 bg-black/50 transition duration-300" />
             )}
 
             {/* ✅ Video modunda sağ üstteki minik ikonların altına isim ekle (Sadece sunucu moderasyonu varsa) */}
@@ -661,7 +676,7 @@ const UserCard = ({
             }`}
           >
             {!(shouldShowVideo && videoTrack) && (
-              <div className="absolute inset-0 bg-black/50 transition-all duration-300" />
+              <div className="absolute inset-0 bg-black/50 transition duration-300" />
             )}
 
             <div

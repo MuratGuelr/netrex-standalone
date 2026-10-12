@@ -149,12 +149,13 @@ export default function AppShell({
     let cleanupTriggered;
     if (window.netrex) {
       cleanupTriggered = window.netrex.onHotkeyTriggered((action) => {
-        if (action === "tts-stop") {
+        // inputManager olayı "toggle-<eylem>" olarak gönderir
+        if (action === "toggle-tts-stop") {
           window.speechSynthesis?.cancel();
           const evt = new CustomEvent("netrex-tts-state", { detail: { active: false, text: "" } });
           window.dispatchEvent(evt);
           toast.info("TTS durduruldu.");
-        } else if (action === "tts-toggle") {
+        } else if (action === "toggle-tts-toggle") {
           const sStore = useSettingsStore.getState();
           useSettingsStore.setState({ ttsEnabled: !sStore.ttsEnabled });
           const newState = !sStore.ttsEnabled;
@@ -213,7 +214,7 @@ export default function AppShell({
                 initial={{ opacity: 0, x: -20, width: 0 }}
                 animate={{ opacity: 1, x: 0, width: 240 }}
                 exit={{ opacity: 0, x: -20, width: 0 }}
-                transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
                 className="
                   sidebar
                   h-full
@@ -290,7 +291,7 @@ export default function AppShell({
               <motion.div
                 initial={false}
                 animate={{ width: panelOpen ? 240 : 0 }}
-                transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
                 className="h-full overflow-hidden"
                 // Panelin içi genişlik animasyonu sırasında dışarıyı etkilemesin / yeniden boyanmasın
                 style={{ contain: "layout paint" }}

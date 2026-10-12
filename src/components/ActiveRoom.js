@@ -38,6 +38,9 @@ import { useSpatialAudio } from "@/src/hooks/useSpatialAudio";
 import { useMicGuard } from "@/src/hooks/useMicGuard";
 import { useAudioDeviceSync } from "@/src/hooks/useAudioDeviceSync";
 import { useCursorShareController } from "@/src/hooks/useCursorShareController";
+import { useVoiceGroups } from "@/src/hooks/useVoiceGroups";
+import TabletopHandler from "@/src/modules/tabletop/TabletopHandler";
+import { TalkHud } from "@/src/components/active-room/VoiceGroupsUI";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import SpatialCanvas from "./active-room/SpatialCanvas";
 import { db, rtdb } from "@/src/lib/firebase";
@@ -144,6 +147,12 @@ function MicGuardHandler({ serverMuted, serverDeafened }) {
 function CursorShareHandler() {
   useCursorShareController();
   return null;
+}
+
+// 🎙️ Konuşma grupları — grup senkronu, mikrofon izinleri ve basılı tut-konuş (odada TEK kez bağlanır)
+function VoiceGroupsHandler() {
+  useVoiceGroups();
+  return <TalkHud />;
 }
 
 // 🎧 Spatial Audio Handler — LiveKitRoom içinde çalışmalı
@@ -934,6 +943,7 @@ export default function ActiveRoom({
    * Kullanıcıyı eski odasından temizle (varsa).
    * user_voice_state/{userId} dökümanını kontrol eder.
    */
+  const presenceShouldExistRef = useRef(false); // true iken kaydımız silinirse bekçi geri yazar
   const cleanupOldRoomPresence = useCallback(async () => {
     if (!userId) return;
     try {
@@ -992,6 +1002,7 @@ export default function ActiveRoom({
   // Component unmount veya room değiştiğinde cleanup
   useEffect(() => {
     return () => {
+      presenceShouldExistRef.current = false;
       // Component unmount olduğunda Firebase'den temizle
       if (userId && roomName) {
         removeFromRoomPresence(roomName);
@@ -1004,6 +1015,7 @@ export default function ActiveRoom({
     playSound("left");
 
     // Firebase'den kullanıcıyı çıkar (room presence + voice state)
+    presenceShouldExistRef.current = false;
     if (userId && roomName) {
       await removeFromRoomPresence(roomName);
       await setVoiceState(null);
@@ -1040,6 +1052,7 @@ export default function ActiveRoom({
           isDeafened: useSettingsStore.getState().isDeafened,
         };
         
+        presenceShouldExistRef.current = true;
         await set(presenceRef, userData);
         // 🚀 HAYALET KULLANICI ÖNLEYİCİ: Bağlantı koparsa RTDB'den odadaki kaydı sil
         onDisconnect(presenceRef).remove();
@@ -1085,6 +1098,45 @@ export default function ActiveRoom({
       }
     });
     return () => unsub();
+  }, [hasConnectedOnce, userId, roomName, username, user?.photoURL, setVoiceState]);
+
+  // 🛡️ Presence bekçisi: LiveKit'te odadayken kendi kaydımız dışarıdan silinirse geri yaz.
+  // Kısa kopmada eski RTDB bağlantısının geç tetiklenen onDisconnect().remove()'u yeni yazdığımız kaydı silebiliyor
+  // (ya da handleDisconnect'in remove'u handleConnected'ın set'inden sonra işleniyor) → kullanıcı listeden kaybolur.
+  // Bilerek silme durumlarında (ayrılma, kopma) presenceShouldExistRef false olduğundan geri yazılmaz.
+  useEffect(() => {
+    if (!hasConnectedOnce || !userId || !roomName) return;
+    const presenceRef = ref(rtdb, `room_presence/${roomName}/${userId}`);
+    let timer = null;
+    const unsub = onValue(presenceRef, (snap) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (snap.exists() || !presenceShouldExistRef.current) return;
+      timer = setTimeout(async () => {
+        timer = null;
+        if (!presenceShouldExistRef.current) return;
+        try {
+          const s = useSettingsStore.getState();
+          await set(presenceRef, {
+            userId,
+            username,
+            photoURL: user?.photoURL || null,
+            isMuted: s.isMuted,
+            isDeafened: s.isDeafened,
+          });
+          onDisconnect(presenceRef).remove();
+          await setVoiceState(roomName);
+        } catch (e) {
+          console.warn("Room presence bekçisi geri yazamadı:", e);
+        }
+      }, 500);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsub();
+    };
   }, [hasConnectedOnce, userId, roomName, username, user?.photoURL, setVoiceState]);
 
   // Sync isMuted and isDeafened in real-time with debouncing
@@ -1399,6 +1451,7 @@ export default function ActiveRoom({
 
     // Firebase'den kullanıcıyı çıkar (cleanup + voice state)
     if (userId && roomName) {
+      presenceShouldExistRef.current = false; // bilerek siliyoruz: bekçi geri yazmasın
       await removeFromRoomPresence(roomName);
       await setVoiceState(null);
     }
@@ -1609,6 +1662,7 @@ export default function ActiveRoom({
       <SpatialAudioHandler channelId={roomName} userId={userId} deafened={isDeafened || serverDeafened} />
       <MicGuardHandler serverMuted={serverMuted} serverDeafened={serverDeafened} />
       <CursorShareHandler />
+      <VoiceGroupsHandler />
       <OverlayBridge
         channelName={roomDisplayName}
         serverName={currentServerName}
@@ -1815,6 +1869,7 @@ export default function ActiveRoom({
         renderBottomControls={(stopScreenShare) => (
           hasConnectedOnce && (
             <BottomControls
+              voicePanelHidden={!showVoicePanel}
               username={username}
               serverId={serverId}
               channelId={roomName}
@@ -1868,6 +1923,9 @@ export default function ActiveRoom({
 
       {/* 🎧 Spatial Audio Canvas — Floating panel */}
       <SpatialCanvasWrapper channelId={roomName} localUserId={userId} />
+
+      {/* 🎲 Masa modülü: ayarlardan kapalıysa hiçbir şey yüklenmez / çalışmaz */}
+      <TabletopHandler />
     </LiveKitRoom>
   );
 }

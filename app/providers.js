@@ -6,6 +6,7 @@ import { useIdleDetection } from "@/src/hooks/useIdleDetection";
 import { SettingsApplier } from "@/src/components/SettingsApplier";
 import ToastSystem from "@/src/components/ui/ToastSystem";
 import { useEffect, useRef, memo } from "react";
+import { MotionConfig } from "framer-motion";
 
 // ✅ OPTIMIZATION #5: Memoize ToastSystem to prevent re-renders
 const MemoizedToast = memo(ToastSystem);
@@ -41,10 +42,12 @@ export function Providers({ children }) {
   }, []); // Empty deps - only run once
 
   return (
-    <>
+    // reducedMotion="user": işletim sistemi "animasyonları azalt" diyorsa Framer Motion kayma/ölçek/layout hareketini
+    // bırakır, opaklık geçişlerini korur
+    <MotionConfig reducedMotion="user">
       <SettingsApplier />
       {children}
       <MemoizedToast />
-    </>
+    </MotionConfig>
   );
 }

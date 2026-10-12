@@ -62,7 +62,7 @@ const MessageItem = memo(({
         className={`
           group flex pr-4 pl-[72px] relative w-full
           ${!isSequence ? "mt-[17px]" : "mt-[2px]"}
-          hover:bg-white/[0.03] -mx-4 px-4 py-0.5 transition-all duration-75
+          hover:bg-white/[0.03] -mx-4 px-4 py-0.5 transition duration-75
         `}
         onContextMenu={(e) => onContextMenu(e, message, isInSequence)}
       >
@@ -101,7 +101,7 @@ const MessageItem = memo(({
                   <img 
                     src={message.imageUrl} 
                     alt="Uploaded content" 
-                    className="w-full h-auto max-h-[300px] sm:max-h-[450px] object-cover hover:scale-[1.01] transition-transform duration-500 cursor-zoom-in"
+                    className="w-full h-auto max-h-[300px] sm:max-h-[450px] object-cover hover:scale-[1.01] transition-transform duration-300 ease-ui-out cursor-zoom-in"
                     onClick={(e) => {
                       e.stopPropagation();
                       onImageClick(message.imageUrl);
@@ -120,7 +120,7 @@ const MessageItem = memo(({
                   <div className="relative group/edit">
                     <textarea
                       autoFocus
-                      className="w-full bg-[#1e1f22] text-[#dcddde] text-[14px] p-3 rounded-xl border border-indigo-500/50 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all duration-300 min-h-[44px] max-h-[300px] resize-none overflow-hidden"
+                      className="w-full bg-[#1e1f22] text-[#dcddde] text-[14px] p-3 rounded-xl border border-indigo-500/50 outline-none focus:ring-4 focus:ring-indigo-500/10 transition duration-300 min-h-[44px] max-h-[300px] resize-none overflow-hidden"
                       value={message.tempText}
                       onChange={(e) => message.onTempTextChange(e.target.value)}
                       onKeyDown={(e) => {
@@ -198,7 +198,7 @@ const MessageItem = memo(({
                             message.onToggleReaction(emoji);
                         }}
                         className={`
-                          flex items-center gap-1.5 px-2 py-0.5 rounded-lg border transition-all duration-200
+                          flex items-center gap-1.5 px-2 py-0.5 rounded-lg border transition duration-200
                           ${hasReacted 
                             ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300" 
                             : "bg-white/5 border-white/5 text-[#949ba4] hover:bg-white/10 hover:border-white/10"}

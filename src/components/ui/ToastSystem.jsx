@@ -128,14 +128,14 @@ const ToastItem = ({ toast }) => {
           <div className="relative shrink-0">
              {toast.type === 'chat' ? (
                 <div 
-                  className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-xl relative overflow-hidden transition-transform duration-500 group-hover:scale-105"
+                  className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-xl relative overflow-hidden transition-transform duration-300 group-hover:scale-105"
                   style={{ background: toast.avatarColor || 'var(--nds-accent-primary)' }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                   {toast.username?.charAt(0).toUpperCase()}
                 </div>
              ) : (
-                <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center bg-white/[0.03] border border-white/5 relative transition-transform duration-500 group-hover:scale-105 group-hover:bg-white/[0.06]">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center bg-white/[0.03] border border-white/5 relative transition-transform duration-300 group-hover:scale-105 group-hover:bg-white/[0.06]">
                    <span className="scale-75 sm:scale-100">{current.icon}</span>
                    {/* Animated pulse only on high quality */}
                    {!['chat', 'info'].includes(toast.type) && !isPotato && !disableAnimations && (
@@ -185,11 +185,11 @@ const ToastItem = ({ toast }) => {
 
           {/* Action/Close Area */}
           <div className="shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 relative mt-0.5">
-             <div className="absolute inset-0 flex items-center justify-center scale-100 group-hover:scale-0 opacity-100 group-hover:opacity-0 transition-all duration-300">
+             <div className="absolute inset-0 flex items-center justify-center scale-100 group-hover:scale-90 opacity-100 group-hover:opacity-0 transition-[transform,opacity] duration-300 ease-ui-out">
                 <ChevronRight className="text-[#4e5058] sm:scale-100 scale-75" size={18} />
              </div>
              
-             <div className="absolute inset-0 flex items-center justify-center scale-0 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-300">
+             <div className="absolute inset-0 flex items-center justify-center scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-[transform,opacity] duration-300 ease-ui-out">
                 <div 
                    onClick={(e) => {
                      e.stopPropagation();

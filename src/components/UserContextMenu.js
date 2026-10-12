@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useServerPermission } from "@/src/hooks/useServerPermission";
-import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
+import { useRoomContext, useLocalParticipant, useParticipants } from "@livekit/components-react";
 import { useServerStore } from "@/src/store/serverStore";
 import { useAuthStore } from "@/src/store/authStore";
 import { useFriendStore } from "@/src/store/friendStore";
@@ -9,6 +9,65 @@ import ModerationPanel from "@/src/components/ModerationPanel";
 import UserPhoto from "@/src/components/ui/UserPhoto";
 import { AvatarFallback } from "@/src/components/ui/Avatar";
 import QuickStatusManager from "@/src/components/settings/QuickStatusManager";
+import { useVoiceGroupStore, VOICE_GROUPS, DEFAULT_GROUP_ID } from "@/src/store/voiceGroupStore";
+import { moveToGroup, splitWith } from "@/src/hooks/useVoiceGroups";
+import { WhisperHold } from "@/src/components/active-room/VoiceGroupsUI";
+import { Split } from "lucide-react";
+
+/** Sağ tık menüsünde: tek tıkla ayrı konuş + gruba taşı + basılı tut fısılda */
+function VoiceGroupQuickActions({ participant, onDone }) {
+  const { localParticipant } = useLocalParticipant();
+  const groupId = useVoiceGroupStore((s) => s.assignments[participant.identity] ?? DEFAULT_GROUP_ID);
+  const participants = useParticipants();
+  const myGroupId = useVoiceGroupStore((s) =>
+    s.localIdentity ? (s.assignments[s.localIdentity] ?? DEFAULT_GROUP_ID) : DEFAULT_GROUP_ID,
+  );
+  const together = groupId === myGroupId;
+
+  return (
+    <div className="px-2 space-y-2">
+      <div className="text-[10px] font-bold text-[#949ba4] uppercase tracking-wider">Konuşma Grubu</div>
+      <div className="flex items-center gap-1.5">
+        {VOICE_GROUPS.map((g) => {
+          const active = groupId === g.id;
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => {
+                moveToGroup(localParticipant, participant.identity, g.id);
+                onDone?.();
+              }}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
+                active ? "text-white" : "bg-white/5 text-[#949ba4] hover:text-white hover:bg-white/10"
+              }`}
+              style={active ? { background: g.color, boxShadow: `0 0 10px ${g.color}55` } : undefined}
+            >
+              {g.name}
+            </button>
+          );
+        })}
+      </div>
+      {/* Tek tıkla: ben ve o ayrı bir gruba geçeriz */}
+      {together && participants.length > 2 && (
+        <button
+          type="button"
+          onClick={() => {
+            splitWith(localParticipant, participant.identity, participants.map((p) => p.identity));
+            onDone?.();
+          }}
+          className="w-full py-2 rounded-lg bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 hover:bg-indigo-500 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+        >
+          <Split size={14} />
+          Onunla ayrı konuş
+        </button>
+      )}
+
+      {/* Basılı tut: sadece bu kişi duyar (menü açık kalır) */}
+      <WhisperHold identity={participant.identity} showLabel className="w-full justify-center" />
+    </div>
+  );
+}
 
 /**
  * ✅ ULTRA-OPTIMIZED UserContextMenu v3.1
@@ -201,6 +260,9 @@ export default function UserContextMenu({
                  })()}
                </div>
             )}
+
+            {/* 🎙️ Konuşma grubu + fısıltı hedefi (sağ tıkla hızlı erişim) */}
+            <VoiceGroupQuickActions participant={participant} onDone={onClose} />
 
             {/* ✅ Isolated VolumeSlider */}
             <VolumeSlider participantIdentity={participant.identity} />

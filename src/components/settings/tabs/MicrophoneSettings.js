@@ -6,6 +6,7 @@ import InputSensitivitySection from "./voice/InputSensitivitySection";
 import NoiseSuppressionSection from "./voice/NoiseSuppressionSection";
 import AdvancedAudioSection from "./voice/AdvancedAudioSection";
 import MicGuardSection from "./voice/MicGuardSection";
+import VoiceGroupsSection from "./voice/VoiceGroupsSection";
 
 export default function MicrophoneSettings({ isSettingsModalOpen }) {
   const [audioInputs, setAudioInputs] = useState([]);
@@ -56,6 +57,9 @@ export default function MicrophoneSettings({ isSettingsModalOpen }) {
 
       {/* 4. Mikrofon kapalıyken konuşursam beni uyar */}
       <MicGuardSection />
+
+      {/* 5. Konuşma grupları: fısıltıya otomatik yanıt */}
+      <VoiceGroupsSection />
     </div>
   );
 }

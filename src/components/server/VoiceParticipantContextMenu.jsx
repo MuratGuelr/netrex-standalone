@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRightLeft, LogOut, Volume2, UserPlus } from "lucide-react";
+import { ArrowRightLeft, LogOut, Volume2, UserPlus, Split } from "lucide-react";
+import { VOICE_GROUPS, DEFAULT_GROUP_ID } from "@/src/store/voiceGroupStore";
 
 /**
  * 🎛️ Sesli kanaldaki bir kişiye sağ tık menüsü (Discord'daki gibi)
@@ -21,6 +22,7 @@ export default function VoiceParticipantContextMenu({
   voiceChannels,      // sunucudaki sesli kanallar
   canMove,
   canDisconnect,
+  group,              // konuşma grubu bilgisi/eylemleri (yoksa null): { groupId, isSelf, onMoveToGroup, onSplit, roomSize, myGroupId }
   onMove,             // (channelId) => void
   onDisconnect,       // () => void
   onClose,
@@ -64,7 +66,7 @@ export default function VoiceParticipantContextMenu({
     };
   }, [onClose]);
 
-  if (!canMove && !canDisconnect) return null;
+  if (!canMove && !canDisconnect && !group) return null;
 
   return createPortal(
     <div
@@ -82,9 +84,70 @@ export default function VoiceParticipantContextMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="px-2.5 pt-1 pb-2 border-b border-white/[0.06] mb-1">
-        <span className="text-xs font-bold text-white truncate block">{displayName}</span>
-        <span className="text-[10px] text-[#5c5e66]">Sesli kanal yönetimi</span>
+        <span className="text-xs font-bold text-white truncate block">
+          {displayName}
+          {group?.isSelf ? " (Sen)" : ""}
+        </span>
+        <span className="text-[10px] text-[#5c5e66]">{canMove || canDisconnect ? "Sesli kanal yönetimi" : "Konuşma grubu"}</span>
       </div>
+
+      {/* 🎙️ Konuşma grubu: gruba taşı / gruptan çık / onunla ayrı konuş */}
+      {group && (
+        <div className="px-1 pb-2 mb-1 border-b border-white/[0.06]">
+          <div className="px-1.5 pt-1 pb-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[#72767d] font-semibold">
+            <Split size={11} />
+            Konuşma Grubu
+          </div>
+          <div className="flex items-center gap-1.5 px-1">
+            {VOICE_GROUPS.map((g) => {
+              const active = group.groupId === g.id;
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => {
+                    group.onMoveToGroup(g.id);
+                    onClose();
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
+                    active ? "text-white" : "bg-white/5 text-[#949ba4] hover:text-white hover:bg-white/10"
+                  }`}
+                  style={active ? { background: g.color, boxShadow: `0 0 10px ${g.color}55` } : undefined}
+                >
+                  {g.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Gruptan çık: Grup 1'e (ana gruba) dön */}
+          {group.groupId !== DEFAULT_GROUP_ID && (
+            <button
+              onClick={() => {
+                group.onMoveToGroup(DEFAULT_GROUP_ID);
+                onClose();
+              }}
+              className="mt-1.5 w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#dbdee1] hover:bg-white/[0.06] hover:text-white transition-colors"
+            >
+              <LogOut size={14} className="text-indigo-400" />
+              {group.isSelf ? "Gruptan Çık" : "Gruptan Çıkar"}
+            </button>
+          )}
+
+          {/* Onunla ayrı konuş (ikimiz de aynı gruptayız ve odada 3+ kişi var) */}
+          {!group.isSelf && group.groupId === group.myGroupId && group.roomSize > 2 && (
+            <button
+              onClick={() => {
+                group.onSplit();
+                onClose();
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#dbdee1] hover:bg-white/[0.06] hover:text-white transition-colors"
+            >
+              <Split size={14} className="text-indigo-400" />
+              Onunla Ayrı Konuş
+            </button>
+          )}
+        </div>
+      )}
 
       {canBringToMe && (
         <button

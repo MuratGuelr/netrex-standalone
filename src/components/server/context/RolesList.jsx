@@ -30,7 +30,7 @@ const RoleItem = memo(({ role, hasRole, isLoading, onToggle }) => {
       
       <div className={`
         w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200
-        ${hasRole ? 'bg-indigo-500 text-white scale-100' : 'bg-white/5 text-transparent scale-0 group-hover/role:scale-100 group-hover/role:bg-white/10'}
+        ${hasRole ? 'bg-indigo-500 text-white scale-100' : 'bg-white/5 text-transparent scale-90 group-hover/role:scale-100 group-hover/role:bg-white/10'}
       `}>
         <Check size={10} strokeWidth={3} />
       </div>

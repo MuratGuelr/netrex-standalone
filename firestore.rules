@@ -157,6 +157,63 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    // ───────── Masa Atölyesi (3D masa modları) ─────────
+    // Modlar yalnızca VERİdir (JSON + görsel), kod içermez. Veri `parts` alt koleksiyonunda parça parça tutulur.
+    // BİLİNEN SINIR: sayaçlar (indirme/puan/bildirim) istemciden artırılır; kurallar her seferinde yalnızca +1 / makul aralığa izin
+    // verir ama kötü niyetli biri yine de sayıları şişirebilir. Telifli içerik için "bildir" düğmesi var (5 bildirimde liste dışı).
+    match /tabletop_mods/{modId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.downloads == 0
+        && request.resource.data.ratingSum == 0
+        && request.resource.data.ratingCount == 0
+        && request.resource.data.reports == 0
+        && request.resource.data.parts is int
+        && request.resource.data.parts >= 1
+        && request.resource.data.parts <= 6;
+      allow update: if signedIn() && (
+        // yazar: yalnızca durum / açıklama / etiketleri değiştirir
+        (resource.data.authorId == request.auth.uid && changesOnly(['status', 'description', 'tags']))
+        // herkes: indirme sayacını 1 artırır
+        || (changesOnly(['downloads']) && request.resource.data.downloads == resource.data.downloads + 1)
+        // herkes: bildirim sayacını 1 artırır
+        || (changesOnly(['reports']) && request.resource.data.reports == resource.data.reports + 1)
+        // herkes: puan toplamı / adedi (tek puanın izin verdiği aralıkta)
+        || (changesOnly(['ratingSum', 'ratingCount'])
+            && request.resource.data.ratingCount - resource.data.ratingCount >= 0
+            && request.resource.data.ratingCount - resource.data.ratingCount <= 1
+            && request.resource.data.ratingSum - resource.data.ratingSum >= -4
+            && request.resource.data.ratingSum - resource.data.ratingSum <= 5)
+      );
+      allow delete: if signedIn() && resource.data.authorId == request.auth.uid;
+
+      match /parts/{n} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && get(/databases/$(database)/documents/tabletop_mods/$(modId)).data.authorId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['i', 'd'])
+          && request.resource.data.d is string
+          && request.resource.data.d.size() <= 750000;
+        allow delete: if signedIn()
+          && get(/databases/$(database)/documents/tabletop_mods/$(modId)).data.authorId == request.auth.uid;
+      }
+
+      match /ratings/{uid} {
+        allow read: if signedIn();
+        allow create, update: if isSelf(uid)
+          && request.resource.data.value is int
+          && request.resource.data.value >= 1
+          && request.resource.data.value <= 5;
+      }
+
+      match /reports/{uid} {
+        allow read: if isSelf(uid);
+        allow create: if isSelf(uid);
+      }
+    }
+
     // Yukarıda tanımlanmayan her şey kapalı
     match /{document=**} {
       allow read, write: if false;

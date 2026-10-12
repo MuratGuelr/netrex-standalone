@@ -857,6 +857,27 @@ node scripts/fix-electron-paths.js
 - Mesajlar Firestore'a yazılıyor mu? (Firebase Console'da kontrol edin)
 - LiveKit Data Channel çalışıyor mu? (Network tab'de kontrol edin)
 
+### macOS: "Netrex zarar görmüş, açılamıyor"
+
+Uygulama Apple ile imzalanmadığı (ad-hoc imza) için Gatekeeper indirilen dosyayı engeller. `Netrex.app`'i Applications'a taşıdıktan sonra Terminal'de:
+
+```bash
+xattr -cr /Applications/Netrex.app
+```
+
+### macOS: Ekran paylaşımı izni sürekli isteniyor / çalışmıyor
+
+Ad-hoc imzalı uygulamalarda macOS izni imzaya bağlar; her yeni sürümde imza değişir ve eski izin kaydı geçersiz kalır (ayarlarda açık görünse bile). Çözüm:
+
+```bash
+tccutil reset ScreenCapture com.netrex.app
+tccutil reset Camera com.netrex.app
+tccutil reset Microphone com.netrex.app
+tccutil reset Accessibility com.netrex.app
+```
+
+Sonra Netrex'i tamamen kapatıp (Cmd+Q) tekrar açın, izin istendiğinde verin ve **Netrex'i bir kez daha kapatıp açın**. Ekran kaydı izni macOS'ta uygulama yeniden başlatılana kadar devreye girmez.
+
 ---
 
 ## 💰 Maliyet Optimizasyonu
