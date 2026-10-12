@@ -5,6 +5,7 @@ const {
   autoUpdater,
   app,
   screen,
+  systemPreferences,
 } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
@@ -556,6 +557,15 @@ function registerIpcHandlers(
   // ✅ SCREEN SHARE - Optimized Thumbnails
   // ============================================
   ipcMain.handle("get-desktop-sources", async () => {
+    // macOS: Ekran kaydı izni yoksa kaynaklar boş/siyah gelir -> ayarları aç
+    if (process.platform === "darwin") {
+      const status = systemPreferences.getMediaAccessStatus("screen");
+      if (status === "denied" || status === "restricted") {
+        shell.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        );
+      }
+    }
     const s = await desktopCapturer.getSources({
       types: ["window", "screen"],
       thumbnailSize: { width: 150, height: 150 }, // ✅ 400 → 150
@@ -630,6 +640,13 @@ function registerIpcHandlers(
   // ============================================
   ipcMain.handle("start-input-listener", () => {
     if (inputManager) {
+      // macOS: Erişilebilirlik izni olmadan uiohook olay yakalayamaz (ve çökebilir)
+      if (
+        process.platform === "darwin" &&
+        !systemPreferences.isTrustedAccessibilityClient(true)
+      ) {
+        return { success: false, error: "accessibility-permission-required" };
+      }
       inputManager.start();
       return { success: true };
     }

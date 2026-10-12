@@ -188,6 +188,8 @@ if (!gotTheLock) {
       const { systemPreferences, Menu } = require('electron');
       systemPreferences.askForMediaAccess("microphone");
       systemPreferences.askForMediaAccess("camera");
+      // Global kısayollar (uiohook) için Erişilebilirlik izni - yoksa sistem diyaloğunu açar
+      systemPreferences.isTrustedAccessibilityClient(true);
       
       const template = [
         {

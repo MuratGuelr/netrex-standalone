@@ -71,9 +71,14 @@
       "target": ["dmg", "zip"],
       "icon": "public/logo.png",
       "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "identity": "-",
+      "entitlements": "build-resources/entitlements.mac.plist",
+      "entitlementsInherit": "build-resources/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Netrex, sesli sohbet için mikrofonunuza ihtiyaç duyar.",
         "NSCameraUsageDescription": "Netrex, görüntülü sohbet için kameranıza ihtiyaç duyar.",
+        "NSScreenCaptureUsageDescription": "Netrex, ekran paylaşımı için ekran kaydı iznine ihtiyaç duyar.",
         "NSAccessibilityUsageDescription": "Netrex, global klavye kısayolları (bas-konuş) için erişilebilirlik iznine ihtiyaç duyar."
       }
     }

@@ -1090,7 +1090,11 @@ export default function BottomControls({
 
       // Audio constraint'leri kaynak tipine göre ayarla
       let audioConstraints = false;
-      if (withAudio) {
+      // macOS'ta Chromium masaüstü/sistem sesi yakalamayı desteklemiyor;
+      // audio constraint verilirse getUserMedia tamamen hata veriyor.
+      const isMacPlatform =
+        typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || "");
+      if (withAudio && !(window.netrex && isMacPlatform)) {
         if (audioMode === "app" || !isScreen) {
           // Uygulama paylaşımı: Sadece o uygulamanın sesi
           audioConstraints = {
