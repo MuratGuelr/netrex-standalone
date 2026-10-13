@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useGroupAdjustedVolumes } from '@/src/hooks/useGroupAdjustedVolumes';
 import { useParticipants } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useParticipantVolumeStore } from '@/src/store/participantVolumeStore';
@@ -16,7 +17,9 @@ import { useServerStore } from '@/src/store/serverStore';
  */
 export function useApplyParticipantVolumes() {
   const participants = useParticipants();
-  const volumes = useParticipantVolumeStore(s => s.volumes);
+  const baseVolumes = useParticipantVolumeStore(s => s.volumes);
+  const identities = useMemo(() => (participants || []).map(p => p.identity).sort(), [participants]);
+  const volumes = useGroupAdjustedVolumes(baseVolumes, identities);
   const spatialEnabled = useSpatialAudioStore(s => s.enabled);
   const isDeafened = useSettingsStore(s => s.isDeafened);
   const serverDeafened = useServerStore(s => s.serverDeafened || false);

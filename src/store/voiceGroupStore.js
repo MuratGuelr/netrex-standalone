@@ -44,6 +44,17 @@ export const useVoiceGroupStore = create((set, get) => ({
   whisperTargetId: null,
   incoming: {}, // { [speakerIdentity]: { mode, at } }
 
+  // Başka grupları dinleyenler: { [identity]: number[] } — o kişi hangi grupların sesini duymak istiyor.
+  // Gönderen, kendi grubunu dinleyen kişilere de sesini açar (bkz. computeAudience).
+  listeners: {},
+  setListener: (identity, groups) =>
+    set((s) => {
+      const next = { ...s.listeners };
+      if (groups && groups.length) next[identity] = groups;
+      else delete next[identity];
+      return { listeners: next };
+    }),
+
   // Bana fısıldayan kişiye otomatik yanıt: o kişi konuşurken ve bitince kısa bir süre sesim SADECE ona gider.
   // until: Infinity = hâlâ fısıldıyor, sayı = yanıt penceresinin bitiş zamanı (ms)
   replyTo: null, // { id, until }
@@ -106,6 +117,7 @@ export const useVoiceGroupStore = create((set, get) => ({
       talk: IDLE_TALK,
       whisperTargetId: null,
       incoming: {},
+      listeners: {},
       replyTo: null,
     }),
 }));
@@ -122,7 +134,7 @@ export function isReplyActive(replyTo, remoteIdentities) {
  * @returns {Set<string>} duyabilecek uzak katılımcı kimlikleri
  */
 export function computeAudience(myIdentity, remoteIdentities, state) {
-  const { assignments, talk, whisperTargetId, replyTo } = state;
+  const { assignments, talk, whisperTargetId, replyTo, listeners = {} } = state;
   const groupOf = (id) => assignments[id] ?? DEFAULT_GROUP_ID;
   const myGroup = groupOf(myIdentity);
   const out = new Set();
@@ -142,6 +154,44 @@ export function computeAudience(myIdentity, remoteIdentities, state) {
     if (talk.mode === TALK_MODES.ALL) out.add(id);
     else if (g === myGroup) out.add(id);
     else if (talk.mode === TALK_MODES.GROUP && g === talk.groupId) out.add(id);
+    else if (listeners[id]?.includes(myGroup)) out.add(id); // o kişi benim grubumu dinliyor
   }
   return out;
+}
+
+/** Özel sohbet (fısıltı) sürerken diğer herkesin sesi bu çarpanla kısılır: karşılıklı konuşan iki kişi öne çıkar. */
+export const DUCK_FACTOR = 0.3;
+
+/** Şu an özel konuştuğum kişiler: fısıldadığım, yanıtımın gittiği, bana fısıldayanlar. */
+function getPartners(state, remoteIdentities) {
+  const { talk, whisperTargetId, replyTo, incoming } = state;
+  const partners = new Set();
+  if (talk.mode === TALK_MODES.WHISPER && whisperTargetId) partners.add(whisperTargetId);
+  if (talk.mode === TALK_MODES.NORMAL && isReplyActive(replyTo, remoteIdentities)) partners.add(replyTo.id);
+  Object.entries(incoming).forEach(([id, v]) => {
+    if (v.mode === TALK_MODES.WHISPER) partners.add(id);
+  });
+  return partners;
+}
+
+/**
+ * Bir kişinin sesine uygulanacak çarpan (0–1), kullanıcının kendi ses ayarının ÜSTÜNE biner:
+ *  - Özel sohbet ettiğim kişi: tam ses.
+ *  - Bana doğrudan konuşan (grup/herkes): tam ses.
+ *  - Başka gruptaki: o grup için ayarladığım "dinleme" seviyesi (0 = duymam).
+ *  - Özel sohbet sürerken partner dışındaki herkes kısılır.
+ */
+export function computeListenFactor(identity, state, groupListenVolumes = {}, remoteIdentities) {
+  const { assignments, localIdentity, incoming } = state;
+  const partners = getPartners(state, remoteIdentities);
+  if (partners.has(identity)) return 1;
+
+  const groupOf = (id) => assignments[id] ?? DEFAULT_GROUP_ID;
+  let factor = 1;
+  if (!incoming[identity] && localIdentity && groupOf(identity) !== groupOf(localIdentity)) {
+    const v = groupListenVolumes[groupOf(identity)];
+    factor = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
+  }
+  if (partners.size > 0) factor *= DUCK_FACTOR;
+  return factor;
 }

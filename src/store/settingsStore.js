@@ -81,6 +81,7 @@ export const useSettingsStore = create(
       micGuardEnabled: true, // "Sesiniz karşıya gitmiyor" uyarı sistemi (görsel bildirim)
       micGuardVoice: true, // Uyarıyı ayrıca sesli (TTS) söyle
       micGuardDelaySec: 15, // Mikrofon kapatıldıktan kaç saniye sonra (konuşursa) uyarılsın
+      groupListenVolumes: {}, // Başka konuşma gruplarını dinleme seviyesi (0–100): { [groupId]: seviye }, yoksa 0 = duyulmaz
       whisperAutoReply: true, // Bana fısıldayana yanıtım otomatik olarak sadece ona gitsin (konuşma grupları)
       mutedTtsChannels: [], // Sesi kapatılan kanalların ID'leri
       mutedTtsUsers: [], // Sesi kapatılan kullanıcıların ID'leri
@@ -310,6 +311,13 @@ export const useSettingsStore = create(
       setTtsVoiceURI: (uri) => set({ ttsVoiceURI: uri }),
       setTtsOnlyUnfocused: (enabled) => set({ ttsOnlyUnfocused: enabled }),
       setWhisperAutoReply: (enabled) => set({ whisperAutoReply: !!enabled }),
+      setGroupListenVolume: (groupId, volume) =>
+        set((state) => ({
+          groupListenVolumes: {
+            ...state.groupListenVolumes,
+            [groupId]: Math.max(0, Math.min(100, Math.round(Number(volume) || 0))),
+          },
+        })),
       setMicGuardEnabled: (enabled) => set({ micGuardEnabled: enabled }),
       setMicGuardVoice: (enabled) => set({ micGuardVoice: enabled }),
       setMicGuardDelaySec: (sec) => set({ micGuardDelaySec: Math.max(0, Math.min(300, Math.round(Number(sec) || 0))) }),

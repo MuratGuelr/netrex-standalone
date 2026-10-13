@@ -28,6 +28,7 @@ export const VG_TOPICS = {
   STATE: "vg_state",
   REQUEST: "vg_request",
   TALK: "vg_talk",
+  LISTEN: "vg_listen", // hangi (başka) grupları dinlemek istediğim; gönderenler sesini bana da açar
 };
 
 const HEARTBEAT_MS = 8000; // basılı tutarken hedeflere "hâlâ konuşuyorum" bilgisi
@@ -60,6 +61,15 @@ function broadcastState(localParticipant, state, destinationIdentities) {
     { assignments: state.assignments, version: state.version, versionBy: state.versionBy },
     destinationIdentities,
   );
+}
+
+/** Dinlemek istediğim grupları (seviyesi > 0) odaya duyur. */
+function announceListen(localParticipant, destinationIdentities) {
+  const vols = useSettingsStore.getState().groupListenVolumes || {};
+  const groups = VOICE_GROUPS.filter((g) => (Number(vols[g.id]) || 0) > 0).map((g) => g.id);
+  // Hiç grup dinlemiyorsam ve yeni gelene gönderiyorsam gerek yok (varsayılan zaten "dinlemiyor")
+  if (destinationIdentities && groups.length === 0) return;
+  publish(localParticipant, VG_TOPICS.LISTEN, { groups }, destinationIdentities);
 }
 
 // Odanın DIŞINDAN (örn. sol kanal listesi) grup işlemi yapabilmek için: odadaki hook kendini buraya kaydeder.
@@ -133,7 +143,14 @@ export function useVoiceGroups() {
 
     const onData = (payload, participant, _kind, topic) => {
       if (!participant || !payload || payload.byteLength > MAX_PAYLOAD_BYTES) return;
-      if (topic !== VG_TOPICS.STATE && topic !== VG_TOPICS.REQUEST && topic !== VG_TOPICS.TALK) return;
+      if (
+        topic !== VG_TOPICS.STATE &&
+        topic !== VG_TOPICS.REQUEST &&
+        topic !== VG_TOPICS.TALK &&
+        topic !== VG_TOPICS.LISTEN
+      ) {
+        return;
+      }
       const senderId = participant.identity;
       if (!senderId || senderId === identity) return;
 
@@ -141,6 +158,7 @@ export function useVoiceGroups() {
         // Yeni gelen durumu istiyor: bende varsa sadece ona gönder
         const s = store();
         if (s.version > 0) broadcastState(localParticipant, s, [senderId]);
+        announceListen(localParticipant, [senderId]);
         return;
       }
 
@@ -151,6 +169,14 @@ export function useVoiceGroups() {
         return;
       }
       if (!msg || typeof msg !== "object") return;
+
+      if (topic === VG_TOPICS.LISTEN) {
+        const groups = Array.isArray(msg.groups)
+          ? msg.groups.filter((g) => VOICE_GROUPS.some((v) => v.id === g))
+          : [];
+        store().setListener(senderId, groups);
+        return;
+      }
 
       if (topic === VG_TOPICS.STATE) {
         if (typeof msg.version !== "number" || typeof msg.assignments !== "object") return;
@@ -165,18 +191,17 @@ export function useVoiceGroups() {
 
       // TALK: biri bana (veya grubuma) özel konuşuyor
       if (msg.mode === TALK_MODES.WHISPER || msg.mode === TALK_MODES.GROUP || msg.mode === TALK_MODES.ALL) {
-        const fresh = !store().incoming[senderId];
+        const prevMode = store().incoming[senderId]?.mode;
+        const fresh = prevMode !== msg.mode;
         store().setIncoming(senderId, msg.mode);
         // Bana fısıldıyor: yanıtım otomatik olarak sadece ona gider (cevap herkese yayılmasın)
-        if (msg.mode === TALK_MODES.WHISPER && useSettingsStore.getState().whisperAutoReply !== false) {
+        // Sadece YENİ başlayan fısıltıda açılır: heartbeat'ler (8 sn'de bir) kullanıcının ✕ ile kapattığı yanıtı geri açmasın
+        if (fresh && msg.mode === TALK_MODES.WHISPER && useSettingsStore.getState().whisperAutoReply !== false) {
           store().setReplyTo(senderId, Infinity);
-          // Yeni başlayan fısıltıda bir kez haber ver: cevabın nereye gideceğini şaşırtmasın
-          if (fresh) {
-            toast.info(`${participant.name || "Biri"} sana fısıldıyor — cevabın sadece ona gider (kartındaki ✕ ile iptal)`, {
-              id: `vg-whisper-${senderId}`,
-              duration: 4500,
-            });
-          }
+          toast.info(`${participant.name || "Biri"} sana fısıldıyor — cevabın sadece ona gider (kartındaki ✕ ile iptal)`, {
+            id: `vg-whisper-${senderId}`,
+            duration: 4500,
+          });
         }
       } else {
         const wasWhisper = store().incoming[senderId]?.mode === TALK_MODES.WHISPER;
@@ -195,16 +220,24 @@ export function useVoiceGroups() {
     const onJoin = (p) => {
       const s = store();
       if (s.version > 0 && p?.identity) broadcastState(localParticipant, s, [p.identity]);
+      if (p?.identity) announceListen(localParticipant, [p.identity]);
     };
     const onLeave = (p) => {
       if (!p?.identity) return;
       store().clearIncoming(p.identity);
+      store().setListener(p.identity, null);
       if (store().replyTo?.id === p.identity) store().setReplyTo(null);
       // Fısıltı hedefi odadan çıktıysa seçim kalkar (yoksa tuş sessizce kimseye gitmez)
       if (store().whisperTargetId === p.identity) store().setWhisperTarget(null);
     };
     store().setLocalIdentity(identity);
     bridgeParticipant = localParticipant;
+
+    // Dinleme ayarım değişince odaya duyur; girişte de mevcut ayarımı bildir
+    announceListen(localParticipant, [...room.remoteParticipants.values()].map((p) => p.identity));
+    const unsubListen = useSettingsStore.subscribe((state, prev) => {
+      if (state.groupListenVolumes !== prev.groupListenVolumes) announceListen(localParticipant);
+    });
 
     room.on(RoomEvent.DataReceived, onData);
     room.on(RoomEvent.ParticipantConnected, onJoin);
@@ -229,6 +262,7 @@ export function useVoiceGroups() {
       room.off(RoomEvent.ParticipantConnected, onJoin);
       room.off(RoomEvent.ParticipantDisconnected, onLeave);
       if (bridgeParticipant === localParticipant) bridgeParticipant = null;
+      unsubListen();
       clearInterval(expireTimer);
     };
   }, [room, identity, localParticipant]);
@@ -281,6 +315,7 @@ export function useVoiceGroups() {
     const unsub = useVoiceGroupStore.subscribe((state, prev) => {
       if (
         state.assignments !== prev.assignments ||
+        state.listeners !== prev.listeners ||
         state.talk !== prev.talk ||
         state.whisperTargetId !== prev.whisperTargetId ||
         state.replyTo?.id !== prev.replyTo?.id

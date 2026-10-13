@@ -42,7 +42,7 @@ export const LIMITS = {
 
 export const TABLE_BOUNDS = { x: 18, z: 11 };
 
-const GAMES = new Set(["okey101"]); // modun özel kurulum/kural desteği (veri etiketi; kod çalıştırmaz)
+const GAMES = new Set(["okey101", "airhockey", "foosball", "pool", "bowling", "tabu"]); // modun özel kurulum/kural desteği (veri etiketi; kod çalıştırmaz)
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 const KEY_RE = /^[a-z0-9_-]{1,32}$/;
 const DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -287,8 +287,13 @@ export function validateCompiled(m) {
 export const BUILTIN_MODS = [
   { id: "classic", name: "Klasik Set", description: "2 zar ve 4 renkli parça" },
   { id: "cards", name: "İskambil Destesi", description: "54 kartlık deste (2 joker), karışık ve kapalı" },
-  { id: "okey", name: "101 Okey", description: "106 taş, ıstaka, 21/22 taş dağıtımı, gösterge ve okey" },
+  { id: "okey", name: "101 Okey", description: "106 taş, ıstaka, gösterge ve okey, per puanı hesabı, sıra takibi, otomatik dizme" },
   { id: "chess", name: "Satranç", description: "Tahta ve 32 taş" },
+  { id: "airhockey", name: "Air Hockey", description: "2 kişilik hızlı oyun: fareni raket yap, ilk 7 golü atan kazanır. Botla da oynanır" },
+  { id: "pool", name: "Bilardo", description: "8 top, 2 oyuncu: nişan al, basılı tutup bırak. Faul, grup ve 8 numara kuralları. Botla da oynanır" },
+  { id: "bowling", name: "Bowling", description: "4 oyuncuya kadar, 10 frame, strike/spare skoru. Nişan al, basılı tutup bırak" },
+  { id: "tabu", name: "Tabu", description: "İki takımlı kelime oyunu: yasaklı kelimeleri söylemeden anlat. Kartı rakip takım denetler" },
+  { id: "foosball", name: "Langırt", description: "8 çubuk, 2 takım: fareyle kaydır, basılı tutup bırakarak vur. İlk 7 gol" },
 ];
 
 const SUITS = [
@@ -323,12 +328,37 @@ export function buildBuiltin(id, helpers = {}) {
   } else if (id === "okey") {
     raw.name = "101 Okey";
     raw.game = "okey101";
-    raw.description = "4 kişilik 101 Okey: 106 taş (1-13 ×4 renk ×2 + 2 sahte okey). Taş yığınına sağ tık → 101 Okey Dağıt.";
+    raw.description = "4 kişilik 101 Okey: 106 taş (1-13 ×4 renk ×2 + 2 sahte okey). Sol üstteki panelden Dağıt; ıstakada per puanın otomatik hesaplanır.";
     const colors = [["#111111", "#f3ead2"], ["#c0392b", "#f3ead2"], ["#1f6fb5", "#f3ead2"], ["#d4a017", "#f3ead2"]];
     const tiles = [];
     for (const [c, bg] of colors) for (let n = 1; n <= 13; n++) tiles.push({ face: { text: String(n), textColor: c, color: bg }, count: 2 });
     tiles.push({ face: { text: "★", textColor: "#16a34a", color: "#f3ead2" }, count: 2 }); // sahte okey
     raw.items = [{ type: "tile", tiles, back: { color: "#c9b98f" }, shuffle: true, pos: [0, 0] }];
+  } else if (id === "airhockey") {
+    raw.name = "Air Hockey";
+    raw.game = "airhockey";
+    raw.description = "Sağ/sol koltuğa otur, fareyi raket olarak kullan. İlk 7 golü atan kazanır. Boş koltuğa bot koyabilirsin.";
+    raw.table = { color: "#0f172a" };
+  } else if (id === "pool") {
+    raw.name = "Bilardo";
+    raw.game = "pool";
+    raw.description = "8 top bilardo. Koltuğa otur (ya da bot ekle), fareyle nişan al, basılı tut: güç, bırak: vur. Faul ve 8 numara kuralları geçerli.";
+    raw.table = { color: "#241810" };
+  } else if (id === "bowling") {
+    raw.name = "Bowling";
+    raw.game = "bowling";
+    raw.description = "10 frame bowling. Sıra sende iken fareyle nişan al, basılı tut: güç, bırak: at. ← → ile başlangıç konumunu kaydır.";
+    raw.table = { color: "#14161c" };
+  } else if (id === "tabu") {
+    raw.name = "Tabu";
+    raw.game = "tabu";
+    raw.description = "Takımını seç, anlatıcı kartın kelimesini yasaklıları söylemeden anlatır. Rakip takım kartı görür ve Tabu! der.";
+    raw.table = { color: "#2a1b3d" };
+  } else if (id === "foosball") {
+    raw.name = "Langırt";
+    raw.game = "foosball";
+    raw.description = "Takımını seç. Fareyle çubuğu kaydır, basılı tutup bırakarak vur. 1-4 tuşlarıyla çubuğu kilitle. İlk 7 gol.";
+    raw.table = { color: "#2b1d12" };
   } else if (id === "chess") {
     raw.name = "Satranç";
     const hasBoard = !!helpers.boardDataUrl;

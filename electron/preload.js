@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld("netrex", {
   // UTILS
   // ============================================
   openExternalLink: (url) => ipcRenderer.invoke("open-external-link", url),
+  requestStreamFullscreen: (streamId) => ipcRenderer.invoke("request-stream-fullscreen", streamId),
 
   // ============================================
   // AUTO UPDATE

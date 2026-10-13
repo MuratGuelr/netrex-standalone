@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParticipants, useLocalParticipant, useRoomContext } from "@livekit/components-react";
-import { Split, Merge, Megaphone, Ear, MicOff, Info, Reply, X } from "lucide-react";
+import { Split, Merge, Megaphone, Ear, MicOff, Info, Reply, X, Headphones } from "lucide-react";
 import {
   useVoiceGroupStore,
   VOICE_GROUPS,
@@ -351,6 +351,35 @@ export function GroupsToolbar() {
 
 
 // ──────────────────────────────────────
+// Başka bir grubu dinleme seviyesi (0 = duymam). Grup başına ayrı; kişi başı ses ayarlarının üstüne biner.
+// ──────────────────────────────────────
+function GroupListenSlider({ group }) {
+  const value = useSettingsStore((s) => s.groupListenVolumes?.[group.id] ?? 0);
+  const setValue = useSettingsStore((s) => s.setGroupListenVolume);
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: group.color }} />
+      <span className="text-[11px] text-[#b5bac1] w-14 shrink-0 truncate">{group.name}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={value}
+        onChange={(e) => setValue(group.id, Number(e.target.value))}
+        aria-label={`${group.name} dinleme sesi`}
+        className="flex-1 h-1 cursor-pointer"
+        style={{ accentColor: group.color }}
+      />
+      <span className="text-[10px] text-[#949ba4] tabular-nums w-8 text-right">
+        {value === 0 ? "Kapalı" : `%${value}`}
+      </span>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────
 // Alt çubuk düğmesi + panel
 // ──────────────────────────────────────
 export function VoiceGroupsControl() {
@@ -441,6 +470,21 @@ export function VoiceGroupsControl() {
               />
             ))}
           </div>
+
+          {/* Diğer grupları dinle: gruptan ayrılmadan, grup başına ayrı ses seviyesi */}
+          {byGroup.some(({ group, members }) => group.id !== myGroupId && members.length > 0) && (
+            <div className="px-3 py-2.5 border-t border-white/[0.06] space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-white/80">
+                <Headphones size={12} className="text-indigo-400" />
+                Diğer grupları dinle
+              </div>
+              {byGroup
+                .filter(({ group, members }) => group.id !== myGroupId && members.length > 0)
+                .map(({ group }) => (
+                  <GroupListenSlider key={group.id} group={group} />
+                ))}
+            </div>
+          )}
 
           {/* Alt: birleştir + herkese */}
           <div className="px-3 py-3 border-t border-white/[0.06] bg-black/20 space-y-2">

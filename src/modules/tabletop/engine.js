@@ -14,8 +14,12 @@
  */
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { Sfx } from "./sfx.js";
+import { createGame, isGameType, cleanGameMeta, cleanGameSpec, initialGameMeta } from "./gameLogic.js";
+import { buildGameDecor, buildGamePart } from "./gameView.js";
+import { layoutSort } from "./okeyRules.js";
 
 // ── Ölçüler (birim ≈ 1 cm) ──
 export const TABLE = { w: 40, d: 26 };
@@ -131,7 +135,12 @@ export class TableEngine {
     this.imgCache = new Map();
     this.assetTex = new Map();
     this.mod = { name: "", faces: [], assets: {}, table: { color: "#1f5c3a" }, objects: [] };
-    this.meta = {}; // oyun bilgisi (örn. { okey: { text, color } })
+    this.meta = {}; // oyun bilgisi (örn. { okey: { text, color }, game: { type, seats, score… } })
+    this.game = null; // Air Hockey / Langırt (bkz. gameLogic.js); host fiziği çalıştırır, herkes girdiyi gönderir
+    this.gameDecor = null;
+    this.mySeat = -1;
+    this.metaDirty = false;
+    this.lastPadSent = 0;
     this.world = null;
     this.raf = 0;
     this.lastT = 0;
@@ -183,7 +192,16 @@ export class TableEngine {
     this.camera = new THREE.PerspectiveCamera(42, w / h, 0.5, 400);
     this._updateCamera();
 
-    this.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x303846, 0.95));
+    // Ortam haritası: cilalı/metal yüzeyler (raket, çubuk, toplar, lobut, zar) yansıma alır → daha gerçekçi görünüm
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      const env = pmrem.fromScene(new RoomEnvironment(), 0.04);
+      this.envTex = env.texture;
+      this.scene.environment = this.envTex;
+      if ("environmentIntensity" in this.scene) this.scene.environmentIntensity = 0.42;
+      pmrem.dispose();
+    } catch (e) {}
+    this.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x303846, 0.7));
     const sun = new THREE.DirectionalLight(0xfff1dc, 1.7);
     sun.position.set(12, 40, 14);
     sun.castShadow = true;
@@ -266,7 +284,77 @@ export class TableEngine {
     this.assetTex.clear();
     this.imgCache.clear();
     this._applyTable();
+    this._setupGame(mod.game);
     this.objects.forEach((o) => this._rebuildVisual(o));
+  }
+
+  // ───────────────── Oyunlar (Air Hockey / Langırt) ─────────────────
+  _gameHost() {
+    return {
+      RAPIER,
+      world: this.world,
+      myId: this.opts.myId,
+      newId: (k) => this._newId(k),
+      addObject: (spec, pos, quat) => {
+        const o = this._addObject(spec, pos, quat);
+        if (o) this.changed.add(spec.id);
+        return o;
+      },
+      objects: this.objects,
+      touch: (o) => o && this.changed.add(o.spec.id), // konumu zorla (güvenilir kanaldan) herkese gönder
+      onMeta: () => this._hostGameMeta(),
+      notice: (t) => this.opts.onNotice?.(t),
+      sound: (n) => this.sfx[n]?.(),
+    };
+  }
+
+  _teardownGame() {
+    this.game?.dispose();
+    this.game = null;
+    if (this.gameDecor) {
+      this.gameDecor.dispose();
+      this.gameDecor = null;
+    }
+    this.mySeat = -1;
+  }
+
+  /** Modun oyunu varsa: sahne dekorunu çiz, oyun nesnesini oluştur ve kamerayı yukarıdan bakacak şekilde ayarla. */
+  _setupGame(type) {
+    this._teardownGame();
+    if (!isGameType(type)) return;
+    this.gameDecor = buildGameDecor(THREE, RoundedBoxGeometry, type);
+    this.scene.add(this.gameDecor.group);
+    this.game = createGame(type, this._gameHost());
+    this.resetCamera();
+  }
+
+  /** Host: oyun bilgisi (skor, koltuk) değişti → meta'ya yaz, herkese yay */
+  _hostGameMeta() {
+    if (!this.game) return;
+    const prev = this.meta.game;
+    this.meta = { ...this.meta, game: { ...this.game.meta, seats: [...this.game.meta.seats], score: [...this.game.meta.score] } };
+    this.metaDirty = true;
+    this._afterGameMeta(prev);
+    this.opts.onMeta?.(this.meta);
+  }
+
+  _afterGameMeta(prev) {
+    const g = this.meta.game;
+    this.mySeat = g ? g.seats.indexOf(this.opts.myId) : -1;
+    if (g && prev && !this.isHost) {
+      if (g.score[0] + g.score[1] > prev.score[0] + prev.score[1]) this.sfx[g.winner !== null ? "win" : "goal"]?.();
+      else if (g.type === "pool" && (g.info.potted?.length || 0) > (prev.info?.potted?.length || 0)) this.sfx.goal?.();
+      else if (g.type === "bowling" && /STRIKE|Spare/.test(g.info.msg || "") && g.info.msg !== prev.info?.msg) this.sfx.win?.();
+      else if (g.type === "bowling" && /lobut/.test(g.info.msg || "") && g.info.msg !== prev.info?.msg) this.sfx.goal?.();
+    }
+    if (this.canvas) this.canvas.style.cursor = this.mySeat >= 0 ? "crosshair" : "default";
+  }
+
+  /** Host: bir oyuncu masadan ayrıldı */
+  playerLeft(pid) {
+    this.releaseHold(pid);
+    this.game?.leave(pid);
+    if (this.meta.okey?.turn === pid) this._nextTurn(pid, true);
   }
 
   _applyTable() {
@@ -341,7 +429,30 @@ export class TableEngine {
         const ih = img.height * s;
         g.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih);
       }
-      if (f.text) {
+      if (dim === "tile" && !img) {
+        // Kabartmalı krem taş: kenarda hafif gölge, içte parlak çerçeve
+        const edge = g.createLinearGradient(0, 0, W, H);
+        edge.addColorStop(0, "rgba(255,255,255,0.35)");
+        edge.addColorStop(1, "rgba(0,0,0,0.12)");
+        g.fillStyle = edge;
+        g.fillRect(0, 0, W, H);
+        g.strokeStyle = "rgba(0,0,0,0.12)";
+        g.lineWidth = 3;
+        g.strokeRect(9, 9, W - 18, H - 18);
+      }
+      if (dim === "tile" && f.text && /^d+$/.test(f.text) && !img) {
+        // Sayı + altında küçük halka (gerçek okey taşları gibi)
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.font = "bold " + Math.round(H * 0.42) + "px sans-serif";
+        g.fillStyle = f.textColor || "#111111";
+        g.fillText(f.text, W / 2, H * 0.4);
+        g.strokeStyle = f.textColor || "#111111";
+        g.lineWidth = Math.max(3, H * 0.025);
+        g.beginPath();
+        g.arc(W / 2, H * 0.76, W * 0.095, 0, Math.PI * 2);
+        g.stroke();
+      } else if (f.text) {
         let size = Math.round(H * 0.34);
         g.textAlign = "center";
         g.textBaseline = "middle";
@@ -435,6 +546,8 @@ export class TableEngine {
         mat.color.set("#ffffff");
       }
       mesh = new THREE.Mesh(new THREE.BoxGeometry(spec.w, BOARD_T, spec.d), [side, side, mat, side, side, side]);
+    } else if (spec.kind === "game") {
+      mesh = buildGamePart(THREE, RoundedBoxGeometry, spec);
     }
     mesh.castShadow = spec.kind !== "board";
     mesh.receiveShadow = true;
@@ -458,6 +571,17 @@ export class TableEngine {
   }
 
   _disposeMesh(mesh) {
+    if (mesh.isGroup) {
+      // oyun parçaları birden çok ağdan oluşur
+      mesh.traverse((c) => {
+        c.geometry?.dispose();
+        if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach((m) => {
+          m.map?.dispose?.();
+          m.dispose();
+        });
+      });
+      return;
+    }
     mesh.geometry.dispose();
     (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => m.dispose());
   }
@@ -489,6 +613,7 @@ export class TableEngine {
 
   _buildBody(o, pos, quat) {
     const spec = o.spec;
+    if (spec.kind === "game") return this.game ? this.game.buildBody(o, pos, quat) : null;
     if (spec.kind === "board") {
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pos[0], BOARD_T / 2, pos[2]));
       o.collider = this.world.createCollider(RAPIER.ColliderDesc.cuboid(spec.w / 2, BOARD_T / 2, spec.d / 2).setFriction(0.9), body);
@@ -555,6 +680,7 @@ export class TableEngine {
   }
 
   _clearAll() {
+    this.game?.dispose(); // fizik duvarları (nesneleri aşağıda silinir)
     [...this.objects.keys()].forEach((id) => this._removeObject(id));
     this.holds.clear();
   }
@@ -597,9 +723,19 @@ export class TableEngine {
     const m = {};
     const o = meta && typeof meta === "object" ? meta.okey : null;
     if (o && typeof o.text === "string" && typeof o.color === "string" && /^#[0-9a-f]{6}$/i.test(o.color)) {
-      m.okey = { text: o.text.slice(0, 3), color: o.color };
+      m.okey = {
+        text: o.text.slice(0, 3),
+        color: o.color,
+        ...(typeof o.turn === "string" && o.turn.length <= 64 ? { turn: o.turn } : {}),
+      };
     }
+    const g = cleanGameMeta(meta?.game);
+    if (g && this.game && g.type === this.game.type) m.game = g;
+    const prevGame = this.meta.game;
     this.meta = m;
+    // Host oyun bilgisinin sahibidir (build() yazar); diğerleri host'tan geleni alır
+    if (this.game && !this.isHost) this.game.meta = m.game || initialGameMeta(this.game.type);
+    this._afterGameMeta(prevGame);
     this.opts.onMeta?.(m);
   }
 
@@ -625,6 +761,7 @@ export class TableEngine {
     this.setMod(mod);
     this._setMeta({});
     mod.objects.forEach((def) => this._instantiate(def));
+    this.game?.build(); // Air Hockey / Langırt: duvarlar + disk/raket/top/çubuklar
     this.opts.onHands?.(this.handCounts);
     this.opts.getPlayerIds?.().forEach((pid) => this.opts.onHand?.(pid, []));
   }
@@ -777,9 +914,9 @@ export class TableEngine {
    */
   _deal101(playerId, deckObj) {
     let deck = deckObj;
+    if ([...this.hands.values()].some((h) => h.length > 0)) return this.opts.onNotice?.("Eller dolu. Önce Sıfırla ile yeni el kur.");
     if (!deck || deck.spec.dim !== "tile" || deck.spec.cards.length < 60) return this.opts.onNotice?.("Önce tam taş yığınına (106 taş) uygula.");
     const players = (this.opts.getPlayerIds?.() || [playerId]).slice(0, 4);
-    if ([...this.hands.values()].some((h) => h.length > 0)) return this.opts.onNotice?.("Eller dolu. Önce Sıfırla ile yeni el kur.");
     if (!players.includes(playerId)) players.unshift(playerId);
 
     // Gösterge: sahte okey (★) olmasın; gelirse yığının dibine koy
@@ -805,7 +942,9 @@ export class TableEngine {
       null,
     );
     if (g) this.changed.add(g.spec.id);
-    this.meta = { okey: { text: String(nextNum), color: gf.textColor || "#111111" } };
+    this.okeyOrder = players.slice();
+    this.meta = { okey: { text: String(nextNum), color: gf.textColor || "#111111", turn: playerId } };
+    this.metaDirty = true;
     this.opts.onMeta?.(this.meta);
 
     // Dağıtım: herkese 21, başlayana 22
@@ -815,6 +954,42 @@ export class TableEngine {
     }
     // Yığın boşalmadıysa kapalı kalsın
     return true;
+  }
+
+  /** Sıra bir sonraki oyuncuya geçer (okeyOrder dağıtımda belirlenir) */
+  _nextTurn(pid, force = false) {
+    const o = this.meta.okey;
+    const order = (this.okeyOrder || []).filter((id) => id === this.opts.myId || this.opts.getPlayerIds?.().includes(id));
+    if (!o || !order.length) return;
+    if (!force && o.turn !== pid && pid !== this.opts.myId) return; // sırayı sadece sırası olan (ya da masayı açan) geçebilir
+    const i = order.indexOf(o.turn);
+    this.meta = { ...this.meta, okey: { ...o, turn: order[(i + 1) % order.length] } };
+    this.metaDirty = true;
+    this.opts.onMeta?.(this.meta);
+  }
+
+  /** Taşları ıstakada diz (renge ya da sayıya göre) */
+  _sortTiles(pid, mode) {
+    const hand = this._hand(pid);
+    const faces = this.mod.faces || [];
+    const order = [];
+    faces.forEach((f) => {
+      const col = (f.textColor || "").toLowerCase();
+      if (/^\d+$/.test(f.text || "") && col && !order.includes(col)) order.push(col);
+    });
+    const tiles = hand.filter((c) => c.d === "tile");
+    if (!tiles.length) return;
+    const items = tiles.map((c, i) => {
+      const f = faces[c.f] || {};
+      const n = /^\d+$/.test(f.text || "") ? parseInt(f.text, 10) : 0;
+      return { key: i, n, col: (f.textColor || "").toLowerCase() };
+    });
+    const slots = layoutSort(items, mode === "num" ? "num" : "color", order);
+    if (!slots) return;
+    tiles.forEach((c, i) => {
+      c.s = slots.get(i);
+    });
+    this._syncHand(pid);
   }
 
   // ───────────────── Host: niyetleri uygula ─────────────────
@@ -1049,6 +1224,21 @@ export class TableEngine {
         this._syncHand(playerId);
         break;
       }
+      case "seat":
+      case "pad":
+      case "padBtn":
+      case "rodSel":
+      case "bowlPos":
+      case "serve":
+      case "gameReset":
+        this.game?.intent(playerId, intent);
+        break;
+      case "turn":
+        this._nextTurn(playerId);
+        break;
+      case "sortTiles":
+        this._sortTiles(playerId, intent.mode);
+        break;
       case "reorderHand": {
         const hand = this._hand(playerId);
         const from = Math.round(num(intent.from, -1));
@@ -1137,7 +1327,8 @@ export class TableEngine {
   }
 
   _flush() {
-    if (!this.changed.size && !this.removed.size) return;
+    if (!this.changed.size && !this.removed.size && !this.metaDirty) return;
+    this.metaDirty = false;
     const specs = [];
     const snap = [];
     this.changed.forEach((id) => {
@@ -1194,8 +1385,20 @@ export class TableEngine {
       h.prev = { x: nx, y: ny, z: nz };
     }
 
-    this.world.timestep = Math.min(dt, 1 / 30);
-    this.world.step();
+    if (this.game) {
+      // Oyunlarda küçük adımlar: hızlı raket/çubuk diske tek karede derin geçmesin (çarpışma kaçmasın)
+      const n = clamp(Math.ceil(Math.min(dt, 0.05) * 120), 1, 6);
+      const sub = Math.min(dt, 0.05) / n;
+      for (let i = 0; i < n; i++) {
+        this.game.step(sub);
+        this.world.timestep = sub;
+        this.world.step();
+        this.game.post(sub);
+      }
+    } else {
+      this.world.timestep = Math.min(dt, 1 / 30);
+      this.world.step();
+    }
 
     this.objects.forEach((o) => {
       if (!o.body) return;
@@ -1204,7 +1407,7 @@ export class TableEngine {
         const q = o.body.rotation();
         o.basePos.set(p.x, p.y, p.z);
         o.baseQuat.set(q.x, q.y, q.z, q.w);
-        if (p.y < -15) {
+        if (p.y < -15 && o.spec.kind !== "game") {
           o.body.setTranslation({ x: 0, y: 6, z: 0 }, true);
           o.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         }
@@ -1223,18 +1426,27 @@ export class TableEngine {
     });
 
     this.snapAcc += dt;
-    if (this.snapAcc >= 1 / 15) {
+    if (this.snapAcc >= (this.game ? 1 / 30 : 1 / 15)) {
       this.snapAcc = 0;
       const s = this.getSnapshot(true);
       if (s.length) this.opts.onSnapshot?.(s);
     }
+    if (this.metaDirty) this._flush(); // skor / koltuk değişimi
   }
 
   _remoteStep(dt) {
     this.objects.forEach((o) => {
       if (o.target) {
-        o.basePos.lerp(o.target.p, 0.35);
-        o.baseQuat.slerp(o.target.q, 0.35);
+        o.basePos.lerp(o.target.p, this.game ? 0.5 : 0.35);
+        o.baseQuat.slerp(o.target.q, this.game ? 0.5 : 0.35);
+      }
+      // Kendi rakedim: ağ gecikmesini hissetmeyeyim diye imleci hemen izler (host yine de yetkili; fark büyürse ona döner)
+      if (this.game?.type === "airhockey" && this.mySeat >= 0 && this.padLocal && o.target && o.spec.part === "paddle" && o.spec.team === this.mySeat) {
+        const t = this.padLocal;
+        if (Math.hypot(t.x - o.target.p.x, t.z - o.target.p.z) < 6) {
+          o.basePos.x += (t.x - o.basePos.x) * 0.6;
+          o.basePos.z += (t.z - o.basePos.z) * 0.6;
+        }
       }
       this._poseMesh(o, dt);
     });
@@ -1267,6 +1479,22 @@ export class TableEngine {
       }
       o.prevY = o.basePos.y;
       o.prevVy = vy;
+      // Disk / top: yön ya da hız birden değiştiyse (duvar, raket, oyuncu) çarpma sesi
+      const hitPart = o.spec.part;
+      if (dt > 0 && (hitPart === "puck" || hitPart === "ball" || hitPart === "poolball" || hitPart === "bowlball" || hitPart === "pin")) {
+        const vx = (o.basePos.x - (o.prevX ?? o.basePos.x)) / dt;
+        const vz = (o.basePos.z - (o.prevZ ?? o.basePos.z)) / dt;
+        const pvx = o.prevVx ?? 0;
+        const pvz = o.prevVz ?? 0;
+        const prevSp = Math.hypot(pvx, pvz);
+        if (prevSp > 9 && Math.hypot(vx - pvx, vz - pvz) > prevSp * 0.55) {
+          this.sfx.hit(Math.min(1, prevSp / 60), hitPart === "puck" ? "puck" : hitPart === "poolball" ? "ball" : hitPart === "pin" || hitPart === "bowlball" ? "pin" : "piece");
+        }
+        o.prevX = o.basePos.x;
+        o.prevZ = o.basePos.z;
+        o.prevVx = vx;
+        o.prevVz = vz;
+      }
     }
   }
 
@@ -1293,12 +1521,21 @@ export class TableEngine {
     const out = [];
     const held = new Set();
     for (const h of this.holds.values()) h.members.forEach((m) => held.add(m.id));
+    const now = performance.now();
     this.objects.forEach((o) => {
       if (!o.body || o.static) return;
       if (onlyMoving && o.body.isSleeping() && !held.has(o.spec.id)) return;
       const p = o.body.translation();
       const q = o.body.rotation();
-      out.push([o.spec.id, r3(p.x), r3(p.y), r3(p.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]);
+      const row = [o.spec.id, r3(p.x), r3(p.y), r3(p.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)];
+      if (onlyMoving && o.spec.kind === "game") {
+        // Uyumayan oyun gövdeleri (raket/çubuk): değişmediyse her an gönderme, ama paket kaybına karşı ~1 sn'de bir tekrarla
+        const key = row.slice(1).join(",");
+        if (o.lastKey === key && now - (o.lastKeyAt || 0) < 900) return;
+        o.lastKey = key;
+        o.lastKeyAt = now;
+      }
+      out.push(row);
     });
     return out;
   }
@@ -1313,6 +1550,7 @@ export class TableEngine {
     const fi = (n) => clamp(Math.round(num(n)), 0, Math.max(0, faces - 1));
     const col = (c, d) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : d);
     const locked = s.locked ? { locked: true } : {};
+    if (s.kind === "game") return this.game ? cleanGameSpec(s) : null;
     if (s.kind === "die") return { id: s.id, kind: "die", ...locked };
     if (s.kind === "piece")
       return {
@@ -1437,6 +1675,7 @@ export class TableEngine {
   _applyEmissive(o) {
     const id = o.spec.id;
     const lvl = this.sel.has(id) ? 0x5a4a14 : id === this.hoverId ? 0x2a2a30 : 0x000000;
+    if (o.spec.kind === "game") return;
     (Array.isArray(o.mesh.material) ? o.mesh.material : [o.mesh.material]).forEach((m) => m.emissive?.setHex(lvl));
   }
 
@@ -1459,7 +1698,7 @@ export class TableEngine {
     const ids = [];
     const v = new THREE.Vector3();
     this.objects.forEach((o) => {
-      if (o.static || o.spec.locked) return;
+      if (o.static || o.spec.locked || o.spec.kind === "game") return;
       v.copy(o.mesh.position).project(this.camera);
       const sx = r.left + (v.x * 0.5 + 0.5) * r.width;
       const sy = r.top + (-v.y * 0.5 + 0.5) * r.height;
@@ -1500,9 +1739,15 @@ export class TableEngine {
   }
 
   resetCamera() {
-    this.cam = { theta: 0, phi: 0.95, radius: 38 };
-    this.camTarget.set(0, 0, 0);
-    this._updateCamera();
+    // Oyun masalarında (Air Hockey / Langırt) sahaya yukarıdan, daha dik bakılır
+    const t = this.game?.type;
+    this.cam =
+      t === "bowling" ? { theta: -Math.PI / 2, phi: 0.78, radius: 30 }
+        : t === "pool" ? { theta: 0, phi: 0.5, radius: 36 }
+          : this.game ? { theta: 0, phi: 0.55, radius: 40 }
+            : { theta: 0, phi: 0.95, radius: 38 };
+    this.camTarget.set(t === "bowling" ? 2 : 0, 0, 0);
+    if (this.camera) this._updateCamera();
   }
 
   _updateCamera() {
@@ -1525,7 +1770,7 @@ export class TableEngine {
     this.raycaster.setFromCamera(this._ndc(e), this.camera);
     const meshes = [];
     this.objects.forEach((o) => {
-      if (!o.static) meshes.push(o.mesh);
+      if (!o.static && o.spec.kind !== "game") meshes.push(o.mesh);
     });
     const hit = this.raycaster.intersectObjects(meshes, false)[0];
     return hit?.object?.userData?.id || null;
@@ -1558,6 +1803,13 @@ export class TableEngine {
     this._onDown = (e) => {
       c.focus?.({ preventScroll: true });
       this.sfx._ensure();
+      // Oyun masasında koltuktaysan sol tuş oyuna aittir (langırtta vuruş); nesne tutma/kutu seçimi yok
+      if (e.button === 0 && this.game && this.mySeat >= 0) {
+        c.setPointerCapture?.(e.pointerId);
+        this.opts.onIntent({ k: "padBtn", down: true });
+        drag = { button: 0, game: true };
+        return;
+      }
       if (e.button === 0) {
         const id = this._pick(e);
         if (!id) {
@@ -1587,6 +1839,22 @@ export class TableEngine {
     };
 
     this._onMove = (e) => {
+      if (this.game && this.mySeat >= 0 && (!drag || drag.game)) {
+        // İmleç = raket / çubuk. ~60 Hz gönder; AH'de kendi raketi hemen göster (gecikme hissi olmasın)
+        const now = performance.now();
+        if (now - this.lastPadSent < 16) return;
+        this.lastPadSent = now;
+        const p = this._planePoint(e, this.groundPlane);
+        if (p) {
+          const pt = { x: r3(clamp(p.x, -TABLE.w / 2, TABLE.w / 2)), z: r3(clamp(p.z, -TABLE.d / 2, TABLE.d / 2)) };
+          if (this.game.type === "airhockey") {
+            const zn = this.game._zone(this.mySeat);
+            this.padLocal = { x: clamp(pt.x, zn.x0, zn.x1), z: clamp(pt.z, -9, 9) };
+          }
+          this.opts.onIntent({ k: "pad", ...pt });
+        }
+        return;
+      }
       if (drag?.box) {
         drag.moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
         if (drag.moved > 4) this.opts.onBox?.({ x0: drag.x0, y0: drag.y0, x1: e.clientX, y1: e.clientY });
@@ -1631,6 +1899,12 @@ export class TableEngine {
     };
 
     this._onUp = (e) => {
+      if (drag?.game) {
+        this.opts.onIntent({ k: "padBtn", down: false });
+        drag = null;
+        c.releasePointerCapture?.(e.pointerId);
+        return;
+      }
       if (drag?.box) {
         this.opts.onBox?.(null);
         if (drag.moved > 5) this._boxSelect(drag.x0, drag.y0, e.clientX, e.clientY, drag.add);
@@ -1693,6 +1967,17 @@ export class TableEngine {
         this._updatePreview();
         return;
       }
+      // Langırt: 0 otomatik çubuk · 1 kaleci · 2 defans · 3 orta saha · 4 forvet (kilitler)
+      if (this.game?.type === "foosball" && this.mySeat >= 0 && /^[0-4]$/.test(k)) {
+        this.opts.onIntent({ k: "rodSel", n: Number(k) });
+        return;
+      }
+      // Bowling: ← → ile atış konumunu kaydır
+      if (this.game?.type === "bowling" && this.mySeat >= 0 && (k === "arrowleft" || k === "arrowright")) {
+        e.preventDefault();
+        this.opts.onIntent({ k: "bowlPos", dz: k === "arrowright" ? 1 : -1 });
+        return;
+      }
       const ids = this._keyTargets();
       if (k === "w" || k === "a" || k === "s" || k === "d") {
         this.keys.add(k);
@@ -1737,6 +2022,7 @@ export class TableEngine {
     };
 
     this._onBlur = () => {
+      if (this.game && this.mySeat >= 0) this.opts.onIntent({ k: "padBtn", down: false }); // takılı kalmasın
       this.keys.clear();
       this.altDown = false;
       this._updatePreview();
@@ -1770,6 +2056,7 @@ export class TableEngine {
     cancelAnimationFrame(this.raf);
     clearTimeout(this.numTimer);
     this._ro?.disconnect();
+    this._teardownGame();
     const c = this.canvas;
     if (c) {
       c.removeEventListener("pointerdown", this._onDown);

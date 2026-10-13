@@ -4,6 +4,7 @@ import { RoomEvent, Track } from "livekit-client";
 import { useSpatialAudioStore } from "@/src/store/spatialAudioStore";
 import { useParticipantVolumeStore } from "@/src/store/participantVolumeStore";
 import { useSettingsStore } from "@/src/store/settingsStore";
+import { useGroupAdjustedVolumes } from "@/src/hooks/useGroupAdjustedVolumes";
 import { SpatialEngine } from "@/src/audio/spatialEngine";
 import { resolveLayout } from "@/src/utils/spatialMath";
 import { loadSpatialFromFirebase, saveSpatialToFirebase } from "@/src/services/spatialAudioService";
@@ -36,7 +37,9 @@ export function useSpatialAudio({ channelId = null, userId = null, deafened = fa
   const participants = useParticipants();
   const enabled = useSpatialAudioStore((s) => s.enabled);
   const positions = useSpatialAudioStore((s) => s.positions);
-  const volumes = useParticipantVolumeStore((s) => s.volumes);
+  const baseVolumes = useParticipantVolumeStore((s) => s.volumes);
+  const identityList = useMemo(() => participants.map((p) => p.identity).sort(), [participants]);
+  const volumes = useGroupAdjustedVolumes(baseVolumes, identityList);
   const audioOutputId = useSettingsStore((s) => s.audioOutputId);
 
   const engineRef = useRef(null);

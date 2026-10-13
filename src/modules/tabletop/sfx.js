@@ -77,7 +77,10 @@ export class Sfx {
   hit(v, kind = "piece") {
     if (!this._ensure() || !this._gate(`hit-${kind}`, 45)) return;
     const k = Math.min(1, Math.max(0.15, v));
-    if (kind === "die") this._burst({ freq: 1400 + Math.random() * 500, type: "bandpass", q: 1.5, dur: 0.07, gain: 0.35 * k, tone: 0.08 * k, toneFreq: 260 });
+    if (kind === "ball") this._burst({ freq: 3600 + Math.random() * 600, type: "bandpass", q: 1.6, dur: 0.05, gain: 0.4 * k, tone: 0.12 * k, toneFreq: 520 });
+    else if (kind === "pin") this._burst({ freq: 900 + Math.random() * 300, type: "bandpass", q: 0.9, dur: 0.11, gain: 0.42 * k, tone: 0.16 * k, toneFreq: 190 });
+    else if (kind === "puck") this._burst({ freq: 2100 + Math.random() * 400, type: "bandpass", q: 1.1, dur: 0.06, gain: 0.34 * k, tone: 0.1 * k, toneFreq: 320 });
+    else if (kind === "die") this._burst({ freq: 1400 + Math.random() * 500, type: "bandpass", q: 1.5, dur: 0.07, gain: 0.35 * k, tone: 0.08 * k, toneFreq: 260 });
     else if (kind === "card") this._burst({ freq: 3200, type: "highpass", q: 0.7, dur: 0.045, gain: 0.16 * k });
     else this._burst({ freq: 700, dur: 0.08, gain: 0.3 * k, tone: 0.12 * k, toneFreq: 140 });
   }
@@ -98,6 +101,42 @@ export class Sfx {
   deal() {
     if (!this._ensure() || !this._gate("deal", 70)) return;
     this._burst({ freq: 3000, type: "bandpass", q: 1.2, dur: 0.06, gain: 0.13 });
+  }
+
+  /** Vuruş / atış (istaka, bowling topu) */
+  shot() {
+    if (!this._ensure() || !this._gate("shot", 120)) return;
+    this._burst({ freq: 1800, type: "bandpass", q: 1.2, dur: 0.07, gain: 0.34, tone: 0.18, toneFreq: 240 });
+  }
+
+  /** Kısa melodi: [frekans, başlangıç sn, süre] listesi */
+  _melody(notes, gain = 0.16) {
+    const c = this.ctx;
+    const t0 = c.currentTime;
+    for (const [f, at, dur] of notes) {
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = "triangle";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + at);
+      g.gain.exponentialRampToValueAtTime(gain, t0 + at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+      o.connect(g).connect(c.destination);
+      o.start(t0 + at);
+      o.stop(t0 + at + dur + 0.05);
+    }
+  }
+
+  /** Gol */
+  goal() {
+    if (!this._ensure() || !this._gate("goal", 600)) return;
+    this._melody([[523, 0, 0.14], [659, 0.12, 0.14], [784, 0.24, 0.3]]);
+  }
+
+  /** Maç bitti */
+  win() {
+    if (!this._ensure() || !this._gate("win", 1500)) return;
+    this._melody([[523, 0, 0.16], [659, 0.15, 0.16], [784, 0.3, 0.16], [1047, 0.45, 0.5]], 0.2);
   }
 
   close() {

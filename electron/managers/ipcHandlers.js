@@ -613,6 +613,27 @@ function registerIpcHandlers(
     }
   });
 
+  // Yayın geri geldiğinde tam ekrana dönmek için: tarayıcı kullanıcı hareketi olmadan requestFullscreen'i reddeder.
+  // executeJavaScript(…, userGesture=true) hareketi var sayar.
+  ipcMain.handle("request-stream-fullscreen", async (event, streamId) => {
+    try {
+      if (typeof streamId !== "string" || streamId.length > 300) return false;
+      const wc = event.sender;
+      if (!wc || wc.isDestroyed()) return false;
+      const code = `(() => {
+        if (document.fullscreenElement) return true;
+        const id = ${JSON.stringify(streamId)};
+        const el = Array.from(document.querySelectorAll("[data-stage-container]")).find((n) => n.getAttribute("data-stream-id") === id);
+        if (!el) return false;
+        el.requestFullscreen().catch(() => {});
+        return true;
+      })()`;
+      return !!(await wc.executeJavaScript(code, true));
+    } catch (e) {
+      return false;
+    }
+  });
+
   ipcMain.on("cleanup-complete", () => {
     // Cleanup signal received from renderer - handled in main.js before-quit
   });

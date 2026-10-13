@@ -184,7 +184,9 @@ const Avatar = forwardRef(function Avatar(
             src={src}
             alt={alt || name}
             className="w-full h-full object-cover"
-            crossOrigin="anonymous"
+            // CORS yalnızca canvas okuması gerekirse (onImageLoad). Google (lh3) fotoğrafları CORS başlığı
+            // göndermez: crossOrigin ile istenirse yükleme hata verip harf/gradyan yedeğine düşüyordu.
+            crossOrigin={onImageLoad ? "anonymous" : undefined}
             referrerPolicy="no-referrer"
             onLoad={onImageLoad}
             onError={() => setFailedSrc(liveSrc)}

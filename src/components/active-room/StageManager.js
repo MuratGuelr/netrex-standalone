@@ -518,12 +518,17 @@ const RESUME_GRACE_MS = 10 * 60_000; // 10 dakika
 function restoreFullscreenFor(streamId) {
   const attempt = () => {
     if (document.fullscreenElement) return;
+    // Electron: ana süreç kullanıcı hareketi sayarak tam ekranı açar (tarayıcı hareketsiz isteği reddeder)
+    if (window.netrex?.requestStreamFullscreen) {
+      window.netrex.requestStreamFullscreen(streamId).catch(() => {});
+      return;
+    }
     const el = Array.from(document.querySelectorAll("[data-stage-container]")).find(
       (n) => n.getAttribute("data-stream-id") === streamId,
     );
     el?.requestFullscreen?.().catch(() => {});
   };
-  [400, 1200].forEach((ms) => setTimeout(() => { try { attempt(); } catch (e) {} }, ms));
+  [400, 1200, 2500].forEach((ms) => setTimeout(() => { try { attempt(); } catch (e) {} }, ms));
   setTimeout(() => {
     const exists = Array.from(document.querySelectorAll("[data-stage-container]")).some(
       (n) => n.getAttribute("data-stream-id") === streamId,
@@ -531,7 +536,7 @@ function restoreFullscreenFor(streamId) {
     if (exists && !document.fullscreenElement) {
       toast.info("Yayın geri geldi. Tam ekran için yayına çift tıklayın.");
     }
-  }, 1800);
+  }, 3200);
 }
 
 function StageManager({
